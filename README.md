@@ -1,5 +1,3 @@
-Excellent — since you’re going for an **academic-style** README suitable for a **graduation project**, here’s a **clean, professional, and structured version** of your `README.md`.
-It avoids flashy icons and focuses on clarity, documentation quality, and project purpose — the kind evaluators and supervisors appreciate.
 
 ---
 
@@ -159,6 +157,3 @@ This project is developed for the **Nile University Graduation Project (ITCS Dep
 All rights reserved © Team Sha8lny.
 
 ---
-
-Would you like me to create a **`.md` version** (proper Markdown formatting and indentation ready to copy-paste into GitHub) so you can directly drop it into your repo?
-If yes, I’ll generate the final Markdown file text for you next.
