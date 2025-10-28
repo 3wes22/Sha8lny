@@ -174,7 +174,11 @@ const AssessmentCenter = () => {
                         <Badge variant="secondary">{assessment.difficulty}</Badge>
                       </div>
                     </div>
-                    <Button variant="hero" className="w-full">
+                    <Button 
+                      variant="hero" 
+                      className="w-full"
+                      onClick={() => window.location.href = '/take-assessment'}
+                    >
                       <PlayCircle size={16} />
                       Start Assessment
                     </Button>
