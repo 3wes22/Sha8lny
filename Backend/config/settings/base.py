@@ -147,7 +147,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Custom User Model (to be created in apps.users)
-# AUTH_USER_MODEL = 'users.User'  # Uncomment after creating custom User model
+AUTH_USER_MODEL = 'users.User'  # Uncomment after creating custom User model
 
 
 # Django REST Framework Configuration
