@@ -4,7 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Sha8alny** is an AI-powered career development platform that provides personalized learning roadmaps, skill assessments, course recommendations, and job market insights. The backend is built using Django with a microservices architecture, leveraging LLMs (OpenAI, Anthropic) for intelligent career guidance.
+**Sha8alny** is an AI-powered career development platform that provides personalized learning roadmaps, skill assessments, course recommendations, and job market insights. The backend is built using Django with a **modular monolithic architecture**, leveraging LLMs (OpenAI, Anthropic) for intelligent career guidance.
+
+**Architecture**: Modular Monolith
+- Single Django application with clear module boundaries
+- Shared database (single source of truth)
+- Direct Python imports between modules (no HTTP overhead)
+- Service layer pattern for business logic
+- ACID transactions across modules
 
 ## Commands
 
@@ -114,9 +121,9 @@ DJANGO_SETTINGS_MODULE=config.settings.development
 DJANGO_SETTINGS_MODULE=config.settings.production
 ```
 
-### Microservices Structure
+### Modular Monolith Structure
 
-All application services are in the `apps/` directory. Each service follows Django app structure:
+All application modules are in the `apps/` directory. Each module is a Django app:
 
 ```
 apps/
@@ -131,11 +138,40 @@ apps/
 └── notifications/     # Email, push, real-time notifications
 ```
 
+**Key Characteristics**:
+- All modules share a single database
+- Modules communicate via direct Python imports (no HTTP)
+- Can use `@transaction.atomic` across multiple modules
+- Service layer separates business logic from views
+
 **IMPORTANT**: All apps use the `apps.` prefix in their `apps.py` configuration:
 ```python
 # apps/users/apps.py
 class UsersConfig(AppConfig):
     name = "apps.users"  # NOT just "users"
+```
+
+### Cross-Module Communication
+
+**Monolith Advantage**: Direct function calls between modules
+
+```python
+# In assessments module, call roadmap module directly
+from django.db import transaction
+from apps.roadmaps.services import RoadmapService
+
+@transaction.atomic  # Single ACID transaction across both modules!
+def complete_assessment_and_generate_roadmap(assessment_id):
+    assessment = Assessment.objects.get(id=assessment_id)
+    assessment.status = 'completed'
+    assessment.save()
+
+    # Direct Python call - no HTTP overhead!
+    roadmap = RoadmapService.generate_from_assessment(
+        user=assessment.user,
+        assessment=assessment
+    )
+    return roadmap
 ```
 
 ### BaseModel Pattern

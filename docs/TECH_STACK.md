@@ -494,11 +494,11 @@ LLM Augmented Generation → Response
 - CDN for static assets
 
 ### Phase 3 (Scale):
-- Microservices architecture (if needed)
+- Extract specific modules to microservices (if bottlenecks identified)
 - Load balancers
 - Database read replicas
 - Cloud migration (AWS/GCP/Azure)
-- Kubernetes orchestration
+- Kubernetes orchestration (if microservices extracted)
 
 ---
 
