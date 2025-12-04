@@ -78,14 +78,14 @@ Only extract services when you have:
 │  │  └──────────┘  └──────────┘  └──────────┘               │   │
 │  │                                                          │   │
 │  │  ┌──────────┐  ┌──────────┐  ┌──────────┐               │   │
-│  │  │ Courses  │  │   Jobs   │  │ Progress │               │   │
-│  │  │  Module  │  │  Module  │  │  Module  │               │   │
+│  │  │ Courses  │  │ Advisory │ │   Jobs   │               │   │
+│  │  │  Module  │  │ (Chatbot)│ │  Module  │               │   │
 │  │  └──────────┘  └──────────┘  └──────────┘               │   │
 │  │                                                          │   │
-│  │  ┌──────────┐  ┌──────────┐                             │   │
-│  │  │ Career   │  │Notifications│                          │   │
-│  │  │  Tools   │  │  Module   │                            │   │
-│  │  └──────────┘  └──────────┘                             │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐               │   │
+│  │  │ Progress │  │ Career   │  │Notifications│            │   │
+│  │  │  Module  │  │  Tools   │  │  Module   │             │   │
+│  │  └──────────┘  └──────────┘  └──────────┘               │   │
 │  │                                                          │   │
 │  │  • Modules communicate via direct Python imports        │   │
 │  │  • Shared database (single source of truth)             │   │
@@ -326,7 +326,93 @@ def complete_assessment_and_generate_roadmap(assessment_id):
 
 ---
 
-### 5. Jobs Module
+### 5. Advisory Module (AI Chatbot)
+**Responsibility:** Provide context-aware career advisory through an AI chatbot
+
+**Capabilities:**
+- AI-powered conversational interface
+- Context-aware responses using RAG (Retrieval-Augmented Generation)
+- Personalized career guidance
+- Roadmap-specific advice
+- Assessment interpretation
+- Job search guidance
+- Conversation history management
+
+**Processing:**
+- **Background Processing**: Optional (streaming responses)
+- Real-time LLM inference
+- Context retrieval from user profile, roadmaps, and assessments
+- Vector similarity search for relevant knowledge
+
+**Models:**
+- Conversation (chat sessions)
+- Message (user and AI messages)
+
+**API Endpoints:**
+- `POST /api/v1/advisory/chat` - Send message and get AI response
+- `GET /api/v1/advisory/conversations` - List user conversations
+- `GET /api/v1/advisory/conversations/{id}` - Get conversation history
+- `DELETE /api/v1/advisory/conversations/{id}` - Delete conversation
+- `POST /api/v1/advisory/conversations/{id}/continue` - Continue existing conversation
+
+**Technology:**
+- LangChain for RAG pipeline
+- OpenAI GPT-4 / Anthropic Claude for responses
+- Vector database (Pinecone/Weaviate) for semantic search
+- WebSocket support for streaming responses
+- Redis for context caching
+
+**RAG Pipeline:**
+```
+User Query → Context Retrieval (User Profile, Roadmap, Assessment) →
+Vector Search (Career Knowledge Base, Courses) →
+Prompt Construction →
+LLM Generation →
+Response Streaming (WebSocket)
+```
+
+**Context Sources:**
+- User profile and career goals
+- Latest assessment results and skill gaps
+- Current roadmap and progress
+- Relevant courses and job postings
+- Career knowledge base (embedded documents)
+
+**Cross-Module Integration:**
+```python
+from apps.users.models import User
+from apps.assessments.models import Assessment
+from apps.roadmaps.models import Roadmap
+from apps.advisory.services import AdvisoryService
+
+# Gather context from multiple modules
+user = User.objects.get(id=user_id)
+assessment = Assessment.objects.filter(user=user).latest('created_at')
+roadmap = Roadmap.objects.filter(user=user).latest('created_at')
+
+# Generate context-aware response
+response = AdvisoryService.chat(
+    user=user,
+    message="How can I improve my Python skills?",
+    context={
+        'assessment': assessment,
+        'roadmap': roadmap,
+        'career_goal': user.preferences.target_career
+    }
+)
+```
+
+**Features:**
+- ✅ Multi-turn conversations
+- ✅ Context persistence across messages
+- ✅ RAG for accurate, personalized responses
+- ✅ Token usage tracking
+- ✅ Response quality feedback (ratings)
+- ✅ Conversation topics (general, roadmap, assessment, jobs)
+
+---
+
+### 6. Jobs Module
 **Responsibility:** Job market analysis and job matching
 
 **Capabilities:**
@@ -373,7 +459,7 @@ def complete_assessment_and_generate_roadmap(assessment_id):
 
 ---
 
-### 6. Progress Module
+### 7. Progress Module
 **Responsibility:** Track user progress through learning roadmaps
 
 **Capabilities:**
@@ -408,7 +494,7 @@ def complete_assessment_and_generate_roadmap(assessment_id):
 
 ---
 
-### 7. Career Tools Module
+### 8. Career Tools Module
 **Responsibility:** Resume builder, portfolio, and ATS optimization
 
 **Capabilities:**
@@ -436,7 +522,7 @@ def complete_assessment_and_generate_roadmap(assessment_id):
 
 ---
 
-### 8. Notifications Module
+### 9. Notifications Module
 **Responsibility:** User notifications via multiple channels
 
 **Capabilities:**
@@ -455,7 +541,7 @@ def complete_assessment_and_generate_roadmap(assessment_id):
 
 ---
 
-### 9. Core Module
+### 10. Core Module
 **Responsibility:** Shared utilities, base models, exceptions
 
 **Components:**

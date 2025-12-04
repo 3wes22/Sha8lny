@@ -23,6 +23,7 @@ Backend/
       assessments/            # AI skill assessment module
       roadmaps/               # Learning roadmap generation module
       courses/                # Course aggregation module
+      advisory/               # AI chatbot & career advisory module
       jobs/                   # Job market analysis module
       progress/               # Progress tracking module
       career_tools/           # Resume builder & portfolio module
@@ -235,7 +236,19 @@ Once the server is running, access API documentation at:
 
 **Models**: CoursePlatform, Course, CourseSkill
 
-### 5. Jobs Module
+### 5. Advisory Module (AI Chatbot)
+**Responsibility**: AI-powered career advisory chatbot
+
+**Features**:
+- Context-aware conversational AI
+- RAG (Retrieval-Augmented Generation) for personalized advice
+- Roadmap and assessment-specific guidance
+- Job search assistance
+- Conversation history management
+
+**Models**: Conversation, Message
+
+### 6. Jobs Module
 **Responsibility**: Job market analysis and job matching
 
 **Features**:
@@ -246,7 +259,7 @@ Once the server is running, access API documentation at:
 
 **Models**: JobPlatform, Job, JobSkill, MarketInsight
 
-### 6. Progress Module
+### 7. Progress Module
 **Responsibility**: Track user progress through learning roadmaps
 
 **Features**:
@@ -257,7 +270,7 @@ Once the server is running, access API documentation at:
 
 **Models**: UserProgress, CourseCompletion, MilestoneAchievement, TimeLog
 
-### 7. Career Tools Module
+### 8. Career Tools Module
 **Responsibility**: Resume builder, portfolio, and ATS optimization
 
 **Features**:
@@ -268,7 +281,7 @@ Once the server is running, access API documentation at:
 
 **Models**: Resume, Portfolio
 
-### 8. Notifications Module
+### 9. Notifications Module
 **Responsibility**: User notifications via multiple channels
 
 **Features**:
@@ -278,7 +291,7 @@ Once the server is running, access API documentation at:
 
 **Models**: Notification, NotificationPreference
 
-### 9. Core Module
+### 10. Core Module
 **Responsibility**: Shared utilities, base models, exceptions
 
 **Components**:

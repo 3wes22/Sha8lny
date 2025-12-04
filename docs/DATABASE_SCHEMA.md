@@ -1,31 +1,34 @@
 # Sha8alny - Database Schema
 
 ## Overview
-This document defines the complete PostgreSQL database schema for the Sha8alny platform. The schema follows microservices principles with logical separation by service domain while maintaining data integrity through foreign key relationships where necessary.
+This document defines the complete PostgreSQL database schema for the Sha8alny platform. The schema follows modular monolithic architecture with clear separation by module while maintaining data integrity through foreign key relationships in a single shared database.
 
-**Database:** PostgreSQL (Latest Stable Version)  
+**Database:** PostgreSQL (Latest Stable Version) - Single shared database
 **Design Principles:**
 - Normalized structure (3NF minimum)
 - Clear table naming conventions
 - Comprehensive indexing for performance
 - Soft deletes where applicable
 - Audit fields (created_at, updated_at) on all tables
-- UUID primary keys for distributed system readiness
+- UUID primary keys for scalability and uniqueness
+- Direct foreign key relationships between modules
+- ACID transaction support across modules
 
 ---
 
-## Schema Organization by Service
+## Schema Organization by Module
 
-### Services and Their Tables
-1. **User Service**: users, user_skills, skills, user_preferences
-2. **Assessment Service**: assessments, assessment_results
-3. **Roadmap Service**: roadmaps, roadmap_phases, roadmap_milestones, roadmap_courses, roadmap_templates
-4. **Course Service**: courses, course_platforms, course_skills
-5. **Job Service**: jobs, job_skills, job_platforms, market_insights, skill_demand
-6. **Progress Service**: user_progress, course_completions, milestone_achievements, time_logs
-7. **Career Tools Service**: resumes, portfolios
-8. **Community Service**: posts, comments, votes (future)
-9. **Notification Service**: notifications, notification_preferences
+### Modules and Their Tables
+1. **User Module** (`apps.users`): users, user_skills, skills, user_preferences
+2. **Assessment Module** (`apps.assessments`): assessments, assessment_results
+3. **Roadmap Module** (`apps.roadmaps`): roadmaps, roadmap_phases, roadmap_milestones, roadmap_courses, roadmap_templates
+4. **Course Module** (`apps.courses`): courses, course_platforms, course_skills
+5. **Advisory Module** (`apps.advisory`): conversations, messages
+6. **Job Module** (`apps.jobs`): jobs, job_skills, job_platforms, market_insights, skill_demand
+7. **Progress Module** (`apps.progress`): user_progress, course_completions, milestone_achievements, time_logs
+8. **Career Tools Module** (`apps.career_tools`): resumes, portfolios
+9. **Community Module** (`apps.community`): posts, comments, votes (future)
+10. **Notification Module** (`apps.notifications`): notifications, notification_preferences
 
 ---
 
@@ -55,7 +58,7 @@ deleted_at TIMESTAMP WITH TIME ZONE
 
 ---
 
-## 1. User Service Schema
+## 1. User Module Schema
 
 ### Table: `users`
 **Purpose:** Core user account information
@@ -239,7 +242,7 @@ CREATE INDEX idx_user_preferences_user ON user_preferences(user_id);
 
 ---
 
-## 2. Assessment Service Schema
+## 2. Assessment Module Schema
 
 ### Table: `assessments`
 **Purpose:** Store completed assessments (entire assessment saved as user attribute)
@@ -339,7 +342,7 @@ CREATE INDEX idx_assessment_results_weaknesses_gin ON assessment_results USING G
 
 ---
 
-## 3. Roadmap Service Schema
+## 3. Roadmap Module Schema
 
 ### Table: `roadmap_templates`
 **Purpose:** Pre-built roadmap templates for common career paths
@@ -560,7 +563,7 @@ CREATE INDEX idx_roadmap_courses_status ON roadmap_courses(status);
 
 ---
 
-## 4. Course Service Schema
+## 4. Course Module Schema
 
 ### Table: `course_platforms`
 **Purpose:** External platforms hosting courses
@@ -706,7 +709,105 @@ CREATE INDEX idx_course_skills_primary ON course_skills(is_primary_skill) WHERE 
 
 ---
 
-## 5. Job Service Schema
+## 5. Advisory Module Schema
+
+### Table: `conversations`
+**Purpose:** Store AI chatbot conversation sessions
+
+```sql
+CREATE TABLE conversations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    -- Relationships
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+    -- Conversation metadata
+    title VARCHAR(255),
+    topic VARCHAR(100),  -- 'general', 'roadmap', 'assessment', 'job_search'
+
+    -- Context snapshot (JSONB)
+    context_snapshot JSONB DEFAULT '{}',
+    -- Example: {
+    --   "roadmap_id": "uuid",
+    --   "assessment_id": "uuid",
+    --   "career_goal": "Backend Developer",
+    --   "user_skills": ["Python", "Django"]
+    -- }
+
+    -- Status
+    is_active BOOLEAN DEFAULT TRUE,
+    last_message_at TIMESTAMP WITH TIME ZONE,
+
+    -- Metadata
+    message_count INT DEFAULT 0,
+    total_tokens_used INT DEFAULT 0,  -- Track LLM usage
+
+    -- Standard fields
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+-- Indexes
+CREATE INDEX idx_conversations_user ON conversations(user_id) WHERE is_deleted = FALSE;
+CREATE INDEX idx_conversations_active ON conversations(is_active) WHERE is_active = TRUE;
+CREATE INDEX idx_conversations_last_message ON conversations(last_message_at DESC);
+CREATE INDEX idx_conversations_topic ON conversations(topic);
+```
+
+### Table: `messages`
+**Purpose:** Store individual messages in conversations
+
+```sql
+CREATE TABLE messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    -- Relationships
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+
+    -- Message details
+    role VARCHAR(20) NOT NULL,  -- 'user', 'assistant', 'system'
+    content TEXT NOT NULL,
+
+    -- RAG context used for this message (JSONB)
+    context_used JSONB DEFAULT '{}',
+    -- Example: {
+    --   "roadmap_phase": "Intermediate",
+    --   "relevant_courses": ["course-uuid-1", "course-uuid-2"],
+    --   "user_skill_level": "beginner",
+    --   "retrieved_documents": ["doc1", "doc2"]
+    -- }
+
+    -- AI metadata
+    model_used VARCHAR(100),  -- 'gpt-4', 'claude-3-sonnet', etc.
+    tokens_used INT,
+    response_time_ms INT,
+
+    -- Feedback
+    user_rating INT CHECK (user_rating BETWEEN 1 AND 5),  -- 1-5 stars
+    is_helpful BOOLEAN,
+
+    -- Standard fields
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+-- Indexes
+CREATE INDEX idx_messages_conversation ON messages(conversation_id) WHERE is_deleted = FALSE;
+CREATE INDEX idx_messages_role ON messages(role);
+CREATE INDEX idx_messages_created ON messages(created_at DESC);
+CREATE INDEX idx_messages_model ON messages(model_used);
+
+-- GIN index for context search
+CREATE INDEX idx_messages_context_gin ON messages USING GIN (context_used);
+```
+
+---
+
+## 6. Job Module Schema
 
 ### Table: `job_platforms`
 **Purpose:** Job listing platforms
@@ -969,7 +1070,7 @@ CREATE INDEX idx_skill_demand_trend ON skill_demand(demand_trend);
 
 ---
 
-## 6. Progress Service Schema
+## 7. Progress Module Schema
 
 ### Table: `user_progress`
 **Purpose:** Overall user progress on their roadmap
@@ -1142,7 +1243,7 @@ CREATE INDEX idx_time_logs_user_date ON time_logs(user_id, started_at DESC);
 
 ---
 
-## 7. Career Tools Service Schema
+## 8. Career Tools Module Schema
 
 ### Table: `resumes`
 **Purpose:** User resumes (stored as database attributes)
@@ -1242,7 +1343,7 @@ CREATE INDEX idx_portfolios_public ON portfolios(is_public) WHERE is_public = TR
 
 ---
 
-## 8. Community Service Schema (Future - Nice to Have)
+## 9. Community Module Schema (Future - Nice to Have)
 
 ### Table: `posts`
 **Purpose:** Community posts
@@ -1372,7 +1473,7 @@ CREATE INDEX idx_votes_type ON votes(vote_type);
 
 ---
 
-## 9. Notification Service Schema
+## 10. Notification Module Schema
 
 ### Table: `notifications`
 **Purpose:** Store all user notifications
@@ -1558,8 +1659,8 @@ VALUES
 
 ### Connection Pooling
 - Use PgBouncer for connection pooling
-- Limit max connections per service
-- Monitor connection usage
+- Configure appropriate connection pool size for the Django application
+- Monitor connection usage and optimize pool settings
 
 ### Partitioning (Future)
 - Partition large tables by date (e.g., `time_logs`, `notifications`)

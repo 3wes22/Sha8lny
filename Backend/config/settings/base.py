@@ -44,6 +44,7 @@ LOCAL_APPS = [
     'apps.assessments',
     'apps.roadmaps',
     'apps.courses',
+    'apps.advisory',
     'apps.jobs',
     'apps.progress',
     'apps.career_tools',
