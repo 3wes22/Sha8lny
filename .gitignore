@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.Python
+venv/
+env/
+
+# Models (large files)
+models/base/
+*.gguf
+*.pth
+*.ckpt
+
+# Data
+data/raw/
+*.csv
+*.json.gz
+
+# Secrets
+.env
+*.key
+kaggle.json
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
