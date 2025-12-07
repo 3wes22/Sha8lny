@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Models (large files - NOT committed)
+models/base/
+*.gguf
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+
+# Data (NOT committed)
+data/raw/
+data/processed/*.csv
+data/processed/*.json
+*.csv
+*.json.gz
+
+# Vector DB (NOT committed)
+data/vector_db/*
+!data/vector_db/.gitkeep
+
+# Secrets
+.env
+*.key
+kaggle.json
+.huggingface/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs
+logs/
+*.log
+
+# Weights & Biases
+wandb/
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
