@@ -1,159 +1,73 @@
+# Welcome to your Lovable project
 
----
+## Project info
 
-# Sha8lny – AI-Powered Career Empowerment Platform
+**URL**: https://lovable.dev/projects/fcfcede9-f7a9-49db-9d3d-d0c50b36152e
 
-## 1. Project Overview
+## How can I edit this code?
 
-Sha8lny is an intelligent platform designed to bridge the gap between students, graduates, and the job market.
-The system provides personalized career guidance through AI-driven assessments, adaptive learning pathways, and integration with local industry data.
+There are several ways of editing your application.
 
-The platform’s primary objective is to help users identify their strengths, develop relevant skills, and connect with suitable job opportunities in the Egyptian market.
+**Use Lovable**
 
----
+Simply visit the [Lovable Project](https://lovable.dev/projects/fcfcede9-f7a9-49db-9d3d-d0c50b36152e) and start prompting.
 
-## 2. Project Vision
+Changes made via Lovable will be committed automatically to this repo.
 
-To empower students and young professionals in Egypt with data-driven insights, personalized learning paths, and real-time market information, enabling them to make informed career decisions and improve employability.
+**Use your preferred IDE**
 
----
+If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
 
-## 3. Key Features
+The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
-1. **Intelligent Career Assessment**
-   AI-powered evaluation combining:
+Follow these steps:
 
-   * Technical skills testing
-   * Soft skills and personality profiling
-   * Personalized career recommendations
+```sh
+# Step 1: Clone the repository using the project's Git URL.
+git clone <YOUR_GIT_URL>
 
-2. **Dynamic Learning Pathways**
-   Automatically updated learning curricula that adapt based on:
+# Step 2: Navigate to the project directory.
+cd <YOUR_PROJECT_NAME>
 
-   * Market trends
-   * Individual progress and interests
-   * Job role evolution
+# Step 3: Install the necessary dependencies.
+npm i
 
-3. **Local Market Integration**
-   Real-time access to:
-
-   * Salary benchmarking
-   * Company culture and skills demand
-   * Industry-specific requirements
-
-4. **Gamified Learning Experience**
-
-   * Progress tracking and achievements
-   * Peer competition features
-   * Motivation through rewards and milestones
-
-5. **Corporate Partnership Network**
-   Direct collaboration with Egyptian companies for:
-
-   * Internships
-   * Graduation projects
-   * Job placements
-
-6. **Certification and Credentialing**
-   Industry-recognized certificates validated by local professional bodies and institutions.
-
----
-
-## 4. System Architecture (Preliminary)
-
-The system will be composed of the following main modules:
-
-* **Frontend:** User interface (Framer or React)
-* **Backend:** Core logic and API layer (Node.js, Django, or Flask)
-* **Database:** Data management (PostgreSQL or MongoDB)
-* **AI/ML Module:** Career assessment and recommendation engine (Python)
-* **Admin Dashboard:** Management and analytics interface
-
-*(Detailed architecture and diagrams will be included in later milestones.)*
-
----
-
-## 5. Tentative Tech Stack
-
-| Layer           | Technologies                                 |
-| --------------- | -------------------------------------------- |
-| Frontend        | Framer / React / TailwindCSS                 |
-| Backend         | Node.js / Express / Django (to be finalized) |
-| Database        | PostgreSQL / MongoDB                         |
-| AI/ML           | Python, TensorFlow / Scikit-learn            |
-| Deployment      | Docker, Render / AWS / Vercel                |
-| Version Control | Git & GitHub Projects                        |
-
----
-
-## 6. Project Structure (Draft)
-
-```
-Sha8lny/
-│
-├── docs/                   # Documentation, reports, and diagrams
-├── frontend/               # Framer or React application
-├── backend/                # Server-side logic and APIs
-├── database/               # Schema, migrations, and seed data
-├── assets/                 # Logos, icons, and media files
-├── .gitignore
-├── README.md
-└── LICENSE
+# Step 4: Start the development server with auto-reloading and an instant preview.
+npm run dev
 ```
 
----
+**Edit a file directly in GitHub**
 
-## 7. Team Members
+- Navigate to the desired file(s).
+- Click the "Edit" button (pencil icon) at the top right of the file view.
+- Make your changes and commit the changes.
 
-| Name          | Role               | Responsibility                               |
-| ------------- | ------------------ | -------------------------------------------- |
-| Mahmoud Ahmed | Team Leader        | Project coordination, architecture design    |
-| [Member 2]    | Backend Developer  | API and database implementation              |
-| [Member 3]    | Frontend Developer | UI/UX and Framer integration                 |
-| [Member 4]    | AI/ML Engineer     | Career assessment and recommendation systems |
-| [Member 5]    | Documentation & QA | Reports, testing, and quality assurance      |
+**Use GitHub Codespaces**
 
----
+- Navigate to the main page of your repository.
+- Click on the "Code" button (green button) near the top right.
+- Select the "Codespaces" tab.
+- Click on "New codespace" to launch a new Codespace environment.
+- Edit files directly within the Codespace and commit and push your changes once you're done.
 
-## 8. Project Milestones
+## What technologies are used for this project?
 
-| Milestone | Description                                            | Status    |
-| --------- | ------------------------------------------------------ | --------- |
-| 0         | Project setup, team roles, repository creation, README | Completed |
-| 1         | Requirements analysis and project outline              | Pending   |
-| 2         | System design (ERD, DFD, architecture diagrams)        | Pending   |
-| 3         | Wireframes and UI design                               | Pending   |
-| 4         | Backend and database development                       | Pending   |
-| 5         | AI/ML integration                                      | Pending   |
-| 6         | Testing and deployment                                 | Pending   |
-| 7         | Final documentation and presentation                   | Pending   |
+This project is built with:
 
----
+- Vite
+- TypeScript
+- React
+- shadcn-ui
+- Tailwind CSS
 
-## 9. Contribution Workflow
+## How can I deploy this project?
 
-1. Clone the repository
+Simply open [Lovable](https://lovable.dev/projects/fcfcede9-f7a9-49db-9d3d-d0c50b36152e) and click on Share -> Publish.
 
-   ```bash
-   git clone https://github.com/<your-org>/Sha8lny.git
-   ```
-2. Create a new branch for your task
+## Can I connect a custom domain to my Lovable project?
 
-   ```bash
-   git checkout -b feature/<task-name>
-   ```
-3. Commit changes with clear messages
+Yes, you can!
 
-   ```bash
-   git commit -m "Add: implemented skill assessment module"
-   ```
-4. Push changes and submit a Pull Request.
+To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
----
-
-## 10. License
-
-This project is developed for the **Nile University Graduation Project (ITCS Department, 2025)**.
-All rights reserved © Team Sha8lny.
-
----
+Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
