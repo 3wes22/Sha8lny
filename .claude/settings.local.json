@@ -5,7 +5,8 @@
       "Bash(__init__.py)",
       "Bash(python:*)",
       "Bash(venv/Scripts/python.exe -m pip:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(wc:*)"
     ],
     "deny": [],
     "ask": []
