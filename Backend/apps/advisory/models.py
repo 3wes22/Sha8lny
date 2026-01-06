@@ -91,6 +91,30 @@ class Conversation(BaseModel):
         help_text="Total LLM tokens consumed in this conversation"
     )
 
+    # AI Processing Status (for async RAG processing)
+    processing_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('completed', 'Completed'),
+            ('pending', 'Pending'),
+            ('processing', 'Processing'),
+            ('failed', 'Failed'),
+        ],
+        default='completed',
+        help_text="Status of AI message processing"
+    )
+
+    task_id = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Celery task ID for async processing"
+    )
+
+    error_message = models.TextField(
+        blank=True,
+        help_text="Error details if processing failed"
+    )
+
     class Meta:
         verbose_name = "Conversation"
         verbose_name_plural = "Conversations"

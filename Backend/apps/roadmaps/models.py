@@ -154,6 +154,33 @@ class RoadmapTemplate(BaseModel):
         return Skill.objects.filter(id__in=self.required_skills)
 
 
+class RoadmapManager(models.Manager):
+    """Custom manager for Roadmap model with optimized queries"""
+
+    def with_hierarchy(self):
+        """Prefetch full roadmap hierarchy for API efficiency"""
+        return self.prefetch_related(
+            'phases',
+            'phases__milestones',
+            'phases__milestones__courses'
+        )
+
+    def for_user(self, user):
+        """Get roadmaps for a specific user"""
+        return self.filter(user=user, is_deleted=False)
+
+    def active(self):
+        """Get active roadmaps only"""
+        return self.filter(
+            status__in=['active', 'in_progress'],
+            is_deleted=False
+        )
+
+    def completed(self):
+        """Get completed roadmaps"""
+        return self.filter(status='completed', is_deleted=False)
+
+
 class Roadmap(BaseModel):
     """
     Personalized learning roadmap for a specific user.
@@ -337,6 +364,9 @@ class Roadmap(BaseModel):
         blank=True,
         help_text="Additional roadmap data (preferences, adjustments, etc.)"
     )
+
+    # Custom manager
+    objects = RoadmapManager()
 
     class Meta:
         verbose_name = "Roadmap"

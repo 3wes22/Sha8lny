@@ -85,14 +85,14 @@ class ResumeAdmin(admin.ModelAdmin):
         }),
         ('File Storage', {
             'fields': (
-                'pdf_data',
-                'docx_data',
+                'pdf_file',
+                'docx_file',
                 'has_files',
                 'file_formats_available',
                 'pdf_size_mb',
                 'docx_size_mb',
             ),
-            'description': 'Binary file data for PDF and DOCX formats'
+            'description': 'File storage for PDF and DOCX formats'
         }),
         ('Metadata', {
             'fields': (
@@ -186,9 +186,9 @@ class ResumeAdmin(admin.ModelAdmin):
     def file_formats_badge(self, obj):
         """Display available file formats"""
         formats = []
-        if obj.pdf_data:
+        if obj.pdf_file:
             formats.append(format_html('<span style="background-color: #e74c3c; color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px;">PDF</span>'))
-        if obj.docx_data:
+        if obj.docx_file:
             formats.append(format_html('<span style="background-color: #2980b9; color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px;">DOCX</span>'))
 
         if not formats:

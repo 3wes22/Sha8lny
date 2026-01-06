@@ -16,6 +16,38 @@ from apps.roadmaps.models import Roadmap, RoadmapPhase, RoadmapMilestone, Roadma
 from apps.courses.models import Course
 
 
+class UserProgressManager(models.Manager):
+    """Custom manager for UserProgress model with optimized queries"""
+
+    def with_related(self):
+        """Prefetch related objects for API efficiency"""
+        return self.select_related(
+            'user',
+            'roadmap',
+            'current_phase',
+            'current_milestone'
+        )
+
+    def for_user(self, user):
+        """Get progress records for a specific user"""
+        return self.filter(user=user, is_deleted=False)
+
+    def active(self):
+        """Get progress for active users (activity in last 30 days)"""
+        from django.utils import timezone
+        from datetime import timedelta
+
+        thirty_days_ago = timezone.now().date() - timedelta(days=30)
+        return self.filter(
+            last_activity_date__gte=thirty_days_ago,
+            is_deleted=False
+        )
+
+    def with_streaks(self):
+        """Get users with active streaks"""
+        return self.filter(current_streak_days__gt=0, is_deleted=False)
+
+
 class UserProgress(BaseModel):
     """
     Tracks overall progress for a user on a specific roadmap.
@@ -120,6 +152,9 @@ class UserProgress(BaseModel):
         default=True,
         help_text="Whether user is on track to complete roadmap on time"
     )
+
+    # Custom manager
+    objects = UserProgressManager()
 
     class Meta:
         verbose_name = "User Progress"

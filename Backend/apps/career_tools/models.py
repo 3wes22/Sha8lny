@@ -102,17 +102,43 @@ class Resume(BaseModel):
         help_text="AI-generated suggestions for improving ATS score"
     )
 
-    # File Storage (Binary data for PDF and DOCX formats)
-    pdf_data = models.BinaryField(
-        null=True,
-        blank=True,
-        help_text="Resume as PDF binary data"
+    # ATS Processing Status (for async optimization)
+    ats_processing_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('completed', 'Completed'),
+            ('pending', 'Pending'),
+            ('processing', 'Processing'),
+            ('failed', 'Failed'),
+        ],
+        default='completed',
+        help_text="Status of ATS optimization processing"
     )
 
-    docx_data = models.BinaryField(
+    ats_task_id = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Celery task ID for async ATS processing"
+    )
+
+    ats_error_message = models.TextField(
+        blank=True,
+        help_text="Error details if ATS processing failed"
+    )
+
+    # File Storage (FileField for scalable file storage)
+    pdf_file = models.FileField(
+        upload_to='resumes/pdf/%Y/%m/',
         null=True,
         blank=True,
-        help_text="Resume as DOCX binary data"
+        help_text="Resume as PDF file"
+    )
+
+    docx_file = models.FileField(
+        upload_to='resumes/docx/%Y/%m/',
+        null=True,
+        blank=True,
+        help_text="Resume as DOCX file"
     )
 
     # Metadata
@@ -163,15 +189,15 @@ class Resume(BaseModel):
     @property
     def has_files(self):
         """Check if resume has generated files"""
-        return bool(self.pdf_data or self.docx_data)
+        return bool(self.pdf_file or self.docx_file)
 
     @property
     def file_formats_available(self):
         """List available file formats"""
         formats = []
-        if self.pdf_data:
+        if self.pdf_file:
             formats.append("PDF")
-        if self.docx_data:
+        if self.docx_file:
             formats.append("DOCX")
         return ", ".join(formats) if formats else "None"
 
@@ -193,16 +219,16 @@ class Resume(BaseModel):
     @property
     def pdf_size_mb(self):
         """Get PDF file size in MB"""
-        if not self.pdf_data:
+        if not self.pdf_file:
             return 0
-        return round(len(self.pdf_data) / (1024 * 1024), 2)
+        return round(self.pdf_file.size / (1024 * 1024), 2)
 
     @property
     def docx_size_mb(self):
         """Get DOCX file size in MB"""
-        if not self.docx_data:
+        if not self.docx_file:
             return 0
-        return round(len(self.docx_data) / (1024 * 1024), 2)
+        return round(self.docx_file.size / (1024 * 1024), 2)
 
 
 class Portfolio(BaseModel):

@@ -12,6 +12,38 @@ from apps.core.models import BaseModel
 from apps.users.models import User
 
 
+class NotificationManager(models.Manager):
+    """Custom manager for Notification model with optimized queries"""
+
+    def for_user(self, user):
+        """Get notifications for a specific user"""
+        return self.filter(user=user, is_deleted=False)
+
+    def unread(self):
+        """Get unread notifications"""
+        return self.filter(is_read=False, is_deleted=False)
+
+    def read(self):
+        """Get read notifications"""
+        return self.filter(is_read=True, is_deleted=False)
+
+    def urgent(self):
+        """Get urgent notifications"""
+        return self.filter(priority='urgent', is_deleted=False)
+
+    def by_type(self, notification_type):
+        """Get notifications by type"""
+        return self.filter(notification_type=notification_type, is_deleted=False)
+
+    def recent(self, days=7):
+        """Get recent notifications from last N days"""
+        from django.utils import timezone
+        from datetime import timedelta
+
+        cutoff_date = timezone.now() - timedelta(days=days)
+        return self.filter(created_at__gte=cutoff_date, is_deleted=False)
+
+
 class Notification(BaseModel):
     """
     User notification with polymorphic entity references.
@@ -138,6 +170,9 @@ class Notification(BaseModel):
         help_text="Additional context data for notification"
     )
 
+    # Custom manager
+    objects = NotificationManager()
+
     class Meta:
         verbose_name = "Notification"
         verbose_name_plural = "Notifications"
@@ -202,6 +237,10 @@ class Notification(BaseModel):
             self.is_read = True
             self.read_at = timezone.now()
             self.save(update_fields=['is_read', 'read_at', 'updated_at'])
+
+            # Emit signal for listeners (WebSockets, analytics, etc.)
+            from .signals import notification_read
+            notification_read.send(sender=self.__class__, instance=self)
 
     def mark_as_unread(self):
         """Mark notification as unread"""
