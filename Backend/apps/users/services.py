@@ -22,8 +22,6 @@ class UserService:
     def create_user(
         email: str,
         password: str,
-        first_name: str = "",
-        last_name: str = "",
         **extra_fields
     ) -> User:
         """
@@ -32,9 +30,7 @@ class UserService:
         Args:
             email: User email address
             password: User password (will be hashed)
-            first_name: Optional first name
-            last_name: Optional last name
-            **extra_fields: Additional user fields
+            **extra_fields: Additional user fields (username, full_name, date_of_birth, etc.)
 
         Returns:
             User: Created user instance
@@ -48,8 +44,6 @@ class UserService:
         user = User.objects.create_user(
             email=email,
             password=password,
-            first_name=first_name,
-            last_name=last_name,
             **extra_fields
         )
 
