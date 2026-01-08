@@ -1,3 +1,166 @@
-from django.shortcuts import render
+"""
+Courses Service Views
 
-# Create your views here.
+Implements course aggregation, search, and recommendation APIs.
+"""
+
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django.db.models import Q
+
+from apps.courses.models import Course, CoursePlatform, CourseCategory, UserCourseEnrollment
+from apps.courses.serializers import (
+    CourseSerializer,
+    CourseListSerializer,
+    CoursePlatformSerializer,
+    CourseCategorySerializer,
+    UserCourseEnrollmentSerializer,
+    CourseEnrollSerializer,
+    CourseSearchSerializer,
+)
+from apps.courses.services import CourseService
+
+
+class CourseViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Course listing and search.
+
+    GET /courses/ - List all courses
+    GET /courses/{id}/ - Get course details
+    GET /courses/search/ - Search courses
+    GET /courses/recommended/ - Get recommended courses
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = Course.objects.filter(is_active=True, is_deleted=False)
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return CourseListSerializer
+        return CourseSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+
+        # Filter by platform
+        platform = self.request.query_params.get('platform')
+        if platform:
+            queryset = queryset.filter(platform__slug=platform)
+
+        # Filter by difficulty
+        difficulty = self.request.query_params.get('difficulty')
+        if difficulty:
+            queryset = queryset.filter(difficulty_level=difficulty)
+
+        # Filter by free/paid
+        is_free = self.request.query_params.get('is_free')
+        if is_free == 'true':
+            queryset = queryset.filter(price=0)
+
+        return queryset.select_related('platform').prefetch_related('categories')
+
+    @action(detail=False, methods=['get'])
+    def search(self, request):
+        """Search courses with filters."""
+        serializer = CourseSearchSerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+
+        queryset = self.get_queryset()
+
+        # Text search
+        query = serializer.validated_data.get('query')
+        if query:
+            queryset = queryset.filter(
+                Q(title__icontains=query) |
+                Q(description__icontains=query) |
+                Q(instructor__icontains=query)
+            )
+
+        # Apply filters
+        if serializer.validated_data.get('min_rating'):
+            queryset = queryset.filter(rating__gte=serializer.validated_data['min_rating'])
+
+        if serializer.validated_data.get('has_certificate'):
+            queryset = queryset.filter(has_certificate=True)
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            result_serializer = CourseListSerializer(page, many=True)
+            return self.get_paginated_response(result_serializer.data)
+
+        result_serializer = CourseListSerializer(queryset, many=True)
+        return Response(result_serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def recommended(self, request):
+        """Get recommended courses for user based on skills."""
+        # TODO: Implement AI-based recommendations
+        # For now, return popular courses
+        courses = self.get_queryset().order_by('-rating', '-number_of_students')[:10]
+        serializer = CourseListSerializer(courses, many=True)
+        return Response(serializer.data)
+
+
+class UserCourseEnrollmentViewSet(viewsets.ModelViewSet):
+    """
+    Manage user course enrollments.
+
+    GET /enrollments/ - List user's enrolled courses
+    POST /enrollments/ - Enroll in a course
+    PUT /enrollments/{id}/ - Update enrollment (progress, status)
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return UserCourseEnrollment.objects.filter(
+            user=self.request.user,
+            is_deleted=False
+        ).select_related('course', 'course__platform')
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return CourseEnrollSerializer
+        return UserCourseEnrollmentSerializer
+
+    def create(self, request, *args, **kwargs):
+        """Enroll user in a course."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        course_id = serializer.validated_data['course_id']
+        course = Course.objects.get(id=course_id)
+
+        # Check if already enrolled
+        existing = UserCourseEnrollment.objects.filter(
+            user=request.user,
+            course=course,
+            is_deleted=False
+        ).first()
+
+        if existing:
+            return Response(
+                {'error': 'Already enrolled in this course'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        enrollment = UserCourseEnrollment.objects.create(
+            user=request.user,
+            course=course,
+            enrollment_status='enrolled'
+        )
+
+        return Response(
+            UserCourseEnrollmentSerializer(enrollment).data,
+            status=status.HTTP_201_CREATED
+        )
+
+
+class CoursePlatformViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    List course platforms.
+
+    GET /platforms/ - List all platforms
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = CoursePlatformSerializer
+    queryset = CoursePlatform.objects.filter(is_active=True, is_deleted=False)
