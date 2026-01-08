@@ -19,12 +19,11 @@ router.register(r'', views.AssessmentViewSet, basename='assessment')
 app_name = 'assessments'
 
 urlpatterns = [
-    # Assessment results
-    path('results/', views.AssessmentResultView.as_view(), name='results-list'),
-    path('results/<uuid:result_id>/', views.AssessmentResultView.as_view(), name='results-detail'),
-
-    # Statistics
-    path('stats/', views.AssessmentStatsView.as_view(), name='stats'),
+    # EXTRA ENDPOINTS - NOT IN SRS APPENDIX B
+    # Uncomment if needed in future
+    # path('results/', views.AssessmentResultView.as_view(), name='results-list'),
+    # path('results/<uuid:result_id>/', views.AssessmentResultView.as_view(), name='results-detail'),
+    # path('stats/', views.AssessmentStatsView.as_view(), name='stats'),
 
     # Assessment CRUD and actions (from router)
     path('', include(router.urls)),

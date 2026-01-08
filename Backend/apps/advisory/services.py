@@ -11,7 +11,7 @@ from decimal import Decimal
 
 from .models import Conversation, Message
 from apps.users.models import User
-from apps.notifications.signals import conversation_started, message_received
+from apps.notifications.signals import chat_message_sent, chat_response_generated
 
 
 class ConversationService:
@@ -46,8 +46,8 @@ class ConversationService:
             processing_status='completed'
         )
 
-        # Emit signal
-        conversation_started.send(
+        # Emit signal (conversation started with first message)
+        chat_message_sent.send(
             sender=Conversation,
             instance=conversation,
             user=user
@@ -193,7 +193,7 @@ class MessageService:
         conversation.save(update_fields=['updated_at'])
 
         # Emit signal
-        message_received.send(
+        chat_message_sent.send(
             sender=Message,
             instance=message,
             conversation=conversation

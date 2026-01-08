@@ -7,7 +7,7 @@ SRS Reference: Implied by FR-11 (Course Association)
 """
 
 from rest_framework import serializers
-from apps.courses.models import Course, CoursePlatform, CourseCategory, UserCourseEnrollment
+from apps.courses.models import Course, CoursePlatform
 
 
 class CoursePlatformSerializer(serializers.ModelSerializer):
@@ -22,20 +22,6 @@ class CoursePlatformSerializer(serializers.ModelSerializer):
             'website_url',
             'logo_url',
             'is_active',
-        ]
-
-
-class CourseCategorySerializer(serializers.ModelSerializer):
-    """Course category serializer."""
-
-    class Meta:
-        model = CourseCategory
-        fields = [
-            'id',
-            'name',
-            'slug',
-            'description',
-            'parent_category',
         ]
 
 
@@ -60,8 +46,6 @@ class CourseListSerializer(serializers.ModelSerializer):
 class CourseSerializer(serializers.ModelSerializer):
     """Complete course information."""
     platform = CoursePlatformSerializer(read_only=True)
-    categories = CourseCategorySerializer(many=True, read_only=True)
-    skills_covered = serializers.ListField(read_only=True)
 
     class Meta:
         model = Course
@@ -84,40 +68,9 @@ class CourseSerializer(serializers.ModelSerializer):
             'language',
             'has_certificate',
             'is_active',
-            'skills_covered',
-            'categories',
             'last_updated',
             'created_at',
         ]
-
-
-class UserCourseEnrollmentSerializer(serializers.ModelSerializer):
-    """User course enrollment tracking."""
-    course = CourseListSerializer(read_only=True)
-
-    class Meta:
-        model = UserCourseEnrollment
-        fields = [
-            'id',
-            'course',
-            'enrollment_status',
-            'progress_percentage',
-            'started_at',
-            'completed_at',
-            'certificate_url',
-            'notes',
-        ]
-
-
-class CourseEnrollSerializer(serializers.Serializer):
-    """Enroll in a course."""
-    course_id = serializers.UUIDField(required=True)
-
-    def validate_course_id(self, value):
-        """Validate course exists."""
-        if not Course.objects.filter(id=value, is_active=True).exists():
-            raise serializers.ValidationError("Course not found or inactive")
-        return value
 
 
 class CourseSearchSerializer(serializers.Serializer):

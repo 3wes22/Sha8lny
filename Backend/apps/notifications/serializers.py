@@ -100,7 +100,7 @@ class NotificationCreateSerializer(serializers.Serializer):
     user_id = serializers.UUIDField(required=True)
     notification_type = serializers.CharField(required=True, max_length=100)
     title = serializers.CharField(required=True, max_length=255)
-    message = serializers.TextField(required=True)
+    message = serializers.CharField(required=True)
     priority = serializers.ChoiceField(
         choices=['low', 'normal', 'high', 'urgent'],
         default='normal',

@@ -13,14 +13,15 @@ from rest_framework.routers import DefaultRouter
 from apps.advisory import views
 
 router = DefaultRouter()
-router.register(r'conversations', views.ConversationViewSet, basename='conversation')
+router.register(r'history', views.ConversationViewSet, basename='conversation')
 
 app_name = 'advisory'
 
 urlpatterns = [
-    # Chat endpoint
+    # SRS APPENDIX B ENDPOINTS
+    # POST /advisory/chat - Send message to chatbot
     path('chat/', views.ChatView.as_view(), name='chat'),
 
-    # Conversation management
+    # GET /advisory/history - Get conversation history
     path('', include(router.urls)),
 ]

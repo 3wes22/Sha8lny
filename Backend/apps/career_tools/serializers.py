@@ -10,43 +10,37 @@ SRS References:
 """
 
 from rest_framework import serializers
-from apps.career_tools.models import Resume, ResumeSection, Portfolio, PortfolioProject
-
-
-class ResumeSectionSerializer(serializers.ModelSerializer):
-    """Resume section serializer."""
-
-    class Meta:
-        model = ResumeSection
-        fields = [
-            'id',
-            'section_type',
-            'title',
-            'content',
-            'order',
-            'is_visible',
-        ]
+from apps.career_tools.models import Resume, Portfolio
 
 
 class ResumeListSerializer(serializers.ModelSerializer):
     """Minimal resume info for list views."""
+    ats_grade = serializers.CharField(source='ats_grade_display', read_only=True)
+    completeness = serializers.FloatField(source='completeness_percentage', read_only=True)
 
     class Meta:
         model = Resume
         fields = [
             'id',
             'title',
-            'template',
+            'template_name',
             'is_primary',
             'is_ats_optimized',
-            'last_generated_at',
+            'ats_score',
+            'ats_grade',
+            'completeness',
+            'version',
             'created_at',
+            'updated_at',
         ]
 
 
 class ResumeSerializer(serializers.ModelSerializer):
     """Complete resume information."""
-    sections = ResumeSectionSerializer(many=True, read_only=True)
+    ats_grade = serializers.CharField(source='ats_grade_display', read_only=True)
+    completeness = serializers.FloatField(source='completeness_percentage', read_only=True)
+    has_files = serializers.BooleanField(read_only=True)
+    available_formats = serializers.CharField(source='file_formats_available', read_only=True)
 
     class Meta:
         model = Resume
@@ -54,45 +48,53 @@ class ResumeSerializer(serializers.ModelSerializer):
             'id',
             'user',
             'title',
-            'template',
-            'full_name',
-            'email',
-            'phone',
-            'location',
-            'professional_summary',
-            'linkedin_url',
-            'github_url',
-            'website_url',
-            'sections',
-            'is_primary',
+            'template_name',
+            'personal_info',
+            'work_experience',
+            'education',
+            'skills',
+            'certifications',
+            'projects',
+            'languages',
             'is_ats_optimized',
             'ats_score',
-            'last_generated_at',
-            'metadata',
+            'ats_grade',
+            'ats_suggestions',
+            'pdf_file',
+            'docx_file',
+            'has_files',
+            'available_formats',
+            'is_primary',
+            'version',
+            'completeness',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'ats_score', 'last_generated_at', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'user', 'pdf_file', 'docx_file', 'created_at', 'updated_at']
 
 
-class PortfolioProjectSerializer(serializers.ModelSerializer):
-    """Portfolio project serializer."""
+class ResumeCreateSerializer(serializers.ModelSerializer):
+    """Create/update resume."""
 
     class Meta:
-        model = PortfolioProject
+        model = Resume
         fields = [
-            'id',
             'title',
-            'description',
-            'technologies',
-            'project_url',
-            'github_url',
-            'image_url',
-            'start_date',
-            'end_date',
-            'is_featured',
-            'order',
+            'template_name',
+            'personal_info',
+            'work_experience',
+            'education',
+            'skills',
+            'certifications',
+            'projects',
+            'languages',
+            'is_primary',
         ]
+
+    def create(self, validated_data):
+        """Create resume for current user."""
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
 
 
 class PortfolioListSerializer(serializers.ModelSerializer):
@@ -103,16 +105,17 @@ class PortfolioListSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'title',
-            'slug',
+            'custom_url_slug',
             'is_public',
             'view_count',
+            'theme',
             'created_at',
+            'updated_at',
         ]
 
 
 class PortfolioSerializer(serializers.ModelSerializer):
     """Complete portfolio information."""
-    projects = PortfolioProjectSerializer(many=True, read_only=True)
 
     class Meta:
         model = Portfolio
@@ -120,19 +123,40 @@ class PortfolioSerializer(serializers.ModelSerializer):
             'id',
             'user',
             'title',
-            'slug',
-            'bio',
-            'tagline',
-            'profile_image_url',
-            'theme',
-            'custom_css',
+            'description',
             'projects',
+            'achievements',
+            'testimonials',
+            'theme',
+            'custom_styles',
             'is_public',
+            'custom_url_slug',
             'view_count',
-            'seo_title',
-            'seo_description',
-            'metadata',
+            'last_viewed_at',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'view_count', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'user', 'view_count', 'last_viewed_at', 'created_at', 'updated_at']
+
+
+class PortfolioCreateSerializer(serializers.ModelSerializer):
+    """Create/update portfolio."""
+
+    class Meta:
+        model = Portfolio
+        fields = [
+            'title',
+            'description',
+            'projects',
+            'achievements',
+            'testimonials',
+            'theme',
+            'custom_styles',
+            'is_public',
+            'custom_url_slug',
+        ]
+
+    def create(self, validated_data):
+        """Create portfolio for current user."""
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)

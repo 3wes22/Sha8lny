@@ -191,173 +191,180 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         serializer = AssessmentListSerializer(queryset, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['post'])
-    def submit(self, request, pk=None):
-        """
-        Submit assessment responses.
+    # ============================================================================
+    # EXTRA ENDPOINTS - NOT IN SRS APPENDIX B
+    # Commented out to match SRS. Uncomment if needed in future.
+    # ============================================================================
 
-        POST /assessment/{id}/submit/
-
-        Request Body:
-        {
-            "responses": [
-                {
-                    "question_id": "q1",
-                    "answer": "Python, Django, REST APIs",
-                    "confidence_level": 4
-                },
-                ...
-            ]
-        }
-
-        Actions:
-        1. Validate responses against assessment questions
-        2. Save responses to assessment.responses field
-        3. Update assessment status to 'completed'
-        4. Trigger AI processing (async via Celery - TODO)
-        5. Return updated assessment
-
-        SRS FR-6: User submits responses
-        """
-        assessment = self.get_object()
-
-        # Check if assessment is already completed
-        if assessment.status == 'completed':
-            return Response(
-                {'error': 'Assessment already completed'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        serializer = AssessmentResponseSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        responses = serializer.validated_data['responses']
-
-        # Update assessment with responses
-        assessment.responses = responses
-        assessment.status = 'completed'
-        assessment.answered_questions = len(responses)
-        assessment.save()
-
-        # TODO: Trigger AI processing task
-        # from apps.assessments.tasks import process_assessment_results
-        # process_assessment_results.delay(str(assessment.id))
-
-        return Response(
-            {
-                'message': 'Assessment submitted successfully',
-                'assessment': AssessmentSerializer(assessment).data,
-                'note': 'AI processing will complete shortly'
-            },
-            status=status.HTTP_200_OK
-        )
-
-    @action(detail=True, methods=['get'])
-    def result(self, request, pk=None):
-        """
-        Get AI-processed assessment result.
-
-        GET /assessment/{id}/result/
-
-        SRS FR-8: Parse AI response into Skills, Levels, Notes, Recommendations
-
-        Returns:
-        - AssessmentResult object with skill scores, insights, recommendations
-        - 404 if result not yet processed
-        - 202 if processing is in progress
-        """
-        assessment = self.get_object()
-
-        # Check if assessment is completed
-        if assessment.status != 'completed':
-            return Response(
-                {'error': 'Assessment not yet completed'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Check AI processing status
-        if assessment.ai_processing_status == 'pending':
-            return Response(
-                {
-                    'message': 'Assessment is queued for AI processing',
-                    'status': 'pending'
-                },
-                status=status.HTTP_202_ACCEPTED
-            )
-        elif assessment.ai_processing_status == 'processing':
-            return Response(
-                {
-                    'message': 'AI is currently processing your assessment',
-                    'status': 'processing'
-                },
-                status=status.HTTP_202_ACCEPTED
-            )
-        elif assessment.ai_processing_status == 'failed':
-            return Response(
-                {
-                    'error': 'AI processing failed. Please try resubmitting.',
-                    'status': 'failed'
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-        # Get result
-        try:
-            result = AssessmentResult.objects.get(
-                assessment=assessment,
-                is_deleted=False
-            )
-            serializer = AssessmentResultSerializer(result)
-            return Response(serializer.data)
-
-        except AssessmentResult.DoesNotExist:
-            return Response(
-                {'error': 'Assessment result not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-    @action(detail=True, methods=['delete'])
-    def cancel(self, request, pk=None):
-        """
-        Cancel in-progress assessment.
-
-        DELETE /assessment/{id}/cancel/
-
-        Only allows canceling draft or in_progress assessments.
-        """
-        assessment = self.get_object()
-
-        if assessment.status == 'completed':
-            return Response(
-                {'error': 'Cannot cancel completed assessment'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Soft delete
-        assessment.is_deleted = True
-        assessment.save()
-
-        return Response(
-            {'message': 'Assessment cancelled successfully'},
-            status=status.HTTP_204_NO_CONTENT
-        )
+    # @action(detail=True, methods=['post'])
+    # def submit(self, request, pk=None):
+    #     """
+    #     Submit assessment responses.
+    #
+    #     POST /assessment/{id}/submit/
+    #
+    #     Request Body:
+    #     {
+    #         "responses": [
+    #             {
+    #                 "question_id": "q1",
+    #                 "answer": "Python, Django, REST APIs",
+    #                 "confidence_level": 4
+    #             },
+    #             ...
+    #         ]
+    #     }
+    #
+    #     Actions:
+    #     1. Validate responses against assessment questions
+    #     2. Save responses to assessment.responses field
+    #     3. Update assessment status to 'completed'
+    #     4. Trigger AI processing (async via Celery - TODO)
+    #     5. Return updated assessment
+    #
+    #     SRS FR-6: User submits responses
+    #     """
+    #     assessment = self.get_object()
+    #
+    #     # Check if assessment is already completed
+    #     if assessment.status == 'completed':
+    #         return Response(
+    #             {'error': 'Assessment already completed'},
+    #             status=status.HTTP_400_BAD_REQUEST
+    #         )
+    #
+    #     serializer = AssessmentResponseSerializer(data=request.data)
+    #     serializer.is_valid(raise_exception=True)
+    #
+    #     responses = serializer.validated_data['responses']
+    #
+    #     # Update assessment with responses
+    #     assessment.responses = responses
+    #     assessment.status = 'completed'
+    #     assessment.answered_questions = len(responses)
+    #     assessment.save()
+    #
+    #     # TODO: Trigger AI processing task
+    #     # from apps.assessments.tasks import process_assessment_results
+    #     # process_assessment_results.delay(str(assessment.id))
+    #
+    #     return Response(
+    #         {
+    #             'message': 'Assessment submitted successfully',
+    #             'assessment': AssessmentSerializer(assessment).data,
+    #             'note': 'AI processing will complete shortly'
+    #         },
+    #         status=status.HTTP_200_OK
+    #     )
+    #
+    # @action(detail=True, methods=['get'])
+    # def result(self, request, pk=None):
+    #     """
+    #     Get AI-processed assessment result.
+    #
+    #     GET /assessment/{id}/result/
+    #
+    #     SRS FR-8: Parse AI response into Skills, Levels, Notes, Recommendations
+    #
+    #     Returns:
+    #     - AssessmentResult object with skill scores, insights, recommendations
+    #     - 404 if result not yet processed
+    #     - 202 if processing is in progress
+    #     """
+    #     assessment = self.get_object()
+    #
+    #     # Check if assessment is completed
+    #     if assessment.status != 'completed':
+    #         return Response(
+    #             {'error': 'Assessment not yet completed'},
+    #             status=status.HTTP_400_BAD_REQUEST
+    #         )
+    #
+    #     # Check AI processing status
+    #     if assessment.ai_processing_status == 'pending':
+    #         return Response(
+    #             {
+    #                 'message': 'Assessment is queued for AI processing',
+    #                 'status': 'pending'
+    #             },
+    #             status=status.HTTP_202_ACCEPTED
+    #         )
+    #     elif assessment.ai_processing_status == 'processing':
+    #         return Response(
+    #             {
+    #                 'message': 'AI is currently processing your assessment',
+    #                 'status': 'processing'
+    #             },
+    #             status=status.HTTP_202_ACCEPTED
+    #         )
+    #     elif assessment.ai_processing_status == 'failed':
+    #         return Response(
+    #             {
+    #                 'error': 'AI processing failed. Please try resubmitting.',
+    #                 'status': 'failed'
+    #             },
+    #             status=status.HTTP_500_INTERNAL_SERVER_ERROR
+    #         )
+    #
+    #     # Get result
+    #     try:
+    #         result = AssessmentResult.objects.get(
+    #             assessment=assessment,
+    #             is_deleted=False
+    #         )
+    #         serializer = AssessmentResultSerializer(result)
+    #         return Response(serializer.data)
+    #
+    #     except AssessmentResult.DoesNotExist:
+    #         return Response(
+    #             {'error': 'Assessment result not found'},
+    #             status=status.HTTP_404_NOT_FOUND
+    #         )
+    #
+    # @action(detail=True, methods=['delete'])
+    # def cancel(self, request, pk=None):
+    #     """
+    #     Cancel in-progress assessment.
+    #
+    #     DELETE /assessment/{id}/cancel/
+    #
+    #     Only allows canceling draft or in_progress assessments.
+    #     """
+    #     assessment = self.get_object()
+    #
+    #     if assessment.status == 'completed':
+    #         return Response(
+    #             {'error': 'Cannot cancel completed assessment'},
+    #             status=status.HTTP_400_BAD_REQUEST
+    #         )
+    #
+    #     # Soft delete
+    #     assessment.is_deleted = True
+    #     assessment.save()
+    #
+    #     return Response(
+    #         {'message': 'Assessment cancelled successfully'},
+    #         status=status.HTTP_204_NO_CONTENT
+    #     )
 
 
 # ============================================================================
-# ASSESSMENT RESULT VIEWS
+# EXTRA VIEWS - NOT IN SRS APPENDIX B
+# Commented out to match SRS. Uncomment if needed in future.
 # ============================================================================
+
+"""
+# Uncomment these views if needed in future
 
 class AssessmentResultView(APIView):
-    """
-    View assessment results.
+    # View assessment results.
+    # GET /assessment/results/ - List all user's assessment results
+    # GET /assessment/results/{id}/ - Get specific result
 
-    GET /assessment/results/ - List all user's assessment results
-    GET /assessment/results/{id}/ - Get specific result
-    """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, result_id=None):
-        """Get assessment result(s)."""
+        # Get assessment result(s).
         if result_id:
             # Get specific result
             try:
@@ -400,26 +407,19 @@ class AssessmentResultView(APIView):
             return Response(serializer.data)
 
 
-# ============================================================================
-# STATISTICS VIEWS
-# ============================================================================
-
 class AssessmentStatsView(APIView):
-    """
-    Get user's assessment statistics.
+    # Get user's assessment statistics.
+    # GET /assessment/stats/
+    # Returns:
+    # - total_assessments: Total completed assessments
+    # - assessments_by_type: Count by assessment type
+    # - average_completion_time: Average time to complete
+    # - latest_result: Most recent assessment result summary
 
-    GET /assessment/stats/
-
-    Returns:
-    - total_assessments: Total completed assessments
-    - assessments_by_type: Count by assessment type
-    - average_completion_time: Average time to complete
-    - latest_result: Most recent assessment result summary
-    """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        """Get assessment statistics for user."""
+        # Get assessment statistics for user.
         user = request.user
 
         # Get all user assessments
@@ -463,3 +463,4 @@ class AssessmentStatsView(APIView):
         }
 
         return Response(stats, status=status.HTTP_200_OK)
+"""

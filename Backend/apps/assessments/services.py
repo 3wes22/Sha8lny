@@ -9,310 +9,409 @@ from django.db import transaction
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 
-from .models import Assessment, AssessmentQuestion, AssessmentSubmission, AssessmentResult
+from .models import Assessment, AssessmentResult
 from apps.users.models import User
-from apps.notifications.signals import assessment_submitted, assessment_completed
 
 
 class AssessmentService:
     """Service for assessment management"""
 
     @staticmethod
-    def get_published_assessments(category: Optional[str] = None) -> List[Assessment]:
-        """Get all published assessments, optionally filtered by category"""
+    def get_user_assessments(user: User, assessment_type: Optional[str] = None) -> List[Assessment]:
+        """Get all assessments for a user, optionally filtered by type"""
         queryset = Assessment.objects.filter(
-            is_published=True,
+            user=user,
             is_deleted=False
         )
 
-        if category:
-            queryset = queryset.filter(category=category)
+        if assessment_type:
+            queryset = queryset.filter(assessment_type=assessment_type)
 
         return list(queryset.order_by('-created_at'))
 
     @staticmethod
-    def get_assessment_by_id(assessment_id: str) -> Optional[Assessment]:
-        """Get assessment by ID with questions"""
+    def get_assessment_by_id(assessment_id: str, user: Optional[User] = None) -> Optional[Assessment]:
+        """Get assessment by ID"""
         try:
-            return Assessment.objects.prefetch_related('questions').get(
-                id=assessment_id,
-                is_deleted=False
-            )
+            queryset = Assessment.objects.filter(id=assessment_id, is_deleted=False)
+            if user:
+                queryset = queryset.filter(user=user)
+            return queryset.first()
         except Assessment.DoesNotExist:
             return None
 
     @staticmethod
-    def get_assessment_questions(assessment: Assessment) -> List[AssessmentQuestion]:
-        """Get all questions for an assessment in order"""
-        return list(assessment.questions.filter(
+    def get_latest_assessment(user: User, assessment_type: Optional[str] = None) -> Optional[Assessment]:
+        """Get user's latest assessment"""
+        queryset = Assessment.objects.filter(
+            user=user,
             is_deleted=False
-        ).order_by('order'))
+        )
+
+        if assessment_type:
+            queryset = queryset.filter(assessment_type=assessment_type)
+
+        return queryset.order_by('-created_at').first()
 
     @staticmethod
     @transaction.atomic
     def create_assessment(
-        title: str,
-        description: str,
+        user: User,
         assessment_type: str,
-        category: str,
-        difficulty_level: str,
-        estimated_duration_minutes: int,
-        passing_score: int = 70
+        questions: Optional[List[Dict[str, Any]]] = None
     ) -> Assessment:
         """
         Create a new assessment.
 
         Args:
-            title: Assessment title
-            description: Assessment description
-            assessment_type: Type (skill_evaluation, career_aptitude, knowledge_check)
-            category: Category (programming, design, business, etc.)
-            difficulty_level: Difficulty (beginner, intermediate, advanced)
-            estimated_duration_minutes: Time estimate
-            passing_score: Minimum score to pass (0-100)
+            user: User taking the assessment
+            assessment_type: Type (skills, career_interests, personality, etc.)
+            questions: List of question dicts (optional, can be generated later)
 
         Returns:
             Assessment: Created assessment
         """
+        # Validate assessment type
+        valid_types = [choice[0] for choice in Assessment.ASSESSMENT_TYPE_CHOICES]
+        if assessment_type not in valid_types:
+            raise ValidationError(f"Invalid assessment type. Must be one of: {', '.join(valid_types)}")
+
+        # TODO: Generate questions using AI if not provided
+        if questions is None:
+            questions = []
+
         assessment = Assessment.objects.create(
-            title=title,
-            description=description,
+            user=user,
             assessment_type=assessment_type,
-            category=category,
-            difficulty_level=difficulty_level,
-            estimated_duration_minutes=estimated_duration_minutes,
-            passing_score=passing_score,
-            is_published=False
+            questions=questions,
+            total_questions=len(questions),
+            status='draft'
         )
+
         return assessment
 
     @staticmethod
     @transaction.atomic
-    def add_question_to_assessment(
-        assessment: Assessment,
-        question_text: str,
-        question_type: str,
-        order: int,
-        options: Optional[List[Dict[str, Any]]] = None,
-        correct_answer: Optional[str] = None,
-        points: int = 1,
-        explanation: str = ""
-    ) -> AssessmentQuestion:
-        """Add a question to assessment"""
-        question = AssessmentQuestion.objects.create(
-            assessment=assessment,
-            question_text=question_text,
-            question_type=question_type,
-            order=order,
-            options=options or [],
-            correct_answer=correct_answer or '',
-            points=points,
-            explanation=explanation
-        )
-        return question
-
-
-class AssessmentSubmissionService:
-    """Service for assessment submission and grading"""
-
-    @staticmethod
-    @transaction.atomic
-    def start_assessment(user: User, assessment: Assessment) -> AssessmentSubmission:
+    def start_assessment(assessment_id: str, user: User) -> Assessment:
         """
-        Start an assessment submission.
+        Start an assessment (mark as in_progress).
 
         Args:
+            assessment_id: Assessment ID
             user: User taking assessment
-            assessment: Assessment to take
 
         Returns:
-            AssessmentSubmission: Created submission
+            Assessment: Updated assessment
         """
-        # Check for existing incomplete submission
-        existing = AssessmentSubmission.objects.filter(
+        assessment = Assessment.objects.select_for_update().get(
+            id=assessment_id,
             user=user,
-            assessment=assessment,
-            status='in_progress',
             is_deleted=False
-        ).first()
-
-        if existing:
-            return existing
-
-        submission = AssessmentSubmission.objects.create(
-            user=user,
-            assessment=assessment,
-            status='in_progress',
-            started_at=timezone.now()
         )
 
-        return submission
+        if assessment.status != 'draft':
+            raise ValidationError("Assessment has already been started")
+
+        assessment.status = 'in_progress'
+        assessment.started_at = timezone.now()
+        assessment.save()
+
+        return assessment
 
     @staticmethod
     @transaction.atomic
-    def submit_assessment(
-        submission: AssessmentSubmission,
-        answers: Dict[str, Any]
-    ) -> AssessmentSubmission:
+    def submit_response(
+        assessment_id: str,
+        user: User,
+        question_id: int,
+        answer: Any
+    ) -> Assessment:
         """
-        Submit assessment answers.
+        Submit a single question response.
 
         Args:
-            submission: AssessmentSubmission instance
-            answers: Dict mapping question_id to answer
+            assessment_id: Assessment ID
+            user: User submitting response
+            question_id: Question ID being answered
+            answer: User's answer
 
         Returns:
-            AssessmentSubmission: Updated submission with score
+            Assessment: Updated assessment
         """
-        submission.answers = answers
-        submission.submitted_at = timezone.now()
-        submission.status = 'submitted'
-
-        # Calculate score
-        questions = submission.assessment.questions.filter(is_deleted=False)
-        total_points = sum(q.points for q in questions)
-        earned_points = 0
-
-        for question in questions:
-            user_answer = answers.get(str(question.id))
-
-            if question.question_type in ['multiple_choice', 'true_false']:
-                if user_answer == question.correct_answer:
-                    earned_points += question.points
-            # TODO: Add grading logic for other question types
-
-        if total_points > 0:
-            submission.score = int((earned_points / total_points) * 100)
-        else:
-            submission.score = 0
-
-        submission.save()
-
-        # Emit signal
-        assessment_submitted.send(
-            sender=AssessmentSubmission,
-            instance=submission,
-            user=submission.user
-        )
-
-        return submission
-
-    @staticmethod
-    def get_user_submissions(user: User) -> List[AssessmentSubmission]:
-        """Get all submissions for user"""
-        return list(AssessmentSubmission.objects.filter(
+        assessment = Assessment.objects.select_for_update().get(
+            id=assessment_id,
             user=user,
             is_deleted=False
-        ).select_related('assessment').order_by('-submitted_at'))
+        )
+
+        if assessment.status not in ['draft', 'in_progress']:
+            raise ValidationError("Cannot submit responses to completed assessment")
+
+        # Add response to responses list
+        response_entry = {
+            'question_id': question_id,
+            'answer': answer,
+            'timestamp': timezone.now().isoformat()
+        }
+
+        responses = assessment.responses or []
+
+        # Update existing response or add new one
+        existing_idx = next(
+            (i for i, r in enumerate(responses) if r.get('question_id') == question_id),
+            None
+        )
+
+        if existing_idx is not None:
+            responses[existing_idx] = response_entry
+        else:
+            responses.append(response_entry)
+
+        assessment.responses = responses
+        assessment.answered_questions = len(responses)
+        assessment.save()
+
+        return assessment
 
     @staticmethod
-    def get_submission_by_id(submission_id: str) -> Optional[AssessmentSubmission]:
-        """Get submission by ID"""
-        try:
-            return AssessmentSubmission.objects.select_related('assessment').get(
-                id=submission_id,
-                is_deleted=False
-            )
-        except AssessmentSubmission.DoesNotExist:
-            return None
+    @transaction.atomic
+    def complete_assessment(
+        assessment_id: str,
+        user: User,
+        responses: Optional[List[Dict[str, Any]]] = None
+    ) -> Assessment:
+        """
+        Complete an assessment and mark for AI processing.
+
+        Args:
+            assessment_id: Assessment ID
+            user: User completing assessment
+            responses: Complete list of responses (optional if already submitted individually)
+
+        Returns:
+            Assessment: Completed assessment
+        """
+        assessment = Assessment.objects.select_for_update().get(
+            id=assessment_id,
+            user=user,
+            is_deleted=False
+        )
+
+        if assessment.status == 'completed':
+            raise ValidationError("Assessment already completed")
+
+        # Update responses if provided
+        if responses is not None:
+            assessment.responses = responses
+            assessment.answered_questions = len(responses)
+
+        assessment.status = 'completed'
+        assessment.completed_at = timezone.now()
+        assessment.ai_processing_status = 'pending'
+        assessment.save()
+
+        # TODO: Trigger async AI processing task
+        # tasks.process_assessment_ai.delay(str(assessment.id))
+
+        return assessment
 
 
 class AssessmentResultService:
     """Service for assessment result analysis"""
 
     @staticmethod
-    @transaction.atomic
-    def generate_assessment_result(
-        submission: AssessmentSubmission
-    ) -> AssessmentResult:
-        """
-        Generate AI-powered assessment result with analysis.
-
-        Args:
-            submission: Completed assessment submission
-
-        Returns:
-            AssessmentResult: Created result with AI insights
-        """
-        # Check for existing result
-        existing = AssessmentResult.objects.filter(
-            submission=submission,
-            is_deleted=False
-        ).first()
-
-        if existing:
-            return existing
-
-        result = AssessmentResult.objects.create(
-            user=submission.user,
-            assessment=submission.assessment,
-            submission=submission,
-            overall_score=submission.score,
-            processing_status='pending'  # Will be processed by AI async
-        )
-
-        # TODO: Trigger async AI analysis task
-        # tasks.analyze_assessment_result.delay(result.id)
-
-        # Emit signal
-        assessment_completed.send(
-            sender=AssessmentResult,
-            instance=result,
-            user=submission.user
-        )
-
-        return result
-
-    @staticmethod
     def get_user_results(user: User) -> List[AssessmentResult]:
         """Get all assessment results for user"""
         return list(AssessmentResult.objects.filter(
-            user=user,
+            assessment__user=user,
             is_deleted=False
-        ).select_related('assessment', 'submission').order_by('-created_at'))
+        ).select_related('assessment').order_by('-created_at'))
+
+    @staticmethod
+    def get_result_by_assessment(assessment_id: str) -> Optional[AssessmentResult]:
+        """Get result for a specific assessment"""
+        try:
+            return AssessmentResult.objects.select_related('assessment').get(
+                assessment_id=assessment_id,
+                is_deleted=False
+            )
+        except AssessmentResult.DoesNotExist:
+            return None
 
     @staticmethod
     def get_result_by_id(result_id: str) -> Optional[AssessmentResult]:
         """Get result by ID"""
         try:
-            return AssessmentResult.objects.select_related(
-                'assessment', 'submission'
-            ).get(id=result_id, is_deleted=False)
+            return AssessmentResult.objects.select_related('assessment').get(
+                id=result_id,
+                is_deleted=False
+            )
         except AssessmentResult.DoesNotExist:
             return None
 
     @staticmethod
-    def get_skill_strengths_weaknesses(user: User) -> Dict[str, Any]:
+    @transaction.atomic
+    def create_assessment_result(
+        assessment: Assessment,
+        overall_score: float,
+        skill_scores: Optional[Dict[str, Any]] = None,
+        strengths: Optional[List[str]] = None,
+        areas_for_improvement: Optional[List[str]] = None,
+        recommended_careers: Optional[List[Dict[str, Any]]] = None,
+        recommended_learning_paths: Optional[List[Dict[str, Any]]] = None,
+        ai_insights: str = "",
+        ai_confidence_score: Optional[float] = None,
+        llm_model_used: str = "",
+        llm_prompt_tokens: Optional[int] = None,
+        llm_completion_tokens: Optional[int] = None,
+        processing_time_seconds: Optional[float] = None
+    ) -> AssessmentResult:
         """
-        Analyze user's skill strengths and weaknesses across all assessments.
+        Create AI-analyzed assessment result.
+
+        Args:
+            assessment: Assessment instance
+            overall_score: Overall score (0-100)
+            skill_scores: Detailed skill scores by category
+            strengths: List of identified strengths
+            areas_for_improvement: List of areas needing improvement
+            recommended_careers: List of recommended career paths
+            recommended_learning_paths: Recommended skills to learn
+            ai_insights: Natural language AI insights
+            ai_confidence_score: AI confidence (0-100)
+            llm_model_used: LLM model name
+            llm_prompt_tokens: Prompt tokens used
+            llm_completion_tokens: Completion tokens used
+            processing_time_seconds: Processing time
 
         Returns:
-            Dict with strengths, weaknesses, and recommendations
+            AssessmentResult: Created result
+        """
+        # Check for existing result
+        existing = AssessmentResult.objects.filter(
+            assessment=assessment,
+            is_deleted=False
+        ).first()
+
+        if existing:
+            # Update existing result
+            existing.overall_score = overall_score
+            existing.skill_scores = skill_scores or {}
+            existing.strengths = strengths or []
+            existing.areas_for_improvement = areas_for_improvement or []
+            existing.recommended_careers = recommended_careers or []
+            existing.recommended_learning_paths = recommended_learning_paths or []
+            existing.ai_insights = ai_insights
+            existing.ai_confidence_score = ai_confidence_score
+            existing.llm_model_used = llm_model_used
+            existing.llm_prompt_tokens = llm_prompt_tokens
+            existing.llm_completion_tokens = llm_completion_tokens
+            existing.processing_time_seconds = processing_time_seconds
+            existing.save()
+            return existing
+
+        # Create new result
+        result = AssessmentResult.objects.create(
+            assessment=assessment,
+            overall_score=overall_score,
+            skill_scores=skill_scores or {},
+            strengths=strengths or [],
+            areas_for_improvement=areas_for_improvement or [],
+            recommended_careers=recommended_careers or [],
+            recommended_learning_paths=recommended_learning_paths or [],
+            ai_insights=ai_insights,
+            ai_confidence_score=ai_confidence_score,
+            llm_model_used=llm_model_used,
+            llm_prompt_tokens=llm_prompt_tokens,
+            llm_completion_tokens=llm_completion_tokens,
+            processing_time_seconds=processing_time_seconds
+        )
+
+        # Update assessment AI processing status
+        assessment.ai_processing_status = 'completed'
+        assessment.ai_processed_at = timezone.now()
+        assessment.save()
+
+        return result
+
+    @staticmethod
+    def get_skill_summary(user: User) -> Dict[str, Any]:
+        """
+        Get comprehensive skill summary across all assessments.
+
+        Returns:
+            Dict with skill categories, scores, strengths, weaknesses
         """
         results = AssessmentResult.objects.filter(
-            user=user,
+            assessment__user=user,
             is_deleted=False
         ).select_related('assessment')
 
-        strengths = []
-        weaknesses = []
+        # Aggregate skill scores across all assessments
+        all_skills = {}
+        all_strengths = []
+        all_weaknesses = []
 
         for result in results:
-            if result.overall_score >= 80:
-                strengths.append({
-                    'category': result.assessment.category,
-                    'score': result.overall_score,
-                    'level': result.skill_level
-                })
-            elif result.overall_score < 60:
-                weaknesses.append({
-                    'category': result.assessment.category,
-                    'score': result.overall_score,
-                    'level': result.skill_level
-                })
+            # Collect skill scores
+            for category, skills in result.skill_scores.items():
+                if isinstance(skills, dict):
+                    if category not in all_skills:
+                        all_skills[category] = {}
+                    for skill_name, score in skills.items():
+                        # Keep highest score for each skill
+                        if skill_name not in all_skills[category] or score > all_skills[category][skill_name]:
+                            all_skills[category][skill_name] = score
+
+            # Collect strengths and weaknesses
+            all_strengths.extend(result.strengths)
+            all_weaknesses.extend(result.areas_for_improvement)
+
+        # Calculate average scores by category
+        category_averages = {}
+        for category, skills in all_skills.items():
+            if skills:
+                category_averages[category] = sum(skills.values()) / len(skills)
 
         return {
-            'strengths': strengths,
-            'weaknesses': weaknesses,
+            'skill_scores': all_skills,
+            'category_averages': category_averages,
+            'strengths': list(set(all_strengths)),  # Deduplicate
+            'areas_for_improvement': list(set(all_weaknesses)),
             'total_assessments': results.count()
+        }
+
+    @staticmethod
+    def get_assessment_statistics(user: User) -> Dict[str, Any]:
+        """
+        Get statistics about user's assessments.
+
+        Returns:
+            Dict with counts, averages, and trends
+        """
+        assessments = Assessment.objects.filter(
+            user=user,
+            is_deleted=False
+        )
+
+        completed = assessments.filter(status='completed')
+        in_progress = assessments.filter(status='in_progress')
+
+        results = AssessmentResult.objects.filter(
+            assessment__user=user,
+            is_deleted=False
+        )
+
+        avg_score = 0
+        if results.exists():
+            total_score = sum(float(r.overall_score) for r in results)
+            avg_score = total_score / results.count()
+
+        return {
+            'total_assessments': assessments.count(),
+            'completed_assessments': completed.count(),
+            'in_progress_assessments': in_progress.count(),
+            'average_score': round(avg_score, 2),
+            'results_count': results.count(),
+            'latest_assessment': completed.order_by('-completed_at').first(),
         }

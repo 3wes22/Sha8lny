@@ -17,32 +17,37 @@ from django.db.models import Q, Avg, Count
 from django.utils import timezone
 from datetime import timedelta
 
-from apps.jobs.models import JobPlatform, Job, SkillDemandInsight
+from apps.jobs.models import JobPlatform, Job, SkillDemand
 from apps.jobs.serializers import (
     JobPlatformSerializer,
     JobSerializer,
     JobListSerializer,
     JobSearchSerializer,
-    SkillDemandInsightSerializer,
+    SkillDemandSerializer,
 )
 
 
-class JobPlatformViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    View job platforms.
+# ============================================================================
+# EXTRA ENDPOINT - NOT IN SRS APPENDIX B
+# Uncomment if needed in future
+# ============================================================================
 
-    Endpoints:
-    - GET /platforms/ - List active job platforms
-    - GET /platforms/{id}/ - Get specific platform
-    """
-    permission_classes = [permissions.IsAuthenticated]
-    serializer_class = JobPlatformSerializer
-
-    def get_queryset(self):
-        return JobPlatform.objects.filter(
-            is_active=True,
-            is_deleted=False
-        ).order_by('name')
+# class JobPlatformViewSet(viewsets.ReadOnlyModelViewSet):
+#     """
+#     View job platforms.
+#
+#     Endpoints:
+#     - GET /platforms/ - List active job platforms
+#     - GET /platforms/{id}/ - Get specific platform
+#     """
+#     permission_classes = [permissions.IsAuthenticated]
+#     serializer_class = JobPlatformSerializer
+#
+#     def get_queryset(self):
+#         return JobPlatform.objects.filter(
+#             is_active=True,
+#             is_deleted=False
+#         ).order_by('name')
 
 
 class JobViewSet(viewsets.ReadOnlyModelViewSet):
@@ -145,58 +150,68 @@ class JobViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['get'])
-    def recent(self, request):
-        """
-        Get recent job postings (last 7 days).
+    # ============================================================================
+    # EXTRA ENDPOINTS - NOT IN SRS APPENDIX B
+    # Commented out to match SRS. Uncomment if needed in future.
+    # ============================================================================
 
-        GET /jobs/recent/
-        """
-        week_ago = timezone.now().date() - timedelta(days=7)
-        jobs = self.get_queryset().filter(
-            posted_date__gte=week_ago
-        ).order_by('-posted_date')[:50]
+    # @action(detail=False, methods=['get'])
+    # def recent(self, request):
+    #     """
+    #     Get recent job postings (last 7 days).
+    #
+    #     GET /jobs/recent/
+    #     """
+    #     week_ago = timezone.now().date() - timedelta(days=7)
+    #     jobs = self.get_queryset().filter(
+    #         posted_date__gte=week_ago
+    #     ).order_by('-posted_date')[:50]
+    #
+    #     serializer = JobListSerializer(jobs, many=True)
+    #     return Response(serializer.data)
 
-        serializer = JobListSerializer(jobs, many=True)
-        return Response(serializer.data)
 
+# ============================================================================
+# EXTRA ENDPOINT - NOT IN SRS APPENDIX B
+# Uncomment if needed in future
+# ============================================================================
 
-class SkillDemandInsightViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    View skill demand insights.
-
-    SRS FR-20: Market Insights
-    SRS FR-21: Skill Demand Analysis
-
-    Endpoints:
-    - GET /insights/ - List skill demand data
-    - GET /insights/{id}/ - Get specific skill insight
-    - GET /insights/trending/ - Get trending skills
-    """
-    permission_classes = [permissions.IsAuthenticated]
-    serializer_class = SkillDemandInsightSerializer
-
-    def get_queryset(self):
-        """Return recent insights (last 30 days)."""
-        thirty_days_ago = timezone.now().date() - timedelta(days=30)
-        return SkillDemandInsight.objects.filter(
-            is_deleted=False,
-            period_end__gte=thirty_days_ago
-        ).select_related('skill').order_by('-demand_score')
-
-    @action(detail=False, methods=['get'])
-    def trending(self, request):
-        """
-        Get trending skills (high growth percentage).
-
-        GET /insights/trending/
-
-        Returns skills with growth_percentage > 0 ordered by growth.
-        """
-        insights = self.get_queryset().filter(
-            trending=True,
-            growth_percentage__gt=0
-        ).order_by('-growth_percentage')[:20]
-
-        serializer = self.get_serializer(insights, many=True)
-        return Response(serializer.data)
+# class SkillDemandViewSet(viewsets.ReadOnlyModelViewSet):
+#     """
+#     View skill demand insights.
+#
+#     SRS FR-20: Market Insights
+#     SRS FR-21: Skill Demand Analysis
+#
+#     Endpoints:
+#     - GET /demand/ - List skill demand data
+#     - GET /demand/{id}/ - Get specific skill demand
+#     - GET /demand/trending/ - Get trending skills
+#     """
+#     permission_classes = [permissions.IsAuthenticated]
+#     serializer_class = SkillDemandSerializer
+#
+#     def get_queryset(self):
+#         """Return recent skill demand data (last 6 months)."""
+#         six_months_ago = timezone.now().date() - timedelta(days=180)
+#         return SkillDemand.objects.filter(
+#             is_deleted=False,
+#             month__gte=six_months_ago
+#         ).select_related('skill').order_by('-demand_count')
+#
+#     @action(detail=False, methods=['get'])
+#     def trending(self, request):
+#         """
+#         Get trending skills (rising trend).
+#
+#         GET /demand/trending/
+#
+#         Returns skills with rising trend ordered by growth.
+#         """
+#         skills = self.get_queryset().filter(
+#             trend_direction='rising',
+#             growth_percentage__gt=0
+#         ).order_by('-growth_percentage')[:20]
+#
+#         serializer = self.get_serializer(skills, many=True)
+#         return Response(serializer.data)

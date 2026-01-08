@@ -40,7 +40,7 @@ from apps.progress.serializers import (
 from apps.progress.services import (
     ProgressService,
     CourseCompletionService,
-    MilestoneAchievementService,
+    MilestoneService,
     TimeLogService,
 )
 from apps.courses.models import Course

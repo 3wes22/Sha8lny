@@ -21,7 +21,8 @@ from apps.advisory.serializers import (
     MessageSerializer,
     ChatMessageSerializer,
 )
-from apps.advisory.services import AdvisoryService
+# TODO: Import advisory services when needed for AI integration
+# from apps.advisory.services import ConversationService, MessageService, RAGContextService
 
 
 class ChatView(APIView):

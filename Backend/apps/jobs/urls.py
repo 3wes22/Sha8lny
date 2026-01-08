@@ -14,8 +14,10 @@ from apps.jobs import views
 
 router = DefaultRouter()
 router.register(r'', views.JobViewSet, basename='job')
-router.register(r'platforms', views.JobPlatformViewSet, basename='platform')
-router.register(r'insights', views.SkillDemandInsightViewSet, basename='insight')
+# EXTRA ENDPOINTS - NOT IN SRS APPENDIX B
+# Uncomment if needed in future
+# router.register(r'platforms', views.JobPlatformViewSet, basename='platform')
+# router.register(r'demand', views.SkillDemandViewSet, basename='demand')
 
 app_name = 'jobs'
 

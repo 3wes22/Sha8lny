@@ -42,51 +42,52 @@ from apps.assessments.models import AssessmentResult
 
 
 # ============================================================================
-# ROADMAP TEMPLATE VIEWS
+# EXTRA ENDPOINT - NOT IN SRS APPENDIX B
+# Uncomment if needed in future
 # ============================================================================
 
-class RoadmapTemplateViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    View roadmap templates.
-
-    Endpoints:
-    - GET /templates/ - List all published templates
-    - GET /templates/{id}/ - Get specific template
-    - GET /templates/by_career/?career=Backend - Filter by career
-    """
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        """Return only published templates."""
-        return RoadmapTemplate.objects.filter(
-            is_published=True,
-            is_deleted=False
-        ).order_by('-usage_count')
-
-    def get_serializer_class(self):
-        """Use minimal serializer for list view."""
-        if self.action == 'list':
-            return RoadmapTemplateListSerializer
-        return RoadmapTemplateSerializer
-
-    @action(detail=False, methods=['get'])
-    def by_career(self, request):
-        """
-        Get templates filtered by career.
-
-        Query Parameters:
-        - career: Career name to search for (required)
-        """
-        career = request.query_params.get('career')
-        if not career:
-            return Response(
-                {'error': 'career parameter is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        templates = RoadmapTemplateService.get_template_by_career(career)
-        serializer = RoadmapTemplateListSerializer(templates, many=True)
-        return Response(serializer.data)
+# class RoadmapTemplateViewSet(viewsets.ReadOnlyModelViewSet):
+#     """
+#     View roadmap templates.
+#
+#     Endpoints:
+#     - GET /templates/ - List all published templates
+#     - GET /templates/{id}/ - Get specific template
+#     - GET /templates/by_career/?career=Backend - Filter by career
+#     """
+#     permission_classes = [permissions.IsAuthenticated]
+#
+#     def get_queryset(self):
+#         """Return only published templates."""
+#         return RoadmapTemplate.objects.filter(
+#             is_published=True,
+#             is_deleted=False
+#         ).order_by('-usage_count')
+#
+#     def get_serializer_class(self):
+#         """Use minimal serializer for list view."""
+#         if self.action == 'list':
+#             return RoadmapTemplateListSerializer
+#         return RoadmapTemplateSerializer
+#
+#     @action(detail=False, methods=['get'])
+#     def by_career(self, request):
+#         """
+#         Get templates filtered by career.
+#
+#         Query Parameters:
+#         - career: Career name to search for (required)
+#         """
+#         career = request.query_params.get('career')
+#         if not career:
+#             return Response(
+#                 {'error': 'career parameter is required'},
+#                 status=status.HTTP_400_BAD_REQUEST
+#             )
+#
+#         templates = RoadmapTemplateService.get_template_by_career(career)
+#         serializer = RoadmapTemplateListSerializer(templates, many=True)
+#         return Response(serializer.data)
 
 
 # ============================================================================
@@ -348,71 +349,76 @@ class RoadmapViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_404_NOT_FOUND
                 )
 
-    @action(detail=True, methods=['post'])
-    def activate(self, request, pk=None):
-        """
-        Activate a roadmap.
+    # ============================================================================
+    # EXTRA ENDPOINTS - NOT IN SRS APPENDIX B
+    # Commented out to match SRS. Uncomment if needed in future.
+    # ============================================================================
 
-        POST /roadmap/{id}/activate/
-
-        Sets roadmap status to 'active' and marks started_at timestamp.
-        """
-        roadmap = self.get_object()
-
-        if roadmap.status in ['active', 'in_progress']:
-            return Response(
-                {'error': 'Roadmap is already active'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        roadmap = RoadmapService.update_roadmap_status(roadmap, 'active')
-
-        return Response(
-            {
-                'message': 'Roadmap activated successfully',
-                'roadmap': RoadmapSerializer(roadmap).data
-            },
-            status=status.HTTP_200_OK
-        )
-
-    @action(detail=True, methods=['get'])
-    def stats(self, request, pk=None):
-        """
-        Get roadmap statistics.
-
-        GET /roadmap/{id}/stats/
-
-        Returns:
-        - total_phases, completed_phases
-        - total_milestones, completed_milestones
-        - total_courses
-        - estimated_total_hours
-        - completion_percentage
-        """
-        roadmap = self.get_object()
-        stats = RoadmapService.get_roadmap_statistics(roadmap)
-
-        serializer = RoadmapStatsSerializer(data=stats)
-        serializer.is_valid(raise_exception=True)
-
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    @action(detail=False, methods=['get'])
-    def active(self, request):
-        """
-        Get user's active roadmaps.
-
-        GET /roadmap/active/
-
-        Returns roadmaps with status 'active' or 'in_progress'.
-        """
-        roadmaps = RoadmapService.get_user_roadmaps(
-            user=request.user,
-            status='active'
-        )
-
-        serializer = RoadmapListSerializer(roadmaps, many=True)
-        return Response(serializer.data)
+    # @action(detail=True, methods=['post'])
+    # def activate(self, request, pk=None):
+    #     """
+    #     Activate a roadmap.
+    #
+    #     POST /roadmap/{id}/activate/
+    #
+    #     Sets roadmap status to 'active' and marks started_at timestamp.
+    #     """
+    #     roadmap = self.get_object()
+    #
+    #     if roadmap.status in ['active', 'in_progress']:
+    #         return Response(
+    #             {'error': 'Roadmap is already active'},
+    #             status=status.HTTP_400_BAD_REQUEST
+    #         )
+    #
+    #     roadmap = RoadmapService.update_roadmap_status(roadmap, 'active')
+    #
+    #     return Response(
+    #         {
+    #             'message': 'Roadmap activated successfully',
+    #             'roadmap': RoadmapSerializer(roadmap).data
+    #         },
+    #         status=status.HTTP_200_OK
+    #     )
+    #
+    # @action(detail=True, methods=['get'])
+    # def stats(self, request, pk=None):
+    #     """
+    #     Get roadmap statistics.
+    #
+    #     GET /roadmap/{id}/stats/
+    #
+    #     Returns:
+    #     - total_phases, completed_phases
+    #     - total_milestones, completed_milestones
+    #     - total_courses
+    #     - estimated_total_hours
+    #     - completion_percentage
+    #     """
+    #     roadmap = self.get_object()
+    #     stats = RoadmapService.get_roadmap_statistics(roadmap)
+    #
+    #     serializer = RoadmapStatsSerializer(data=stats)
+    #     serializer.is_valid(raise_exception=True)
+    #
+    #     return Response(serializer.data, status=status.HTTP_200_OK)
+    #
+    # @action(detail=False, methods=['get'])
+    # def active(self, request):
+    #     """
+    #     Get user's active roadmaps.
+    #
+    #     GET /roadmap/active/
+    #
+    #     Returns roadmaps with status 'active' or 'in_progress'.
+    #     """
+    #     roadmaps = RoadmapService.get_user_roadmaps(
+    #         user=request.user,
+    #         status='active'
+    #     )
+    #
+    #     serializer = RoadmapListSerializer(roadmaps, many=True)
+    #     return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
         """Soft delete roadmap."""

@@ -11,7 +11,7 @@ SRS References:
 """
 
 from rest_framework import serializers
-from apps.jobs.models import JobPlatform, Job, JobSkillRequirement, SkillDemandInsight
+from apps.jobs.models import JobPlatform, Job, JobSkill, SkillDemand, MarketInsight
 
 
 class JobPlatformSerializer(serializers.ModelSerializer):
@@ -30,18 +30,19 @@ class JobPlatformSerializer(serializers.ModelSerializer):
         ]
 
 
-class JobSkillRequirementSerializer(serializers.ModelSerializer):
+class JobSkillSerializer(serializers.ModelSerializer):
     """Job skill requirement details."""
+    skill_name = serializers.CharField(source='skill.name', read_only=True)
 
     class Meta:
-        model = JobSkillRequirement
+        model = JobSkill
         fields = [
             'id',
             'skill',
+            'skill_name',
             'proficiency_level',
-            'years_required',
+            'years_experience',
             'is_required',
-            'priority',
         ]
 
 
@@ -71,7 +72,7 @@ class JobListSerializer(serializers.ModelSerializer):
 class JobSerializer(serializers.ModelSerializer):
     """Complete job information."""
     platform = JobPlatformSerializer(read_only=True)
-    skill_requirements = JobSkillRequirementSerializer(many=True, read_only=True)
+    skills = JobSkillSerializer(many=True, read_only=True, source='jobskill_set')
 
     class Meta:
         model = Job
@@ -81,21 +82,28 @@ class JobSerializer(serializers.ModelSerializer):
             'title',
             'company_name',
             'company_website',
-            'location',
+            'company_logo_url',
+            'location_city',
+            'location_country',
+            'remote_type',
             'job_type',
             'experience_level',
+            'experience_years_min',
+            'experience_years_max',
             'description',
             'requirements',
+            'responsibilities',
             'benefits',
             'salary_min',
             'salary_max',
-            'currency',
-            'is_remote',
+            'salary_currency',
+            'salary_period',
+            'salary_disclosed',
             'application_url',
+            'application_email',
+            'application_deadline',
             'posted_date',
-            'expiry_date',
-            'skill_requirements',
-            'normalized_at',
+            'skills',
             'created_at',
         ]
 
@@ -120,21 +128,39 @@ class JobSearchSerializer(serializers.Serializer):
     )
 
 
-class SkillDemandInsightSerializer(serializers.ModelSerializer):
+class SkillDemandSerializer(serializers.ModelSerializer):
     """Skill demand analytics."""
+    skill_name = serializers.CharField(source='skill.name', read_only=True)
 
     class Meta:
-        model = SkillDemandInsight
+        model = SkillDemand
         fields = [
             'id',
             'skill',
-            'demand_score',
-            'job_count',
-            'average_salary',
+            'skill_name',
+            'country',
+            'month',
+            'demand_count',
+            'trend_direction',
             'growth_percentage',
-            'trending',
-            'top_job_titles',
-            'top_companies',
+            'created_at',
+        ]
+
+
+class MarketInsightSerializer(serializers.ModelSerializer):
+    """Market insights."""
+
+    class Meta:
+        model = MarketInsight
+        fields = [
+            'id',
+            'title',
+            'category',
+            'insight_type',
+            'data',
+            'summary',
             'period_start',
             'period_end',
+            'country',
+            'created_at',
         ]

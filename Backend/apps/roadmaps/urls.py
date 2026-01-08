@@ -14,7 +14,9 @@ from rest_framework.routers import DefaultRouter
 from apps.roadmaps import views
 
 router = DefaultRouter()
-router.register(r'templates', views.RoadmapTemplateViewSet, basename='template')
+# EXTRA ENDPOINT - NOT IN SRS APPENDIX B
+# Uncomment if needed in future
+# router.register(r'templates', views.RoadmapTemplateViewSet, basename='template')
 router.register(r'', views.RoadmapViewSet, basename='roadmap')
 
 app_name = 'roadmaps'
