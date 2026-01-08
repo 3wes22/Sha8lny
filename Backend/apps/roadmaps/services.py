@@ -7,7 +7,7 @@ This is where AI-powered roadmap generation will be integrated.
 
 from typing import Optional, List, Dict, Any
 from decimal import Decimal
-from django.db import transaction
+from django.db import transaction, models
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 
@@ -266,16 +266,18 @@ class RoadmapService:
         milestone: RoadmapMilestone,
         course: Course,
         order: int,
-        is_required: bool = True,
-        completion_criteria: Optional[str] = None
+        is_primary: bool = False,
+        match_score: Decimal = Decimal('0.00'),
+        recommendation_reason: str = ''
     ) -> RoadmapCourse:
         """Associate a course with a milestone"""
         roadmap_course = RoadmapCourse.objects.create(
             milestone=milestone,
             course=course,
             order=order,
-            is_required=is_required,
-            completion_criteria=completion_criteria or ''
+            is_primary=is_primary,
+            match_score=match_score,
+            recommendation_reason=recommendation_reason
         )
         return roadmap_course
 
