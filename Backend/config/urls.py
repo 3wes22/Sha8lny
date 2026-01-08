@@ -28,6 +28,30 @@ urlpatterns = [
     # User Service endpoints: /auth/login, /users/me, /users/skills
     path("api/v1/users/", include('apps.users.urls')),
 
+    # Notification Service endpoints
+    path("api/v1/notifications/", include('apps.notifications.urls')),
+
+    # Course Service endpoints
+    path("api/v1/courses/", include('apps.courses.urls')),
+
+    # Assessment Service endpoints: /assessment/, /assessment/latest, /assessment/history
+    path("api/v1/assessment/", include('apps.assessments.urls')),
+
+    # Roadmap Service endpoints: /roadmap/, /roadmap/progress
+    path("api/v1/roadmap/", include('apps.roadmaps.urls')),
+
+    # Progress Service endpoints
+    path("api/v1/progress/", include('apps.progress.urls')),
+
+    # Job Service endpoints: /jobs/search, /jobs/<id>
+    path("api/v1/jobs/", include('apps.jobs.urls')),
+
+    # Advisory Service endpoints: /advisory/chat, /advisory/history
+    path("api/v1/advisory/", include('apps.advisory.urls')),
+
+    # Career Tools Service endpoints
+    path("api/v1/career-tools/", include('apps.career_tools.urls')),
+
     # API Documentation (OpenAPI/Swagger)
     # As per SRS requirement for REST API documentation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
