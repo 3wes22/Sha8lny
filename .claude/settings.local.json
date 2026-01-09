@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(echo:*)",
+      "Bash(__init__.py)",
+      "Bash(python:*)",
+      "Bash(venv/Scripts/python.exe -m pip:*)",
+      "Bash(cat:*)",
+      "Bash(wc:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

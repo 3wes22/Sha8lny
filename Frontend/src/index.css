@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base design tokens & global styles */
+@layer base {
+  :root {
+    /* Base background & text */
+    --background: 230 40% 98%;       /* #F4F4FB */
+    --foreground: 222 47% 11%;       /* #0F172A */
+
+    /* Surfaces */
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Primary (soft indigo) */
+    --primary: 239 84% 67%;          /* #6366F1 */
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary (teal) */
+    --secondary: 188 75% 53%;        /* #06B6D4 */
+    --secondary-foreground: 0 0% 100%;
+
+    /* Muted / subtle surfaces */
+    --muted: 220 20% 95%;
+    --muted-foreground: 220 10% 45%; /* #6B7280 */
+
+    /* Accent (amber) */
+    --accent: 28 92% 61%;            /* #F97316 */
+    --accent-foreground: 20 20% 15%;
+
+    /* Destructive (errors, danger) */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders & inputs */
+    --border: 220 20% 88%;           /* #E2E8F0 */
+    --input: 220 20% 88%;
+    --ring: 239 84% 67%;             /* primary-colored focus ring */
+
+    /* Radii */
+    --radius: 0.875rem;
+  }
+
+  .dark {
+    --background: 222 47% 7%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 9%;
+    --popover-foreground: 210 40% 98%;
+
+    --muted: 222 30% 15%;
+    --muted-foreground: 215 20% 75%;
+
+    --border: 222 30% 20%;
+    --input: 222 30% 20%;
+    --ring: 239 84% 70%;
+
+    --primary: 239 84% 70%;
+    --primary-foreground: 222 47% 10%;
+
+    --secondary: 188 75% 53%;
+    --secondary-foreground: 222 47% 10%;
+
+    --accent: 28 92% 61%;
+    --accent-foreground: 222 47% 10%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+/* Custom utilities for gradients, shadows, smooth transitions */
+@layer utilities {
+  /* Smooth transitions on hover/focus */
+  .transition-smooth {
+    transition: all 180ms ease-out;
+  }
+
+  /* Premium calm gradient for CTAs, buttons, and important sections */
+  .gradient-primary {
+    background-image: linear-gradient(
+      135deg,
+      hsl(239 84% 67%),
+      hsl(188 75% 53%)
+    );
+  }
+
+  /* Softer gradient for backgrounds / panels */
+  .gradient-soft {
+    background-image: linear-gradient(
+      135deg,
+      hsla(239, 84%, 67%, 0.08),
+      hsla(188, 75%, 53%, 0.04)
+    );
+  }
+
+  /* Soft, premium shadow for key cards and panels */
+  .shadow-soft-lg {
+    box-shadow:
+      0 18px 45px rgba(15, 23, 42, 0.12),
+      0 0 0 1px rgba(148, 163, 184, 0.25);
+  }
+
+  /* Explicit surface helper (if you want to use it separately from bg-card) */
+  .bg-surface {
+    background-color: hsl(var(--card));
+  }
+
+  /* Subtle border helper class */
+  .border-subtle {
+    border-color: hsl(var(--border));
+  }
+}
