@@ -9,10 +9,11 @@ SRS References:
 - FR-15: RAG Pipeline
 """
 
-from rest_framework import viewsets, status, permissions
+from rest_framework import viewsets, status, permissions, serializers as drf_serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema, OpenApiResponse
 
 from apps.advisory.models import Conversation, Message
 from apps.advisory.serializers import (
@@ -25,28 +26,40 @@ from apps.advisory.serializers import (
 # from apps.advisory.services import ConversationService, MessageService, RAGContextService
 
 
+# Response serializer for schema documentation
+class ChatResponseSerializer(drf_serializers.Serializer):
+    """Response serializer for chat endpoint (for OpenAPI schema)."""
+    conversation_id = drf_serializers.UUIDField()
+    user_message = MessageSerializer()
+    assistant_message = MessageSerializer()
+
+
 class ChatView(APIView):
     """
     Send message to AI chatbot.
 
     SRS FR-13: AI Chatbot Interface
     SRS Appendix B: POST /advisory/chat
-
-    Request Body:
-    {
-        "message": "How can I become a backend developer?",
-        "conversation_id": "uuid"  // optional, creates new if not provided
-    }
-
-    Returns:
-    {
-        "conversation_id": "uuid",
-        "user_message": {...},
-        "assistant_message": {...}
-    }
     """
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = ChatMessageSerializer
 
+    @extend_schema(
+        request=ChatMessageSerializer,
+        responses={
+            201: ChatResponseSerializer,
+            404: OpenApiResponse(description='Conversation not found'),
+        },
+        description="""
+        Send a message to the AI chatbot and receive a response.
+
+        Request Body:
+        - message: The user's message (required)
+        - conversation_id: UUID of existing conversation (optional, creates new if not provided)
+
+        Returns the conversation ID along with both the user's message and the AI assistant's response.
+        """
+    )
     def post(self, request):
         """Send message and get AI response."""
         serializer = ChatMessageSerializer(data=request.data)

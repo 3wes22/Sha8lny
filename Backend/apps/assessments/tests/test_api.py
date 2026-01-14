@@ -1,0 +1,380 @@
+"""
+Tests for Assessment API endpoints.
+
+Tests Phase 2 functionality:
+- Assessment creation
+- Question fetching
+- Response submission
+- Result retrieval
+"""
+
+import pytest
+from datetime import date, timedelta
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APIClient
+from apps.users.models import User
+from apps.assessments.models import Assessment, AssessmentResult
+
+
+@pytest.mark.django_db
+class TestAssessmentAPI:
+    """Test assessment CRUD endpoints."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, db):
+        """Set up test fixtures."""
+        self.client = APIClient()
+
+        # Create test user
+        self.user = User.objects.create_user(
+            email='test@example.com',
+            auth0_id='test_auth0_id',
+            username='testuser',
+            full_name='Test User',
+            date_of_birth=date.today() - timedelta(days=365 * 25),
+            password='testpass123'
+        )
+
+        # Authenticate client
+        self.client.force_authenticate(user=self.user)
+
+    def test_create_assessment(self):
+        """Test creating a new assessment."""
+        url = reverse('assessment-list')
+        data = {
+            'assessment_type': 'skills',
+            'target_career': 'Software Engineer'
+        }
+
+        response = self.client.post(url, data, format='json')
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert 'id' in response.data
+        assert response.data['assessment_type'] == 'skills'
+        assert response.data['status'] == 'draft'
+        assert response.data['total_questions'] == 6  # Predefined questions
+        assert len(response.data['questions']) == 6
+
+    def test_create_assessment_unauthenticated(self):
+        """Test creating assessment without authentication fails."""
+        self.client.force_authenticate(user=None)
+
+        url = reverse('assessment-list')
+        data = {'assessment_type': 'skills'}
+
+        response = self.client.post(url, data, format='json')
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_list_user_assessments(self):
+        """Test listing user's assessments."""
+        # Create some assessments
+        Assessment.objects.create(
+            user=self.user,
+            assessment_type='skills',
+            questions=[],
+            total_questions=0
+        )
+        Assessment.objects.create(
+            user=self.user,
+            assessment_type='career_interests',
+            questions=[],
+            total_questions=0
+        )
+
+        url = reverse('assessment-list')
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['count'] == 2
+        assert len(response.data['results']) == 2
+
+    def test_get_latest_assessment(self):
+        """Test getting user's latest assessment."""
+        # Create assessments
+        old_assessment = Assessment.objects.create(
+            user=self.user,
+            assessment_type='skills',
+            questions=[],
+            total_questions=0
+        )
+        new_assessment = Assessment.objects.create(
+            user=self.user,
+            assessment_type='skills',
+            questions=[],
+            total_questions=0
+        )
+
+        url = reverse('assessment-latest')
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['id'] == str(new_assessment.id)
+
+    def test_get_assessment_by_id(self):
+        """Test retrieving specific assessment."""
+        assessment = Assessment.objects.create(
+            user=self.user,
+            assessment_type='skills',
+            questions=[{'id': 1, 'question': 'Test?', 'type': 'text'}],
+            total_questions=1
+        )
+
+        url = reverse('assessment-detail', kwargs={'pk': str(assessment.id)})
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['id'] == str(assessment.id)
+        assert len(response.data['questions']) == 1
+
+    def test_submit_assessment_responses(self):
+        """Test submitting assessment responses."""
+        assessment = Assessment.objects.create(
+            user=self.user,
+            assessment_type='skills',
+            questions=[
+                {'id': 1, 'question': 'Rate Python skills', 'type': 'scale'},
+                {'id': 2, 'question': 'Years of experience', 'type': 'text'}
+            ],
+            total_questions=2
+        )
+
+        url = reverse('assessment-submit', kwargs={'pk': str(assessment.id)})
+        data = {
+            'responses': [
+                {'question_id': 1, 'answer': 4},
+                {'question_id': 2, 'answer': '3 years'}
+            ]
+        }
+
+        response = self.client.post(url, data, format='json')
+
+        assert response.status_code == status.HTTP_200_OK
+        assert 'message' in response.data
+        assert 'assessment' in response.data
+        assert 'result_id' in response.data
+
+        # Verify assessment was updated
+        assessment.refresh_from_db()
+        assert assessment.status == 'completed'
+        assert assessment.answered_questions == 2
+        assert assessment.ai_processing_status == 'completed'
+
+    def test_submit_already_completed_assessment(self):
+        """Test submitting responses to already completed assessment fails."""
+        assessment = Assessment.objects.create(
+            user=self.user,
+            assessment_type='skills',
+            questions=[{'id': 1, 'question': 'Test?', 'type': 'text'}],
+            total_questions=1,
+            status='completed'
+        )
+
+        url = reverse('assessment-submit', kwargs={'pk': str(assessment.id)})
+        data = {
+            'responses': [{'question_id': 1, 'answer': 'test'}]
+        }
+
+        response = self.client.post(url, data, format='json')
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'error' in response.data
+
+    def test_get_assessment_result(self):
+        """Test retrieving assessment result."""
+        assessment = Assessment.objects.create(
+            user=self.user,
+            assessment_type='skills',
+            questions=[],
+            total_questions=0,
+            status='completed',
+            ai_processing_status='completed'
+        )
+
+        # Create result
+        result = AssessmentResult.objects.create(
+            assessment=assessment,
+            overall_score=85.5,
+            skill_scores={'python': 90, 'django': 80},
+            strengths=['Problem solving', 'Quick learner'],
+            areas_for_improvement=['Testing', 'DevOps'],
+            recommended_careers=[
+                {'title': 'Backend Developer', 'match_score': 90, 'reasoning': 'Good fit'}
+            ],
+            ai_insights='Strong technical skills',
+            llm_model_used='mock-v1',
+            ai_confidence_score=75.0
+        )
+
+        url = reverse('assessment-result', kwargs={'pk': str(assessment.id)})
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['id'] == str(result.id)
+        assert response.data['overall_score'] == '85.50'
+        assert 'strengths' in response.data
+        assert 'recommended_careers' in response.data
+
+    def test_get_result_for_incomplete_assessment(self):
+        """Test getting result for incomplete assessment fails."""
+        assessment = Assessment.objects.create(
+            user=self.user,
+            assessment_type='skills',
+            questions=[],
+            total_questions=0,
+            status='draft'
+        )
+
+        url = reverse('assessment-result', kwargs={'pk': str(assessment.id)})
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'error' in response.data
+
+    def test_get_result_while_processing(self):
+        """Test getting result while AI is processing returns 202."""
+        assessment = Assessment.objects.create(
+            user=self.user,
+            assessment_type='skills',
+            questions=[],
+            total_questions=0,
+            status='completed',
+            ai_processing_status='pending'
+        )
+
+        url = reverse('assessment-result', kwargs={'pk': str(assessment.id)})
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        assert 'message' in response.data
+
+    def test_filter_assessments_by_type(self):
+        """Test filtering assessments by assessment_type."""
+        Assessment.objects.create(
+            user=self.user,
+            assessment_type='skills',
+            questions=[],
+            total_questions=0
+        )
+        Assessment.objects.create(
+            user=self.user,
+            assessment_type='career_interests',
+            questions=[],
+            total_questions=0
+        )
+
+        url = reverse('assessment-list')
+        response = self.client.get(url, {'assessment_type': 'skills'})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['count'] == 1
+        assert len(response.data['results']) == 1
+        assert response.data['results'][0]['assessment_type'] == 'skills'
+
+    def test_user_can_only_access_own_assessments(self):
+        """Test users cannot access other users' assessments."""
+        other_user = User.objects.create_user(
+            email='other@example.com',
+            auth0_id='other_auth0_id',
+            username='otheruser',
+            full_name='Other User',
+            date_of_birth=date.today() - timedelta(days=365 * 30),
+            password='otherpass123'
+        )
+
+        other_assessment = Assessment.objects.create(
+            user=other_user,
+            assessment_type='skills',
+            questions=[],
+            total_questions=0
+        )
+
+        url = reverse('assessment-detail', kwargs={'pk': str(other_assessment.id)})
+        response = self.client.get(url)
+
+        # Should return 404 since queryset filters by user
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_assessment_history(self):
+        """Test getting assessment history."""
+        # Create multiple assessments
+        for i in range(3):
+            Assessment.objects.create(
+                user=self.user,
+                assessment_type='skills',
+                questions=[],
+                total_questions=0
+            )
+
+        url = reverse('assessment-history')
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 3
+
+    def test_assessment_history_with_limit(self):
+        """Test assessment history respects limit parameter."""
+        for i in range(5):
+            Assessment.objects.create(
+                user=self.user,
+                assessment_type='skills',
+                questions=[],
+                total_questions=0
+            )
+
+        url = reverse('assessment-history')
+        response = self.client.get(url, {'limit': 2})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 2
+
+
+@pytest.mark.django_db
+class TestAssessmentQuestionGeneration:
+    """Test assessment question generation."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, db):
+        """Set up test fixtures."""
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            email='test@example.com',
+            auth0_id='test_auth0_id',
+            username='testuser',
+            full_name='Test User',
+            date_of_birth=date.today() - timedelta(days=365 * 25),
+            password='testpass123'
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_assessment_has_predefined_questions(self):
+        """Test created assessment has predefined questions."""
+        url = reverse('assessment-list')
+        data = {'assessment_type': 'skills'}
+
+        response = self.client.post(url, data, format='json')
+
+        assert response.status_code == status.HTTP_201_CREATED
+        questions = response.data['questions']
+
+        assert len(questions) > 0
+        assert all('id' in q for q in questions)
+        assert all('question' in q for q in questions)
+        assert all('type' in q for q in questions)
+        assert all('category' in q for q in questions)
+
+    def test_question_types_present(self):
+        """Test assessment contains different question types."""
+        url = reverse('assessment-list')
+        data = {'assessment_type': 'skills'}
+
+        response = self.client.post(url, data, format='json')
+        questions = response.data['questions']
+
+        question_types = {q['type'] for q in questions}
+
+        # Should have multiple question types
+        assert 'multiple_choice' in question_types
+        assert 'scale' in question_types
+        assert 'text' in question_types

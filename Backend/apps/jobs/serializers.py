@@ -41,7 +41,7 @@ class JobSkillSerializer(serializers.ModelSerializer):
             'skill',
             'skill_name',
             'proficiency_level',
-            'years_experience',
+            'years_required',
             'is_required',
         ]
 
@@ -49,6 +49,7 @@ class JobSkillSerializer(serializers.ModelSerializer):
 class JobListSerializer(serializers.ModelSerializer):
     """Minimal job info for list views."""
     platform_name = serializers.CharField(source='platform.name', read_only=True)
+    location = serializers.SerializerMethodField()
 
     class Meta:
         model = Job
@@ -59,20 +60,29 @@ class JobListSerializer(serializers.ModelSerializer):
             'platform',
             'platform_name',
             'location',
+            'location_city',
+            'location_country',
             'job_type',
             'experience_level',
             'salary_min',
             'salary_max',
-            'currency',
+            'salary_currency',
             'is_remote',
             'posted_date',
         ]
+
+    def get_location(self, obj):
+        """Return formatted location string."""
+        if obj.location_city and obj.location_country:
+            return f"{obj.location_city}, {obj.location_country}"
+        return obj.location_city or obj.location_country or "Not specified"
 
 
 class JobSerializer(serializers.ModelSerializer):
     """Complete job information."""
     platform = JobPlatformSerializer(read_only=True)
-    skills = JobSkillSerializer(many=True, read_only=True, source='jobskill_set')
+    skills = JobSkillSerializer(many=True, read_only=True, source='job_skills')
+    location = serializers.SerializerMethodField()
 
     class Meta:
         model = Job
@@ -81,11 +91,12 @@ class JobSerializer(serializers.ModelSerializer):
             'platform',
             'title',
             'company_name',
-            'company_website',
             'company_logo_url',
+            'location',
             'location_city',
             'location_country',
             'remote_type',
+            'is_remote',
             'job_type',
             'experience_level',
             'experience_years_min',
@@ -93,19 +104,23 @@ class JobSerializer(serializers.ModelSerializer):
             'description',
             'requirements',
             'responsibilities',
-            'benefits',
             'salary_min',
             'salary_max',
             'salary_currency',
             'salary_period',
             'salary_disclosed',
-            'application_url',
-            'application_email',
+            'external_url',
             'application_deadline',
             'posted_date',
             'skills',
             'created_at',
         ]
+
+    def get_location(self, obj):
+        """Return formatted location string."""
+        if obj.location_city and obj.location_country:
+            return f"{obj.location_city}, {obj.location_country}"
+        return obj.location_city or obj.location_country or "Not specified"
 
 
 class JobSearchSerializer(serializers.Serializer):
@@ -142,7 +157,10 @@ class SkillDemandSerializer(serializers.ModelSerializer):
             'month',
             'demand_count',
             'trend_direction',
-            'growth_percentage',
+            'trend_percentage',
+            'average_salary_min',
+            'average_salary_max',
+            'top_job_titles',
             'created_at',
         ]
 
@@ -154,13 +172,13 @@ class MarketInsightSerializer(serializers.ModelSerializer):
         model = MarketInsight
         fields = [
             'id',
-            'title',
-            'category',
             'insight_type',
-            'data',
-            'summary',
-            'period_start',
-            'period_end',
+            'career_field',
             'country',
+            'data_period_start',
+            'data_period_end',
+            'insights_data',
+            'total_jobs_analyzed',
+            'generated_at',
             'created_at',
         ]

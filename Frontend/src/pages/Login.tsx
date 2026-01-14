@@ -1,34 +1,34 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
-import { Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
 
 export default function Login() {
-  const navigate = useNavigate();
-  const { toast } = useToast();
+  const { login, isLoading } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setError(null);
 
-    // Simulate API call
-    setTimeout(() => {
-      toast({
-        title: "Welcome back!",
-        description: "You've successfully logged in.",
+    try {
+      await login({
+        email: formData.email,
+        password: formData.password,
       });
-      navigate("/dashboard");
-    }, 1000);
+    } catch {
+      // Error is handled in AuthContext with toast
+      setError("Invalid email or password. Please try again.");
+    }
   };
 
   return (
@@ -58,7 +58,7 @@ export default function Login() {
             <CardContent className="space-y-4">
               {/* Social Login Options */}
               <div className="grid grid-cols-2 gap-4">
-                <Button variant="outline" type="button">
+                <Button variant="outline" type="button" disabled>
                   <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
                     <path
                       fill="currentColor"
@@ -79,7 +79,7 @@ export default function Login() {
                   </svg>
                   Google
                 </Button>
-                <Button variant="outline" type="button">
+                <Button variant="outline" type="button" disabled>
                   <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/>
                   </svg>
@@ -96,6 +96,13 @@ export default function Login() {
                 </div>
               </div>
 
+              {/* Error Message */}
+              {error && (
+                <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+                  {error}
+                </div>
+              )}
+
               {/* Email Input */}
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
@@ -109,6 +116,7 @@ export default function Login() {
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     required
+                    disabled={isLoading}
                   />
                 </div>
               </div>
@@ -131,6 +139,7 @@ export default function Login() {
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     required
+                    disabled={isLoading}
                   />
                   <Button
                     type="button"
@@ -149,8 +158,15 @@ export default function Login() {
               </div>
             </CardContent>
             <CardFooter className="flex flex-col space-y-4">
-              <Button type="submit" className="w-full gradient-primary" disabled={loading}>
-                {loading ? "Signing in..." : "Sign in"}
+              <Button type="submit" className="w-full gradient-primary" disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  "Sign in"
+                )}
               </Button>
               <p className="text-sm text-center text-muted-foreground">
                 Don't have an account?{" "}

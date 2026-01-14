@@ -30,18 +30,27 @@ class MessageSerializer(serializers.ModelSerializer):
 
 class ConversationListSerializer(serializers.ModelSerializer):
     """Minimal conversation info for list views."""
-    last_message_preview = serializers.CharField(read_only=True)
+    last_message_preview = serializers.SerializerMethodField()
 
     class Meta:
         model = Conversation
         fields = [
             'id',
             'title',
+            'topic',
             'message_count',
             'last_message_at',
             'last_message_preview',
             'created_at',
         ]
+
+    def get_last_message_preview(self, obj):
+        """Get preview of the last message in conversation."""
+        last_message = obj.messages.order_by('-created_at').first()
+        if last_message:
+            content = last_message.content
+            return content[:100] + '...' if len(content) > 100 else content
+        return None
 
 
 class ConversationSerializer(serializers.ModelSerializer):
@@ -54,11 +63,12 @@ class ConversationSerializer(serializers.ModelSerializer):
             'id',
             'user',
             'title',
+            'topic',
             'messages',
             'message_count',
             'total_tokens_used',
             'last_message_at',
-            'metadata',
+            'context_snapshot',
             'created_at',
             'updated_at',
         ]

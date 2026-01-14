@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { userApi, UserPreferences } from "@/lib/api";
 import {
   Settings as SettingsIcon,
   User,
@@ -15,6 +17,7 @@ import {
   Eye,
   EyeOff,
   Mail,
+  Loader2,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -30,25 +33,42 @@ import {
 
 export default function Settings() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [loadingPreferences, setLoadingPreferences] = useState(true);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const [notifications, setNotifications] = useState({
-    milestoneComplete: true,
-    phaseComplete: true,
-    roadmapComplete: true,
-    streakAchievement: true,
-    streakRisk: true,
-    jobMatches: false,
-    weeklyDigest: true,
-  });
+  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
 
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
   });
+
+  // Load user preferences on mount
+  useEffect(() => {
+    const loadPreferences = async () => {
+      setLoadingPreferences(true);
+      try {
+        const prefs = await userApi.getPreferences();
+        setPreferences(prefs);
+      } catch (error) {
+        console.error('Error loading preferences:', error);
+        toast({
+          title: "Error loading preferences",
+          description: "Could not load your preferences. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoadingPreferences(false);
+      }
+    };
+
+    loadPreferences();
+  }, [toast]);
 
   const handlePasswordChange = (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,12 +93,25 @@ export default function Settings() {
     });
   };
 
-  const handleNotificationToggle = (key: keyof typeof notifications) => {
-    setNotifications((prev) => ({ ...prev, [key]: !prev[key] }));
-    toast({
-      title: "Notification preference updated",
-      description: "Your notification settings have been saved",
-    });
+  const handlePreferenceToggle = async (key: keyof UserPreferences, value: boolean) => {
+    if (!preferences) return;
+
+    try {
+      const updatedPrefs = await userApi.updatePreferences({
+        [key]: value,
+      });
+      setPreferences(updatedPrefs);
+      toast({
+        title: "Preference updated",
+        description: "Your settings have been saved successfully.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error updating preference",
+        description: "Could not save your settings. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -96,13 +129,13 @@ export default function Settings() {
             <User className="h-5 w-5" />
             Account Information
           </CardTitle>
-          <CardDescription>View and update your account details</CardDescription>
+          <CardDescription>Your account details (edit in Profile page)</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="name">Full Name</Label>
-              <Input id="name" defaultValue="John Doe" />
+              <Input id="name" value={user?.full_name || ''} disabled className="bg-muted" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
@@ -111,8 +144,8 @@ export default function Settings() {
                 <Input
                   id="email"
                   type="email"
-                  defaultValue="john.doe@example.com"
-                  className="pl-10"
+                  value={user?.email || ''}
+                  className="pl-10 bg-muted"
                   disabled
                 />
               </div>
@@ -120,8 +153,18 @@ export default function Settings() {
                 Contact support to change your email address
               </p>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input id="username" value={user?.username || ''} disabled className="bg-muted" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone Number</Label>
+              <Input id="phone" value={user?.phone_number || 'Not set'} disabled className="bg-muted" />
+            </div>
           </div>
-          <Button className="gradient-primary">Save Changes</Button>
+          <p className="text-sm text-muted-foreground">
+            To update your account information, please visit the <a href="/profile" className="text-primary hover:underline">Profile</a> page.
+          </p>
         </CardContent>
       </Card>
 
@@ -246,113 +289,70 @@ export default function Settings() {
           <CardDescription>Choose what notifications you want to receive</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="milestone-complete" className="text-base">
-                  Milestone Completions
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Get notified when you complete a milestone
-                </p>
-              </div>
-              <Switch
-                id="milestone-complete"
-                checked={notifications.milestoneComplete}
-                onCheckedChange={() => handleNotificationToggle("milestoneComplete")}
-              />
+          {loadingPreferences ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <span className="ml-2 text-muted-foreground">Loading preferences...</span>
             </div>
-
-            <Separator />
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="phase-complete" className="text-base">
-                  Phase Completions
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Get notified when you complete a phase
-                </p>
+          ) : preferences ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="email-notifications" className="text-base">
+                    Email Notifications
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Receive notifications via email for important updates
+                  </p>
+                </div>
+                <Switch
+                  id="email-notifications"
+                  checked={preferences.email_notifications}
+                  onCheckedChange={(value) => handlePreferenceToggle("email_notifications", value)}
+                />
               </div>
-              <Switch
-                id="phase-complete"
-                checked={notifications.phaseComplete}
-                onCheckedChange={() => handleNotificationToggle("phaseComplete")}
-              />
-            </div>
 
-            <Separator />
+              <Separator />
 
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="streak-achievement" className="text-base">
-                  Streak Achievements
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Celebrate your learning streaks
-                </p>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="push-notifications" className="text-base">
+                    Push Notifications
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Receive push notifications in your browser
+                  </p>
+                </div>
+                <Switch
+                  id="push-notifications"
+                  checked={preferences.push_notifications}
+                  onCheckedChange={(value) => handlePreferenceToggle("push_notifications", value)}
+                />
               </div>
-              <Switch
-                id="streak-achievement"
-                checked={notifications.streakAchievement}
-                onCheckedChange={() => handleNotificationToggle("streakAchievement")}
-              />
-            </div>
 
-            <Separator />
+              <Separator />
 
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="streak-risk" className="text-base">
-                  Streak Risk Alerts
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Get reminded when your streak is at risk
-                </p>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="weekly-digest" className="text-base">
+                    Weekly Progress Digest
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Receive a weekly summary of your learning progress via email
+                  </p>
+                </div>
+                <Switch
+                  id="weekly-digest"
+                  checked={preferences.weekly_digest}
+                  onCheckedChange={(value) => handlePreferenceToggle("weekly_digest", value)}
+                />
               </div>
-              <Switch
-                id="streak-risk"
-                checked={notifications.streakRisk}
-                onCheckedChange={() => handleNotificationToggle("streakRisk")}
-              />
             </div>
-
-            <Separator />
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="job-matches" className="text-base">
-                  Job Matches
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Get notified about new job opportunities
-                </p>
-              </div>
-              <Switch
-                id="job-matches"
-                checked={notifications.jobMatches}
-                onCheckedChange={() => handleNotificationToggle("jobMatches")}
-              />
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              Could not load preferences. Please refresh the page.
             </div>
-
-            <Separator />
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="weekly-digest" className="text-base">
-                  Weekly Progress Digest
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Receive a weekly summary of your progress
-                </p>
-              </div>
-              <Switch
-                id="weekly-digest"
-                checked={notifications.weeklyDigest}
-                onCheckedChange={() => handleNotificationToggle("weeklyDigest")}
-              />
-            </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 

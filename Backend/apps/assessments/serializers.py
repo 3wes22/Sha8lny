@@ -65,18 +65,91 @@ class AssessmentCreateSerializer(serializers.Serializer):
         required=False,
         default=list
     )
+    target_career = serializers.CharField(required=False, allow_blank=True)
+
+    def _generate_questions(self, assessment_type):
+        """Generate predefined questions based on assessment type."""
+        # In production, this would use AI to generate personalized questions
+        # For MVP, we use predefined question sets
+
+        base_questions = [
+            {
+                "id": 1,
+                "type": "multiple_choice",
+                "question": "How familiar are you with programming fundamentals (variables, loops, functions)?",
+                "category": "Fundamentals",
+                "options": [
+                    {"value": "none", "label": "I've never written code before", "score": 1},
+                    {"value": "basic", "label": "I've done some tutorials / small scripts", "score": 2},
+                    {"value": "comfortable", "label": "I can build small apps/projects", "score": 4},
+                    {"value": "advanced", "label": "I'm very comfortable and help others learn", "score": 5}
+                ]
+            },
+            {
+                "id": 2,
+                "type": "scale",
+                "question": "Rate your confidence in problem-solving and debugging.",
+                "category": "Problem Solving",
+                "min_value": 1,
+                "max_value": 5,
+                "labels": {"1": "Very low", "5": "Very high"}
+            },
+            {
+                "id": 3,
+                "type": "scale",
+                "question": "Rate your familiarity with web technologies (HTML, CSS, JavaScript).",
+                "category": "Web Development",
+                "min_value": 1,
+                "max_value": 5,
+                "labels": {"1": "Not familiar", "5": "Expert"}
+            },
+            {
+                "id": 4,
+                "type": "multiple_choice",
+                "question": "Which best describes your current experience level?",
+                "category": "Experience",
+                "options": [
+                    {"value": "student", "label": "Student / completely new", "score": 1},
+                    {"value": "junior", "label": "Junior / < 2 years experience", "score": 3},
+                    {"value": "mid", "label": "Mid-level / 2-5 years", "score": 4},
+                    {"value": "senior", "label": "Senior / 5+ years", "score": 5}
+                ]
+            },
+            {
+                "id": 5,
+                "type": "text",
+                "question": "What is your main goal with this career path?",
+                "category": "Goals",
+                "helper": "For example: get a first job, switch from another field, grow to senior, freelancing, etc."
+            },
+            {
+                "id": 6,
+                "type": "scale",
+                "question": "How much time per week can you realistically dedicate to learning?",
+                "category": "Commitment",
+                "min_value": 1,
+                "max_value": 5,
+                "labels": {"1": "<3 hours", "5": "15+ hours"}
+            }
+        ]
+
+        return base_questions
 
     def create(self, validated_data):
-        """Create assessment using AssessmentService."""
+        """Create assessment with predefined questions."""
         user = self.context['request'].user
+        assessment_type = validated_data['assessment_type']
 
-        # TODO: Implement AssessmentService.create_assessment()
-        # For now, create basic assessment
+        # Generate questions
+        questions = self._generate_questions(assessment_type)
+
+        # Create assessment
         assessment = Assessment.objects.create(
             user=user,
-            assessment_type=validated_data['assessment_type'],
+            assessment_type=assessment_type,
+            questions=questions,
             status='draft',
-            total_questions=0,
+            total_questions=len(questions),
             answered_questions=0
         )
 

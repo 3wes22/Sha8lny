@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { MainLayout } from "./components/layout/MainLayout";
+import { AuthProvider, ProtectedRoute } from "./contexts/AuthContext";
 
 import Index from "./pages/Index";
 import Login from "./pages/Login";
@@ -20,7 +21,15 @@ import Roadmap from "./pages/Roadmap";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -28,102 +37,124 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          {/* Public routes */}
-          <Route path="/" element={<Index />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+        <AuthProvider>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/" element={<Index />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
 
-          {/* Protected routes with layout */}
-          <Route
-            path="/dashboard"
-            element={
-              <MainLayout>
-                <Dashboard />
-              </MainLayout>
-            }
-          />
+            {/* Protected routes with layout */}
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Dashboard />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
 
-          <Route
-            path="/profile"
-            element={
-              <MainLayout>
-                <Profile />
-              </MainLayout>
-            }
-          />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Profile />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
 
-          <Route
-            path="/assessment"
-            element={
-              <MainLayout>
-                <Assessment />
-              </MainLayout>
-            }
-          />
-          <Route
-            path="/assessment/session"
-            element={
-              <MainLayout>
-                <AssessmentSession />
-              </MainLayout>
-            }
-          />
-          <Route
-            path="/assessment/results"
-            element={
-              <MainLayout>
-                <AssessmentResults />
-              </MainLayout>
-            }
-          />
+            <Route
+              path="/assessment"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Assessment />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/assessment/session/:assessmentId"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <AssessmentSession />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/assessment/results/:assessmentId"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <AssessmentResults />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
 
-          <Route
-            path="/roadmap"
-            element={
-              <MainLayout>
-                <Roadmap />
-              </MainLayout>
-            }
-          />
-          <Route
-            path="/advisor"
-            element={
-              <MainLayout>
-                <Advisor />
-              </MainLayout>
-            }
-          />
+            <Route
+              path="/roadmap"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Roadmap />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/advisor"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Advisor />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
 
-          <Route
-            path="/jobs"
-            element={
-              <MainLayout>
-                <Jobs />
-              </MainLayout>
-            }
-          />
-          <Route
-            path="/jobs/saved"
-            element={
-              <MainLayout>
-                <SavedJobs />
-              </MainLayout>
-            }
-          />
+            <Route
+              path="/jobs"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Jobs />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jobs/saved"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <SavedJobs />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
 
-          <Route
-            path="/settings"
-            element={
-              <MainLayout>
-                <Settings />
-              </MainLayout>
-            }
-          />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Settings />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
 
-          {/* Catch-all */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            {/* Catch-all */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

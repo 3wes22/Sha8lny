@@ -43,7 +43,7 @@ class CourseService:
     def search_courses(
         query: str,
         provider: Optional[str] = None,
-        difficulty_level: Optional[str] = None,
+        level: Optional[str] = None,
         min_rating: Optional[float] = None,
         is_free: Optional[bool] = None,
         limit: int = 50
@@ -54,7 +54,7 @@ class CourseService:
         Args:
             query: Search query
             provider: Filter by provider name
-            difficulty_level: Filter by difficulty
+            level: Filter by difficulty
             min_rating: Minimum average rating
             is_free: Filter free/paid courses
             limit: Maximum results
@@ -77,8 +77,8 @@ class CourseService:
             queryset = queryset.filter(provider__name__iexact=provider)
 
         # Difficulty filter
-        if difficulty_level:
-            queryset = queryset.filter(difficulty_level=difficulty_level)
+        if level:
+            queryset = queryset.filter(level=level)
 
         # Rating filter
         if min_rating:
@@ -274,7 +274,7 @@ class CourseService:
 
         by_difficulty = Course.objects.filter(
             is_deleted=False
-        ).values('difficulty_level').annotate(
+        ).values('level').annotate(
             count=Count('id')
         )
 

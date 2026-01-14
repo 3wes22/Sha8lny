@@ -46,7 +46,7 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
         # Filter by difficulty
         difficulty = self.request.query_params.get('difficulty')
         if difficulty:
-            queryset = queryset.filter(difficulty_level=difficulty)
+            queryset = queryset.filter(level=difficulty)
 
         # Filter by free/paid
         is_free = self.request.query_params.get('is_free')

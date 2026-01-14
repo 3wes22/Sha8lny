@@ -12,8 +12,15 @@ import {
   BookOpen,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Dashboard() {
+  const { user } = useAuth();
+
+  // Get first name for greeting
+  const firstName = user?.full_name?.split(' ')[0] || user?.username || 'User';
+
+  // TODO: Replace with real data from API
   // Mock data
   const stats = [
     {
@@ -87,7 +94,7 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold mb-2">Welcome back, John! 👋</h1>
+          <h1 className="text-4xl font-bold mb-2">Welcome back, {firstName}!</h1>
           <p className="text-muted-foreground text-lg">
             Track your progress and continue your learning journey
           </p>

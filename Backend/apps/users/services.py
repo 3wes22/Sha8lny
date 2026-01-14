@@ -81,10 +81,11 @@ class UserService:
             User: Updated user instance
         """
         allowed_fields = [
-            'first_name', 'last_name', 'phone_number', 'date_of_birth',
-            'location', 'bio', 'linkedin_url', 'github_url', 'portfolio_url',
-            'current_job_title', 'years_of_experience', 'education_level',
-            'preferred_learning_style'
+            'username', 'full_name', 'first_name', 'last_name', 'phone_number',
+            'date_of_birth', 'location', 'bio', 'linkedin_url', 'github_url',
+            'portfolio_url', 'current_job_title', 'years_of_experience',
+            'education_level', 'preferred_learning_style', 'preferred_language',
+            'timezone', 'onboarding_completed', 'onboarding_step'
         ]
 
         for field, value in fields.items():

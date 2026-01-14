@@ -16,7 +16,7 @@ from apps.assessments import views
 router = DefaultRouter()
 router.register(r'', views.AssessmentViewSet, basename='assessment')
 
-app_name = 'assessments'
+# No app_name for API URLs - they're already prefixed with /api/v1/assessment/
 
 urlpatterns = [
     # EXTRA ENDPOINTS - NOT IN SRS APPENDIX B

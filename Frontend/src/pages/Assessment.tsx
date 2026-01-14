@@ -4,11 +4,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Target, Clock, FileText, Search, TrendingUp } from "lucide-react";
+import { Target, Clock, FileText, Search, TrendingUp, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { assessmentApi } from "@/lib/api";
 
 export default function Assessment() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
+  const [creatingAssessment, setCreatingAssessment] = useState(false);
 
   const careerPaths = [
     {
@@ -90,6 +94,27 @@ export default function Assessment() {
       path.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       path.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleStartAssessment = async (careerPath: string) => {
+    setCreatingAssessment(true);
+    try {
+      const assessment = await assessmentApi.create({
+        assessment_type: 'skills',
+        target_career: careerPath,
+      });
+
+      navigate(`/assessment/session/${assessment.id}`);
+    } catch (error) {
+      console.error('Error creating assessment:', error);
+      toast({
+        title: "Error creating assessment",
+        description: "Could not start the assessment. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingAssessment(false);
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -206,9 +231,14 @@ export default function Assessment() {
             <Button
               variant="outline"
               type="button"
-              onClick={() => navigate("/assessment/session?path=Custom%20Career%20Path")}
+              onClick={() => handleStartAssessment("Custom Career Path")}
+              disabled={creatingAssessment}
             >
-              <FileText className="mr-2 h-4 w-4" />
+              {creatingAssessment ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <FileText className="mr-2 h-4 w-4" />
+              )}
               Custom Career Path
             </Button>
           </div>
@@ -220,8 +250,10 @@ export default function Assessment() {
         {filteredPaths.map((path) => (
           <Card
             key={path.title}
-            className="transition-smooth hover:shadow-lg cursor-pointer group"
-            onClick={() => navigate(`/assessment/session?path=${encodeURIComponent(path.title)}`)}
+            className={`transition-smooth hover:shadow-lg group ${
+              creatingAssessment ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+            }`}
+            onClick={() => !creatingAssessment && handleStartAssessment(path.title)}
           >
             <CardHeader>
               <div className="flex items-start justify-between mb-2">

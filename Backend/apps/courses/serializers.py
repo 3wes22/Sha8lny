@@ -38,7 +38,7 @@ class CourseListSerializer(serializers.ModelSerializer):
             'price',
             'currency',
             'rating',
-            'difficulty_level',
+            'level',
             'thumbnail_url',
         ]
 
@@ -64,7 +64,7 @@ class CourseSerializer(serializers.ModelSerializer):
             'number_of_reviews',
             'number_of_students',
             'duration_hours',
-            'difficulty_level',
+            'level',
             'language',
             'has_certificate',
             'is_active',

@@ -311,3 +311,17 @@ AUTH0_DOMAIN = config('AUTH0_DOMAIN', default='')
 AUTH0_CLIENT_ID = config('AUTH0_CLIENT_ID', default='')
 AUTH0_CLIENT_SECRET = config('AUTH0_CLIENT_SECRET', default='')
 AUTH0_AUDIENCE = config('AUTH0_AUDIENCE', default='')
+
+
+# drf-spectacular Configuration (OpenAPI/Swagger)
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Sha8alny API',
+    'DESCRIPTION': 'AI-powered career development platform API',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': r'/api/v1/',
+    # Use CDN for Swagger UI assets (no sidecar package needed)
+    'SWAGGER_UI_DIST': 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@latest',
+    'SWAGGER_UI_FAVICON_HREF': 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@latest/favicon-32x32.png',
+}

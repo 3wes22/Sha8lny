@@ -1,19 +1,20 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { User, Mail, Lock, Eye, EyeOff, Calendar } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { User, Mail, Lock, Eye, EyeOff, Calendar, Loader2, AtSign } from "lucide-react";
 
 export default function Register() {
-  const navigate = useNavigate();
   const { toast } = useToast();
+  const { register, isLoading } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
+    username: "",
     fullName: "",
     email: "",
     password: "",
@@ -25,25 +26,30 @@ export default function Register() {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
+    // Username validation
+    if (!formData.username.trim()) {
+      newErrors.username = "Username is required";
+    } else if (formData.username.length < 3) {
+      newErrors.username = "Username must be at least 3 characters";
+    } else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
+      newErrors.username = "Username can only contain letters, numbers, and underscores";
+    }
+
+    // Full name validation
+    if (!formData.fullName.trim()) {
+      newErrors.fullName = "Full name is required";
+    }
+
     // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
       newErrors.email = "Please enter a valid email address";
     }
 
-    // Password validation
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-    if (!passwordRegex.test(formData.password)) {
-      newErrors.password = "Password must be at least 8 characters with uppercase, lowercase, number, and special character";
-    }
-
-    // Confirm password
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = "Passwords do not match";
-    }
-
-    // Age validation
-    if (formData.dateOfBirth) {
+    // Date of birth validation (required)
+    if (!formData.dateOfBirth) {
+      newErrors.dateOfBirth = "Date of birth is required";
+    } else {
       const birthDate = new Date(formData.dateOfBirth);
       const today = new Date();
       const age = today.getFullYear() - birthDate.getFullYear();
@@ -52,13 +58,31 @@ export default function Register() {
       }
     }
 
+    // Password validation - at least 8 chars, uppercase, lowercase, digit, and special char
+    if (formData.password.length < 8) {
+      newErrors.password = "Password must be at least 8 characters";
+    } else if (!/[a-z]/.test(formData.password)) {
+      newErrors.password = "Password must contain at least one lowercase letter";
+    } else if (!/[A-Z]/.test(formData.password)) {
+      newErrors.password = "Password must contain at least one uppercase letter";
+    } else if (!/\d/.test(formData.password)) {
+      newErrors.password = "Password must contain at least one number";
+    } else if (!/[^a-zA-Z0-9]/.test(formData.password)) {
+      newErrors.password = "Password must contain at least one special character";
+    }
+
+    // Confirm password
+    if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = "Passwords do not match";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       toast({
         title: "Validation Error",
@@ -68,16 +92,18 @@ export default function Register() {
       return;
     }
 
-    setLoading(true);
-
-    // Simulate API call
-    setTimeout(() => {
-      toast({
-        title: "Account created!",
-        description: "Welcome to Sha8alny. Let's start your journey!",
+    try {
+      await register({
+        email: formData.email,
+        password: formData.password,
+        password_confirm: formData.confirmPassword,
+        username: formData.username,
+        full_name: formData.fullName,
+        date_of_birth: formData.dateOfBirth,
       });
-      navigate("/dashboard");
-    }, 1000);
+    } catch {
+      // Error is handled in AuthContext with toast
+    }
   };
 
   return (
@@ -107,7 +133,7 @@ export default function Register() {
             <CardContent className="space-y-4">
               {/* Social Login Options */}
               <div className="grid grid-cols-2 gap-4">
-                <Button variant="outline" type="button">
+                <Button variant="outline" type="button" disabled>
                   <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
                     <path
                       fill="currentColor"
@@ -128,7 +154,7 @@ export default function Register() {
                   </svg>
                   Google
                 </Button>
-                <Button variant="outline" type="button">
+                <Button variant="outline" type="button" disabled>
                   <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/>
                   </svg>
@@ -145,6 +171,25 @@ export default function Register() {
                 </div>
               </div>
 
+              {/* Username */}
+              <div className="space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <div className="relative">
+                  <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="username"
+                    type="text"
+                    placeholder="johndoe"
+                    className="pl-10"
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
+                {errors.username && <p className="text-xs text-destructive">{errors.username}</p>}
+              </div>
+
               {/* Full Name */}
               <div className="space-y-2">
                 <Label htmlFor="fullName">Full Name</Label>
@@ -158,8 +203,10 @@ export default function Register() {
                     value={formData.fullName}
                     onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                     required
+                    disabled={isLoading}
                   />
                 </div>
+                {errors.fullName && <p className="text-xs text-destructive">{errors.fullName}</p>}
               </div>
 
               {/* Email */}
@@ -175,6 +222,7 @@ export default function Register() {
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
@@ -191,7 +239,7 @@ export default function Register() {
                     className="pl-10"
                     value={formData.dateOfBirth}
                     onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
-                    required
+                    disabled={isLoading}
                   />
                 </div>
                 {errors.dateOfBirth && <p className="text-xs text-destructive">{errors.dateOfBirth}</p>}
@@ -210,6 +258,7 @@ export default function Register() {
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     required
+                    disabled={isLoading}
                   />
                   <Button
                     type="button"
@@ -241,6 +290,7 @@ export default function Register() {
                     value={formData.confirmPassword}
                     onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                     required
+                    disabled={isLoading}
                   />
                   <Button
                     type="button"
@@ -260,8 +310,15 @@ export default function Register() {
               </div>
             </CardContent>
             <CardFooter className="flex flex-col space-y-4">
-              <Button type="submit" className="w-full gradient-primary" disabled={loading}>
-                {loading ? "Creating account..." : "Create account"}
+              <Button type="submit" className="w-full gradient-primary" disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating account...
+                  </>
+                ) : (
+                  "Create account"
+                )}
               </Button>
               <p className="text-sm text-center text-muted-foreground">
                 Already have an account?{" "}
