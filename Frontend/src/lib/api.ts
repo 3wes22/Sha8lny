@@ -275,38 +275,141 @@ export interface RecommendedCareer {
   reasoning: string;
 }
 
-export interface Roadmap {
+// Roadmap Template
+export interface RoadmapTemplate {
   id: string;
-  user: string;
   title: string;
-  description?: string;
+  slug: string;
+  description: string;
+  short_description: string;
   target_career: string;
-  current_level: string;
-  target_level: string;
+  career_level: string;
   estimated_duration_weeks: number;
-  milestones: RoadmapMilestone[];
-  overall_progress: number;
-  status: string;
+  difficulty_level: string;
+  prerequisites: string[];
+  learning_outcomes: string[];
+  is_published: boolean;
+  usage_count: number;
   created_at: string;
 }
 
+// Roadmap Course
+export interface RoadmapCourse {
+  id: string;
+  course: any; // Reference to Course model
+  order: number;
+  is_primary: boolean;
+  match_score: string;
+  recommendation_reason: string;
+  is_enrolled: boolean;
+  is_completed: boolean;
+}
+
+// Roadmap Milestone
 export interface RoadmapMilestone {
   id: string;
   title: string;
   description: string;
+  milestone_type: 'course' | 'project' | 'reading' | 'practice' | 'assessment';
   order: number;
-  status: string;
-  skills_covered: string[];
+  estimated_duration_hours: string;
+  status: 'not_started' | 'in_progress' | 'completed' | 'skipped';
+  is_required: boolean;
+  skills: string[];
   resources: Resource[];
-  estimated_hours: number;
+  completed_at?: string;
+  courses?: RoadmapCourse[];
+  total_courses?: number;
+}
+
+// Roadmap Phase
+export interface RoadmapPhase {
+  id: string;
+  title: string;
+  description: string;
+  order: number;
+  estimated_duration_weeks: number;
+  status: 'not_started' | 'in_progress' | 'completed' | 'skipped';
+  completion_percentage: string;
+  started_at?: string;
+  completed_at?: string;
+  objectives: string[];
+  milestones?: RoadmapMilestone[];
+  completed_milestones?: number;
+  total_milestones?: number;
+}
+
+// Complete Roadmap
+export interface Roadmap {
+  id: string;
+  template?: string;
+  assessment?: string;
+  title: string;
+  description: string;
+  target_career: string;
+  current_level: string;
+  target_level: string;
+  estimated_duration_weeks: number;
+  weekly_hours_commitment: number;
+  status: 'draft' | 'active' | 'in_progress' | 'completed' | 'paused' | 'archived';
+  completion_percentage: string;
+  started_at?: string;
+  completed_at?: string;
+  ai_processing_status: 'pending' | 'processing' | 'completed' | 'failed';
+  ai_processed_at?: string;
+  ai_insights?: any;
+  llm_model_used?: string;
+  llm_prompt_tokens?: number;
+  llm_completion_tokens?: number;
+  processing_time_seconds?: string;
+  metadata?: any;
+  phases?: RoadmapPhase[];
+  total_phases?: number;
+  completed_phases?: number;
+  is_active?: boolean;
+  is_complete?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Roadmap List Item (minimal info)
+export interface RoadmapListItem {
+  id: string;
+  title: string;
+  target_career: string;
+  status: string;
+  completion_percentage: string;
+  estimated_duration_weeks: number;
+  ai_processing_status: string;
+  created_at: string;
+}
+
+// Roadmap Creation Requests
+export interface RoadmapCreateFromTemplateRequest {
+  template_id: string;
+  weekly_hours_commitment?: number;
+  customizations?: any;
+}
+
+export interface RoadmapCreateAIRequest {
+  assessment_id?: string;
+  target_career: string;
+  current_level: string;
+  target_level: string;
+  weekly_hours_commitment?: number;
+}
+
+// Progress Update
+export interface RoadmapProgressUpdate {
+  phase_id?: string;
+  milestone_id?: string;
+  status: 'not_started' | 'in_progress' | 'completed' | 'skipped';
 }
 
 export interface Resource {
-  id: string;
   title: string;
   url: string;
   type: string;
-  platform: string;
 }
 
 export interface Job {
@@ -529,14 +632,63 @@ export const userApi = {
 // assessmentApi is defined below with complete implementation
 
 export const roadmapApi = {
-  get: () =>
-    apiClient.get<Roadmap>('/roadmap/'),
+  // List user's roadmaps
+  list: (params?: { status?: string; target_career?: string }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.append('status', params.status);
+    if (params?.target_career) searchParams.append('target_career', params.target_career);
+    const queryString = searchParams.toString();
+    return apiClient.get<PaginatedResponse<RoadmapListItem>>(
+      `/roadmap/${queryString ? '?' + queryString : ''}`
+    );
+  },
 
-  create: (data: { target_career: string }) =>
+  // Get specific roadmap with full hierarchy
+  get: (id: string) =>
+    apiClient.get<Roadmap>(`/roadmap/${id}/`),
+
+  // Create roadmap from template
+  createFromTemplate: (data: RoadmapCreateFromTemplateRequest) =>
     apiClient.post<Roadmap>('/roadmap/', data),
 
-  updateProgress: (milestoneId: string, status: string) =>
-    apiClient.put<RoadmapMilestone>(`/roadmap/progress/`, { milestone_id: milestoneId, status }),
+  // Create AI-generated roadmap
+  createAI: (data: RoadmapCreateAIRequest) =>
+    apiClient.post<Roadmap>('/roadmap/', data),
+
+  // Update roadmap
+  update: (id: string, data: Partial<Roadmap>) =>
+    apiClient.put<Roadmap>(`/roadmap/${id}/`, data),
+
+  // Delete roadmap
+  delete: (id: string) =>
+    apiClient.delete<void>(`/roadmap/${id}/`),
+
+  // Update progress (phase or milestone)
+  updateProgress: (roadmapId: string, data: RoadmapProgressUpdate) =>
+    apiClient.put<{message: string}>(`/roadmap/${roadmapId}/progress/`, data),
+
+  // Activate roadmap
+  activate: (id: string) =>
+    apiClient.post<Roadmap>(`/roadmap/${id}/activate/`, {}),
+
+  // Get roadmap statistics
+  getStats: (id: string) =>
+    apiClient.get<any>(`/roadmap/${id}/stats/`),
+};
+
+// Roadmap Template API
+export const roadmapTemplateApi = {
+  // List all published templates
+  list: () =>
+    apiClient.get<PaginatedResponse<RoadmapTemplate>>('/roadmap/templates/'),
+
+  // Get specific template
+  get: (id: string) =>
+    apiClient.get<RoadmapTemplate>(`/roadmap/templates/${id}/`),
+
+  // Filter templates by career
+  byCareer: (career: string) =>
+    apiClient.get<RoadmapTemplate[]>(`/roadmap/templates/by_career/?career=${encodeURIComponent(career)}`),
 };
 
 export const jobApi = {

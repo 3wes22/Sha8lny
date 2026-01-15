@@ -1,6 +1,21 @@
-# CLAUDE.md
+# CLAUDE.md - Backend
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides backend-specific guidance for the Sha8lny Django application.
+
+**For project-level overview**, see the root `../CLAUDE.md`
+
+## Backend Status
+
+**Current Phase**: Phase 2 Complete - Assessment Module Integration
+**Total Tests**: 67 passing (51 users + 16 assessments)
+**Database**: SQLite (development), PostgreSQL (production ready)
+
+### Completed Modules
+- ✅ **Users** (Phase 1): Auth, profiles, skills - 51 tests passing
+- ✅ **Assessments** (Phase 2): CRUD, questions, submission, results - 16 tests passing
+
+### Next Module
+- 🔄 **Roadmaps** (Phase 3): Templates, progress tracking
 
 ## Project Overview
 
