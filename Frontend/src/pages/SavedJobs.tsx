@@ -9,11 +9,9 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Briefcase, Clock, Bookmark, ExternalLink, Info } from "lucide-react";
+import { MapPin, Briefcase, Clock, Bookmark, ExternalLink, Info, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { Job } from "./Jobs";
-
-const SAVED_JOBS_STORAGE_KEY = "sha8alny_saved_jobs";
+import { jobApi, type JobListItem } from "@/lib/api";
 
 // Same mock assessment for "Why this job?"
 const MOCK_ASSESSMENT = {
@@ -24,36 +22,15 @@ const MOCK_ASSESSMENT = {
   preferredLocations: ["Cairo, Egypt", "Remote"],
 };
 
-const loadSavedJobs = (): Job[] => {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(SAVED_JOBS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (item: any) => item && typeof item.id === "number" && typeof item.title === "string"
-    );
-  } catch {
-    return [];
-  }
-};
+interface SavedJobItem {
+  id: string;
+  job: JobListItem;
+  notes: string;
+  created_at: string;
+}
 
-const persistSavedJobs = (jobs: Job[]) => {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(SAVED_JOBS_STORAGE_KEY, JSON.stringify(jobs));
-  } catch {
-    // ignore
-  }
-};
-
-const getWhyThisJobText = (job: Job) => {
+const getWhyThisJobText = (job: JobListItem) => {
   const locationMatch = MOCK_ASSESSMENT.preferredLocations.includes(job.location);
-  const matchedSkills = job.tags.filter((tag) =>
-    MOCK_ASSESSMENT.topSkills.includes(tag)
-  );
-
   const headline = `Still aligned with your ${MOCK_ASSESSMENT.level.toLowerCase()} ${MOCK_ASSESSMENT.targetPath} profile`;
 
   const bullets: string[] = [];
@@ -62,23 +39,11 @@ const getWhyThisJobText = (job: Job) => {
     `You saved this ${job.title} role after your last assessment targeting ${MOCK_ASSESSMENT.targetPath}.`
   );
 
-  if (matchedSkills.length) {
-    bullets.push(
-      `It focuses on skills you rated strongly: ${matchedSkills.join(", ")}.`
-    );
-  } else {
-    bullets.push(
-      `Its tech stack is compatible with your current strengths (${MOCK_ASSESSMENT.topSkills.join(
-        ", "
-      )}).`
-    );
-  }
-
-  if (typeof job.matchPercentage === "number") {
-    bullets.push(
-      `Match score: ${job.matchPercentage}% based on your skills and preferences.`
-    );
-  }
+  bullets.push(
+    `Its tech stack is compatible with your current strengths (${MOCK_ASSESSMENT.topSkills.join(
+      ", "
+    )}).`
+  );
 
   if (locationMatch) {
     bullets.push(
@@ -97,30 +62,50 @@ const getWhyThisJobText = (job: Job) => {
 
 export default function SavedJobs() {
   const { toast } = useToast();
-  const [savedJobs, setSavedJobs] = useState<Job[]>(() => loadSavedJobs());
-  const [expandedWhyId, setExpandedWhyId] = useState<number | null>(null);
+  const [savedJobs, setSavedJobs] = useState<SavedJobItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedWhyId, setExpandedWhyId] = useState<string | null>(null);
 
   useEffect(() => {
-    // in case localStorage changed in another tab
-    setSavedJobs(loadSavedJobs());
+    fetchSavedJobs();
   }, []);
 
-  useEffect(() => {
-    persistSavedJobs(savedJobs);
-  }, [savedJobs]);
+  const fetchSavedJobs = async () => {
+    try {
+      setLoading(true);
+      const jobs = await jobApi.getSavedJobs();
+      setSavedJobs(jobs);
+    } catch (error: any) {
+      console.error("Error fetching saved jobs:", error);
+      toast({
+        title: "Error",
+        description: error?.response?.data?.detail || "Failed to load saved jobs",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const handleRemove = (job: Job) => {
-    setSavedJobs((prev) => {
-      const next = prev.filter((j) => j.id !== job.id);
+  const handleRemove = async (savedJobId: string) => {
+    try {
+      await jobApi.unsaveJob(savedJobId);
+      setSavedJobs(prev => prev.filter(item => item.id !== savedJobId));
       toast({
         title: "Removed from saved jobs",
         description: "You can always find new recommendations on the Jobs page.",
       });
-      return next;
-    });
+    } catch (error: any) {
+      console.error("Error removing saved job:", error);
+      toast({
+        title: "Error",
+        description: error?.response?.data?.detail || "Failed to remove saved job",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleToggleWhy = (jobId: number) => {
+  const handleToggleWhy = (jobId: string) => {
     setExpandedWhyId((prev) => (prev === jobId ? null : jobId));
   };
 
@@ -144,7 +129,11 @@ export default function SavedJobs() {
         </Button>
       </div>
 
-      {savedJobs.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : savedJobs.length === 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>No saved jobs yet</CardTitle>
@@ -170,17 +159,18 @@ export default function SavedJobs() {
               {savedJobs.length > 1 ? "s" : ""}
             </h2>
             <p className="text-xs text-muted-foreground">
-              Saved jobs are stored locally in your browser for this account/demo.
+              Synced with backend
             </p>
           </div>
 
           <div className="space-y-4">
-            {savedJobs.map((job) => {
+            {savedJobs.map((savedItem) => {
+              const job = savedItem.job;
               const why = getWhyThisJobText(job);
-              const isExpanded = expandedWhyId === job.id;
+              const isExpanded = expandedWhyId === savedItem.id;
 
               return (
-                <Card key={job.id}>
+                <Card key={savedItem.id}>
                   <CardHeader>
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
@@ -190,15 +180,10 @@ export default function SavedJobs() {
                               {job.title}
                             </CardTitle>
                           </Link>
-                          {typeof job.matchPercentage === "number" && (
-                            <Badge className="bg-success/10 text-success border-success">
-                              {job.matchPercentage}% Match
-                            </Badge>
-                          )}
                         </div>
                         <CardDescription className="flex items-center gap-4 flex-wrap">
                           <span className="font-medium text-foreground">
-                            {job.company}
+                            {job.company_name}
                           </span>
                           <span className="flex items-center gap-1">
                             <MapPin className="h-3 w-3" />
@@ -206,18 +191,18 @@ export default function SavedJobs() {
                           </span>
                           <span className="flex items-center gap-1">
                             <Briefcase className="h-3 w-3" />
-                            {job.type}
+                            {job.job_type}
                           </span>
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            {job.postedAgo}
+                            {job.posted_date}
                           </span>
                         </CardDescription>
                       </div>
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleRemove(job)}
+                        onClick={() => handleRemove(savedItem.id)}
                         aria-label="Remove saved job"
                       >
                         <Bookmark className="h-5 w-5" />
@@ -225,14 +210,6 @@ export default function SavedJobs() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <div className="flex flex-wrap gap-2">
-                      {job.tags?.map((tag) => (
-                        <Badge key={tag} variant="secondary">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-
                     {isExpanded && (
                       <div className="rounded-md border bg-muted/40 p-3 text-xs md:text-sm">
                         <p className="font-medium mb-1">Why this job?</p>
@@ -253,7 +230,7 @@ export default function SavedJobs() {
                           variant="ghost"
                           size="sm"
                           className="text-xs"
-                          onClick={() => handleToggleWhy(job.id)}
+                          onClick={() => handleToggleWhy(savedItem.id)}
                         >
                           <Info className="h-3 w-3 mr-1" />
                           {isExpanded ? "Hide reason" : "Why this job?"}

@@ -237,26 +237,6 @@ export interface UserSkill {
   is_verified: boolean;
 }
 
-export interface Assessment {
-  id: string;
-  user: string;
-  assessment_type: string;
-  target_career?: string;
-  status: string;
-  questions: AssessmentQuestion[];
-  started_at?: string;
-  completed_at?: string;
-  created_at: string;
-}
-
-export interface AssessmentQuestion {
-  id: number;
-  question: string;
-  type: 'multiple_choice' | 'scale' | 'text' | 'code';
-  options?: string[];
-  correct_answer?: string;
-}
-
 export interface AssessmentResult {
   id: string;
   assessment: string;
@@ -412,20 +392,75 @@ export interface Resource {
   type: string;
 }
 
-export interface Job {
+// Job Skill interface
+export interface JobSkill {
+  id: string;
+  skill: string;
+  skill_name: string;
+  proficiency_level?: string;
+  years_required?: number;
+  is_required: boolean;
+}
+
+// Job Platform interface
+export interface JobPlatform {
+  id: string;
+  name: string;
+  slug: string;
+  website_url: string;
+  logo_url?: string;
+  is_active: boolean;
+  target_countries: string[];
+}
+
+// Job interface (list view - minimal data)
+export interface JobListItem {
   id: string;
   title: string;
-  company: string;
+  company_name: string;
+  platform: string;
+  platform_name: string;
   location: string;
+  location_city: string;
+  location_country: string;
   job_type: string;
   experience_level: string;
-  salary_min?: number;
-  salary_max?: number;
+  salary_min?: string;
+  salary_max?: string;
+  salary_currency: string;
+  is_remote: boolean;
+  posted_date: string;
+}
+
+// Job interface (detail view - full data)
+export interface Job {
+  id: string;
+  platform: JobPlatform;
+  title: string;
+  company_name: string;
+  company_logo_url?: string;
+  location: string;
+  location_city: string;
+  location_country: string;
+  remote_type?: string;
+  is_remote: boolean;
+  job_type: string;
+  experience_level: string;
+  experience_years_min?: number;
+  experience_years_max?: number;
   description: string;
-  requirements: string[];
-  required_skills: string[];
-  posted_at: string;
-  application_url?: string;
+  requirements: string;
+  responsibilities: string;
+  salary_min?: string;
+  salary_max?: string;
+  salary_currency: string;
+  salary_period?: string;
+  salary_disclosed: boolean;
+  external_url: string;
+  application_deadline?: string;
+  posted_date: string;
+  skills: JobSkill[];
+  created_at: string;
 }
 
 export interface JobSearchParams {
@@ -665,7 +700,7 @@ export const roadmapApi = {
 
   // Update progress (phase or milestone)
   updateProgress: (roadmapId: string, data: RoadmapProgressUpdate) =>
-    apiClient.put<{message: string}>(`/roadmap/${roadmapId}/progress/`, data),
+    apiClient.put<{ message: string }>(`/roadmap/${roadmapId}/progress/`, data),
 
   // Activate roadmap
   activate: (id: string) =>
@@ -692,22 +727,54 @@ export const roadmapTemplateApi = {
 };
 
 export const jobApi = {
+  // Search jobs with filters
   search: (params: JobSearchParams = {}) => {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
+      if (value !== undefined && value !== null && value !== '') {
         if (Array.isArray(value)) {
-          value.forEach(v => searchParams.append(key, v));
+          // For skills array, join with comma
+          if (key === 'skills' && value.length > 0) {
+            searchParams.append(key, value.join(','));
+          }
         } else {
           searchParams.append(key, String(value));
         }
       }
     });
-    return apiClient.get<PaginatedResponse<Job>>(`/jobs/?${searchParams.toString()}`);
+    return apiClient.get<PaginatedResponse<JobListItem>>(`/jobs/search/?${searchParams.toString()}`);
   },
 
+  // Get all jobs (paginated list)
+  list: (params?: { page?: number; page_size?: number }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.append('page', String(params.page));
+    if (params?.page_size) searchParams.append('page_size', String(params.page_size));
+    return apiClient.get<PaginatedResponse<JobListItem>>(`/jobs/?${searchParams.toString()}`);
+  },
+
+  // Get job by ID (full details)
   get: (id: string) =>
     apiClient.get<Job>(`/jobs/${id}/`),
+
+  // Save a job
+  saveJob: (jobId: string, notes?: string) =>
+    apiClient.post<{ id: string; job: JobListItem; notes: string; created_at: string }>('/jobs/saved-jobs/', {
+      job: jobId,
+      notes: notes || ''
+    }),
+
+  // Unsave a job
+  unsaveJob: (savedJobId: string) =>
+    apiClient.delete<void>(`/jobs/saved-jobs/${savedJobId}/`),
+
+  // Toggle save status (convenience method)
+  toggleSaveJob: (jobId: string) =>
+    apiClient.post<{ detail: string; is_saved: boolean; saved_job?: any }>(`/jobs/saved-jobs/toggle/${jobId}/`, {}),
+
+  // Get all saved jobs
+  getSavedJobs: () =>
+    apiClient.get<{ id: string; job: JobListItem; notes: string; created_at: string }[]>('/jobs/saved-jobs/'),
 };
 
 export const advisorApi = {

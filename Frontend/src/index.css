@@ -35,13 +35,21 @@
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
+    /* Semantic colors */
+    --success: 142 76% 36%;          /* Green */
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;           /* Amber */
+    --warning-foreground: 0 0% 100%;
+    --info: 199 89% 48%;             /* Blue */
+    --info-foreground: 0 0% 100%;
+
     /* Borders & inputs */
     --border: 220 20% 88%;           /* #E2E8F0 */
     --input: 220 20% 88%;
     --ring: 239 84% 67%;             /* primary-colored focus ring */
 
-    /* Radii */
-    --radius: 0.875rem;
+    /* Radii - increased for premium feel */
+    --radius: 1rem;
   }
 
   .dark {
@@ -70,6 +78,14 @@
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
+
+    /* Semantic colors - dark mode */
+    --success: 142 70% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 0 0% 100%;
+    --info: 199 89% 55%;
+    --info-foreground: 0 0% 100%;
   }
 
   * {
@@ -78,6 +94,11 @@
 
   body {
     @apply bg-background text-foreground antialiased;
+  }
+
+  /* Tighter heading tracking for professional typography */
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.025em;
   }
 }
 
@@ -113,6 +134,20 @@
       0 0 0 1px rgba(148, 163, 184, 0.25);
   }
 
+  /* Card elevation - subtle always-on shadow */
+  .shadow-card {
+    box-shadow: 
+      0 1px 3px 0 rgb(0 0 0 / 0.05), 
+      0 1px 2px -1px rgb(0 0 0 / 0.05);
+  }
+
+  /* Card hover elevation */
+  .shadow-card-hover {
+    box-shadow: 
+      0 4px 6px -1px rgb(0 0 0 / 0.07), 
+      0 2px 4px -2px rgb(0 0 0 / 0.07);
+  }
+
   /* Explicit surface helper (if you want to use it separately from bg-card) */
   .bg-surface {
     background-color: hsl(var(--card));
@@ -120,6 +155,22 @@
 
   /* Subtle border helper class */
   .border-subtle {
-    border-color: hsl(var(--border));
+    border-color: hsl(var(--border) / 0.5);
+  }
+
+  /* Button scale effect for tactile feedback */
+  .btn-scale {
+    @apply hover:scale-[1.01] active:scale-[0.99] transition-transform duration-100;
+  }
+
+  /* Card with elevation transition */
+  .card-elevated {
+    @apply shadow-card hover:shadow-card-hover transition-shadow duration-200;
+  }
+
+  /* Section divider */
+  .section-divider {
+    @apply border-t border-border/50 my-8;
   }
 }
+

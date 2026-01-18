@@ -9,7 +9,8 @@
       "Bash(wc:*)",
       "Bash(ls:*)",
       "Bash(find:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(pytest:*)"
     ],
     "deny": [],
     "ask": []

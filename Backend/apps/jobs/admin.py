@@ -8,7 +8,7 @@ skill requirements, market insights, and skill demand analytics.
 from django.contrib import admin
 from django.utils.html import format_html
 from django.db.models import Count
-from .models import JobPlatform, Job, JobSkill, MarketInsight, SkillDemand
+from .models import JobPlatform, Job, JobSkill, SavedJob, MarketInsight, SkillDemand
 
 
 @admin.register(JobPlatform)
@@ -420,6 +420,78 @@ class JobSkillAdmin(admin.ModelAdmin):
         """Optimize queryset"""
         qs = super().get_queryset(request)
         return qs.select_related('job', 'skill')
+
+
+@admin.register(SavedJob)
+class SavedJobAdmin(admin.ModelAdmin):
+    """Admin interface for Saved Jobs"""
+
+    list_display = [
+        'user_name',
+        'job_title',
+        'company_name',
+        'created_at',
+    ]
+
+    list_filter = [
+        'created_at',
+    ]
+
+    search_fields = [
+        'user__username',
+        'user__email',
+        'job__title',
+        'job__company_name',
+    ]
+
+    readonly_fields = [
+        'id',
+        'created_at',
+        'updated_at',
+    ]
+
+    autocomplete_fields = ['user', 'job']
+
+    fieldsets = (
+        ('Relationships', {
+            'fields': (
+                'id',
+                'user',
+                'job',
+            )
+        }),
+        ('Notes', {
+            'fields': ('notes',)
+        }),
+        ('Timestamps', {
+            'fields': (
+                'created_at',
+                'updated_at',
+            ),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def user_name(self, obj):
+        """Get user name"""
+        return obj.user.username
+    user_name.short_description = 'User'
+    user_name.admin_order_field = 'user__username'
+
+    def job_title(self, obj):
+        """Get job title"""
+        return obj.job.title[:50]
+    job_title.short_description = 'Job'
+
+    def company_name(self, obj):
+        """Get company name"""
+        return obj.job.company_name
+    company_name.short_description = 'Company'
+
+    def get_queryset(self, request):
+        """Optimize queryset"""
+        qs = super().get_queryset(request)
+        return qs.select_related('user', 'job')
 
 
 @admin.register(MarketInsight)

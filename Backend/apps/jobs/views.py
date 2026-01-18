@@ -17,12 +17,14 @@ from django.db.models import Q, Avg, Count
 from django.utils import timezone
 from datetime import timedelta
 
-from apps.jobs.models import JobPlatform, Job, SkillDemand
+from apps.jobs.models import JobPlatform, Job, SavedJob, SkillDemand
 from apps.jobs.serializers import (
     JobPlatformSerializer,
     JobSerializer,
     JobListSerializer,
     JobSearchSerializer,
+    SavedJobSerializer,
+    SavedJobCreateSerializer,
     SkillDemandSerializer,
 )
 
@@ -62,13 +64,12 @@ class JobViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        """Return active jobs within 24-hour cache."""
-        cache_cutoff = timezone.now() - timedelta(hours=24)
+        """Return active jobs within cache period."""
         return Job.objects.filter(
             is_deleted=False,
-            created_at__gte=cache_cutoff,
+            is_active=True,
             platform__is_active=True
-        ).select_related('platform').prefetch_related('skill_requirements')
+        ).select_related('platform').prefetch_related('job_skills__skill')
 
     def get_serializer_class(self):
         if self.action == 'list' or self.action == 'search':
@@ -108,7 +109,10 @@ class JobViewSet(viewsets.ReadOnlyModelViewSet):
         # Location filter
         location = request.query_params.get('location')
         if location:
-            queryset = queryset.filter(location__icontains=location)
+            queryset = queryset.filter(
+                Q(location_city__icontains=location) |
+                Q(location_country__icontains=location)
+            )
 
         # Job type filter
         job_type = request.query_params.get('job_type')
@@ -136,7 +140,7 @@ class JobViewSet(viewsets.ReadOnlyModelViewSet):
             skill_list = [s.strip() for s in skills.split(',')]
             for skill in skill_list:
                 queryset = queryset.filter(
-                    skill_requirements__skill__name__icontains=skill
+                    job_skills__skill__name__icontains=skill
                 ).distinct()
 
         # Order by posted date (newest first)
@@ -169,6 +173,111 @@ class JobViewSet(viewsets.ReadOnlyModelViewSet):
     #
     #     serializer = JobListSerializer(jobs, many=True)
     #     return Response(serializer.data)
+
+
+class SavedJobViewSet(viewsets.ModelViewSet):
+    """
+    User saved jobs management.
+
+    Endpoints:
+    - GET /saved-jobs/ - List user's saved jobs
+    - POST /saved-jobs/ - Save a job
+    - DELETE /saved-jobs/{id}/ - Unsave a job
+    - POST /saved-jobs/toggle/{job_id}/ - Toggle save status
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None  # Disable pagination for saved jobs
+
+    def get_queryset(self):
+        """Return current user's saved jobs."""
+        return SavedJob.objects.filter(
+            user=self.request.user,
+            is_deleted=False
+        ).select_related('job__platform').order_by('-created_at')
+
+    def get_serializer_class(self):
+        if self.action == 'create' or self.action == 'toggle':
+            return SavedJobCreateSerializer
+        return SavedJobSerializer
+
+    def create(self, request, *args, **kwargs):
+        """Save a job."""
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        
+        # Check if already saved
+        job_id = serializer.validated_data['job'].id
+        if SavedJob.objects.filter(user=request.user, job_id=job_id, is_deleted=False).exists():
+            return Response(
+                {'detail': 'Job already saved'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            SavedJobSerializer(serializer.instance).data,
+            status=status.HTTP_201_CREATED,
+            headers=headers
+        )
+
+    @action(detail=False, methods=['post'], url_path='toggle/(?P<job_id>[^/.]+)')
+    def toggle(self, request, job_id=None):
+        """
+        Toggle save status for a job.
+        
+        POST /saved-jobs/toggle/{job_id}/
+        
+        Returns:
+        - 201: Job saved
+        - 200: Job unsaved
+        """
+        # Check if job exists (including soft-deleted)
+        try:
+            saved_job = SavedJob.objects.get(
+                user=request.user,
+                job_id=job_id
+            )
+            
+            if saved_job.is_deleted:
+                # Restore soft-deleted job
+                saved_job.is_deleted = False
+                saved_job.save()
+                return Response(
+                    {
+                        'detail': 'Job saved',
+                        'is_saved': True,
+                        'saved_job': SavedJobSerializer(saved_job).data
+                    },
+                    status=status.HTTP_201_CREATED
+                )
+            else:
+                # Soft delete the job
+                saved_job.is_deleted = True
+                saved_job.save()
+                return Response(
+                    {'detail': 'Job unsaved', 'is_saved': False},
+                    status=status.HTTP_200_OK
+                )
+                
+        except SavedJob.DoesNotExist:
+            # Job not saved, create new
+            try:
+                job = Job.objects.get(id=job_id, is_deleted=False)
+                saved_job = SavedJob.objects.create(user=request.user, job=job)
+                return Response(
+                    {
+                        'detail': 'Job saved',
+                        'is_saved': True,
+                        'saved_job': SavedJobSerializer(saved_job).data
+                    },
+                    status=status.HTTP_201_CREATED
+                )
+            except Job.DoesNotExist:
+                return Response(
+                    {'detail': 'Job not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
 
 
 # ============================================================================

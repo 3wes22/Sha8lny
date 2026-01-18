@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { MessageSquare, Send, ThumbsUp, ThumbsDown, Copy, Sparkles, Bot, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 interface Message {
   id: string;
@@ -95,15 +96,16 @@ export default function Advisor() {
             {messages.map((message) => (
               <div
                 key={message.id}
-                className={`flex gap-4 ${message.role === "user" ? "flex-row-reverse" : ""}`}
+                className={cn("flex gap-4", message.role === "user" && "flex-row-reverse")}
               >
                 {/* Avatar */}
                 <div
-                  className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  className={cn(
+                    "h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0",
                     message.role === "assistant"
                       ? "gradient-primary text-primary-foreground"
                       : "bg-secondary text-secondary-foreground"
-                  }`}
+                  )}
                 >
                   {message.role === "assistant" ? (
                     <Bot className="h-5 w-5" />

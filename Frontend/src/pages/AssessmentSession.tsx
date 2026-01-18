@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -267,35 +267,42 @@ export default function AssessmentSession() {
             </RadioGroup>
           )}
 
-          {currentQuestion.type === "scale" && (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Choose a number from {currentQuestion.min_value ?? 1} to {currentQuestion.max_value ?? 5}.
-                {currentQuestion.labels && (
-                  <span className="block mt-1">
-                    {currentQuestion.labels[String(currentQuestion.min_value ?? 1)]} - {currentQuestion.labels[String(currentQuestion.max_value ?? 5)]}
-                  </span>
-                )}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {Array.from({ length: (currentQuestion.max_value ?? 5) - (currentQuestion.min_value ?? 1) + 1 }).map((_, idx) => {
-                  const val = (currentQuestion.min_value ?? 1) + idx;
-                  const isSelected = Number(answers[currentQuestion.id]) === val;
-                  return (
-                    <Button
-                      key={val}
-                      type="button"
-                      variant={isSelected ? "default" : "outline"}
-                      className={isSelected ? "gradient-primary" : ""}
-                      onClick={() => handleAnswerChange(currentQuestion.id, val)}
-                    >
-                      {val}
-                    </Button>
-                  );
-                })}
+          {currentQuestion.type === "scale" && (() => {
+            const scaleValues = useMemo(() => {
+              const min = currentQuestion.min_value ?? 1;
+              const max = currentQuestion.max_value ?? 5;
+              return Array.from({ length: max - min + 1 }, (_, idx) => min + idx);
+            }, [currentQuestion.min_value, currentQuestion.max_value]);
+
+            return (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Choose a number from {currentQuestion.min_value ?? 1} to {currentQuestion.max_value ?? 5}.
+                  {currentQuestion.labels && (
+                    <span className="block mt-1">
+                      {currentQuestion.labels[String(currentQuestion.min_value ?? 1)]} - {currentQuestion.labels[String(currentQuestion.max_value ?? 5)]}
+                    </span>
+                  )}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {scaleValues.map((val) => {
+                    const isSelected = Number(answers[currentQuestion.id]) === val;
+                    return (
+                      <Button
+                        key={val}
+                        type="button"
+                        variant={isSelected ? "default" : "outline"}
+                        className={isSelected ? "gradient-primary" : ""}
+                        onClick={() => handleAnswerChange(currentQuestion.id, val)}
+                      >
+                        {val}
+                      </Button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {currentQuestion.type === "text" && (
             <div className="space-y-2">

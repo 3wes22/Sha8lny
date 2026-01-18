@@ -11,7 +11,7 @@ SRS References:
 """
 
 from rest_framework import serializers
-from apps.jobs.models import JobPlatform, Job, JobSkill, SkillDemand, MarketInsight
+from apps.jobs.models import JobPlatform, Job, JobSkill, SavedJob, SkillDemand, MarketInsight
 
 
 class JobPlatformSerializer(serializers.ModelSerializer):
@@ -121,6 +121,34 @@ class JobSerializer(serializers.ModelSerializer):
         if obj.location_city and obj.location_country:
             return f"{obj.location_city}, {obj.location_country}"
         return obj.location_city or obj.location_country or "Not specified"
+
+
+class SavedJobSerializer(serializers.ModelSerializer):
+    """Saved job with full job details."""
+    job = JobListSerializer(read_only=True)
+
+    class Meta:
+        model = SavedJob
+        fields = [
+            'id',
+            'job',
+            'notes',
+            'created_at',
+        ]
+        read_only_fields = ['created_at']
+
+
+class SavedJobCreateSerializer(serializers.ModelSerializer):
+    """Create a saved job."""
+
+    class Meta:
+        model = SavedJob
+        fields = ['job', 'notes']
+
+    def create(self, validated_data):
+        # Add user from request context
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
 
 
 class JobSearchSerializer(serializers.Serializer):

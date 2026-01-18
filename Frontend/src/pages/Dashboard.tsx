@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -18,20 +18,24 @@ import { useAuth } from "@/contexts/AuthContext";
 import { roadmapApi, type Roadmap, type RoadmapMilestone } from "@/lib/api";
 import { toast } from "sonner";
 
+interface RoadmapStats {
+  total_phases: number;
+  completed_phases: number;
+  total_milestones: number;
+  completed_milestones: number;
+  estimated_total_hours: number;
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [roadmap, setRoadmap] = useState<Roadmap | null>(null);
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<RoadmapStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Get first name for greeting
   const firstName = user?.full_name?.split(' ')[0] || user?.username || 'User';
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -60,7 +64,11 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   if (loading) {
     return (
@@ -71,24 +79,35 @@ export default function Dashboard() {
   }
 
   // Calculate recent and upcoming milestones from roadmap
-  const allMilestones: RoadmapMilestone[] = [];
-  roadmap?.phases?.forEach(phase => {
-    phase.milestones?.forEach(milestone => {
-      allMilestones.push({ ...milestone, phaseName: phase.title });
+  const allMilestones = useMemo(() => {
+    const milestones: Array<RoadmapMilestone & { phaseName?: string }> = [];
+    roadmap?.phases?.forEach(phase => {
+      phase.milestones?.forEach(milestone => {
+        milestones.push({ ...milestone, phaseName: phase.title });
+      });
     });
-  });
+    return milestones;
+  }, [roadmap?.phases]);
 
-  const completedMilestones = allMilestones
-    .filter(m => m.status === 'completed')
-    .sort((a, b) => {
-      if (!a.completed_at || !b.completed_at) return 0;
-      return new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime();
-    })
-    .slice(0, 3);
+  const completedMilestones = useMemo(
+    () =>
+      allMilestones
+        .filter(m => m.status === 'completed')
+        .sort((a, b) => {
+          if (!a.completed_at || !b.completed_at) return 0;
+          return new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime();
+        })
+        .slice(0, 3),
+    [allMilestones]
+  );
 
-  const upcomingMilestones = allMilestones
-    .filter(m => m.status === 'not_started' || m.status === 'in_progress')
-    .slice(0, 2);
+  const upcomingMilestones = useMemo(
+    () =>
+      allMilestones
+        .filter(m => m.status === 'not_started' || m.status === 'in_progress')
+        .slice(0, 2),
+    [allMilestones]
+  );
 
   const dashboardStats = [
     {

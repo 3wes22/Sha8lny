@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Target, Clock, FileText, Search, TrendingUp, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { assessmentApi } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 export default function Assessment() {
   const navigate = useNavigate();
@@ -89,10 +90,14 @@ export default function Assessment() {
     },
   ];
 
-  const filteredPaths = careerPaths.filter(
-    (path) =>
-      path.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      path.description.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredPaths = useMemo(
+    () =>
+      careerPaths.filter(
+        (path) =>
+          path.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          path.description.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+    [searchQuery]
   );
 
   const handleStartAssessment = async (careerPath: string) => {
@@ -250,9 +255,10 @@ export default function Assessment() {
         {filteredPaths.map((path) => (
           <Card
             key={path.title}
-            className={`transition-smooth hover:shadow-lg group ${
-              creatingAssessment ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
-            }`}
+            className={cn(
+              "transition-smooth hover:shadow-lg group",
+              creatingAssessment ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+            )}
             onClick={() => !creatingAssessment && handleStartAssessment(path.title)}
           >
             <CardHeader>

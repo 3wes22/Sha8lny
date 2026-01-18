@@ -493,6 +493,57 @@ class JobSkill(BaseModel):
         return f"<JobSkill: {self.skill.name} for {self.job.id}>"
 
 
+class SavedJob(BaseModel):
+    """
+    User-saved jobs for later review.
+
+    Tracks which jobs users have bookmarked.
+    """
+
+    user = models.ForeignKey(
+        'users.User',
+        on_delete=models.CASCADE,
+        related_name='saved_jobs',
+        help_text="User who saved this job"
+    )
+
+    job = models.ForeignKey(
+        Job,
+        on_delete=models.CASCADE,
+        related_name='saved_by_users',
+        help_text="Job that was saved"
+    )
+
+    notes = models.TextField(
+        blank=True,
+        help_text="Optional user notes about this job"
+    )
+
+    class Meta:
+        verbose_name = "Saved Job"
+        verbose_name_plural = "Saved Jobs"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user'], name='idx_savedjob_user'),
+            models.Index(fields=['job'], name='idx_savedjob_job'),
+            models.Index(fields=['created_at'], name='idx_savedjob_created'),
+        ]
+        constraints = [
+            # Only enforce uniqueness for non-deleted records
+            models.UniqueConstraint(
+                fields=['user', 'job'],
+                condition=models.Q(is_deleted=False),
+                name='unique_user_job_active'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} saved {self.job.title}"
+
+    def __repr__(self):
+        return f"<SavedJob: User {self.user.id} - Job {self.job.id}>"
+
+
 class MarketInsight(BaseModel):
     """
     Market analytics and trends.

@@ -1,52 +1,63 @@
 """
 Jobs Service Layer
 
-Handles job aggregation, matching, applications, and AI-powered job recommendations.
+Handles job search, filtering, skill matching, and market insights.
+
+SRS References:
+- FR-18: Job Scraping and Normalization
+- FR-19: Job-Skill Matching
+- FR-20: Market Insights
+- FR-21: Skill Demand Analysis
 """
 
 from typing import Optional, List, Dict, Any
 from decimal import Decimal
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Count, Avg
 from django.utils import timezone
+from datetime import timedelta
 
-from .models import JobListing, JobApplication, SavedJob
-from apps.users.models import User, UserSkill
-from apps.notifications.signals import job_match_found, job_application_submitted
+from apps.jobs.models import JobPlatform, Job, JobSkill, MarketInsight, SkillDemand
+from apps.users.models import User, Skill, UserSkill
 
 
 class JobService:
-    """Service for job listing management and search"""
+    """Service for job management and search."""
 
     @staticmethod
     def search_jobs(
         query: str = "",
-        location: Optional[str] = None,
+        location_city: Optional[str] = None,
+        location_country: str = "Egypt",
         job_type: Optional[str] = None,
         experience_level: Optional[str] = None,
         min_salary: Optional[Decimal] = None,
         is_remote: Optional[bool] = None,
+        skills: Optional[List[str]] = None,
         limit: int = 50
-    ) -> List[JobListing]:
+    ) -> List[Job]:
         """
-        Search jobs with filters.
+        Search jobs with comprehensive filters.
 
         Args:
-            query: Search query
-            location: Filter by location
-            job_type: Filter by job type (full_time, part_time, etc.)
-            experience_level: Filter by experience level
-            min_salary: Minimum salary
+            query: Search in title, company, description
+            location_city: Filter by city
+            location_country: Filter by country (default: Egypt)
+            job_type: full_time, part_time, contract, internship, freelance
+            experience_level: entry, mid, senior, lead, executive
+            min_salary: Minimum salary filter
             is_remote: Filter remote jobs
+            skills: List of skill names to match
             limit: Maximum results
 
         Returns:
-            List[JobListing]: Matching jobs
+            List[Job]: Matching jobs ordered by posted_date
         """
-        queryset = JobListing.objects.filter(
+        queryset = Job.objects.filter(
             is_active=True,
-            is_deleted=False
-        )
+            is_deleted=False,
+            platform__is_active=True
+        ).select_related('platform').prefetch_related('job_skills__skill')
 
         # Text search
         if query:
@@ -54,12 +65,15 @@ class JobService:
                 Q(title__icontains=query) |
                 Q(company_name__icontains=query) |
                 Q(description__icontains=query) |
-                Q(required_skills__icontains=query)
+                Q(requirements__icontains=query)
             )
 
-        # Location filter
-        if location:
-            queryset = queryset.filter(location__icontains=location)
+        # Location filters
+        if location_city:
+            queryset = queryset.filter(location_city__icontains=location_city)
+
+        if location_country:
+            queryset = queryset.filter(location_country=location_country)
 
         # Job type filter
         if job_type:
@@ -71,59 +85,94 @@ class JobService:
 
         # Salary filter
         if min_salary:
-            queryset = queryset.filter(
-                salary_min__gte=min_salary
-            )
+            queryset = queryset.filter(salary_min__gte=min_salary)
 
         # Remote filter
         if is_remote is not None:
             queryset = queryset.filter(is_remote=is_remote)
 
+        # Skills filter (Job-Skill Matching - FR-19)
+        if skills:
+            for skill_name in skills:
+                queryset = queryset.filter(
+                    job_skills__skill__name__iexact=skill_name
+                ).distinct()
+
         return list(queryset.order_by('-posted_date')[:limit])
 
     @staticmethod
-    def get_job_by_id(job_id: str) -> Optional[JobListing]:
-        """Get job by ID"""
+    def get_job_by_id(job_id: str) -> Optional[Job]:
+        """
+        Get job by ID.
+
+        Args:
+            job_id: Job UUID
+
+        Returns:
+            Job instance or None
+        """
         try:
-            job = JobListing.objects.get(id=job_id, is_deleted=False)
-            # Increment view count
-            job.view_count += 1
-            job.save(update_fields=['view_count', 'updated_at'])
-            return job
-        except JobListing.DoesNotExist:
+            return Job.objects.select_related('platform').prefetch_related(
+                'job_skills__skill'
+            ).get(id=job_id, is_deleted=False)
+        except Job.DoesNotExist:
             return None
 
     @staticmethod
-    def get_recent_jobs(limit: int = 20) -> List[JobListing]:
-        """Get recently posted jobs"""
-        return list(JobListing.objects.filter(
+    def get_recent_jobs(days: int = 7, limit: int = 50) -> List[Job]:
+        """
+        Get recently posted jobs.
+
+        Args:
+            days: Number of days to look back
+            limit: Maximum results
+
+        Returns:
+            List[Job]: Recent jobs
+        """
+        cutoff_date = (timezone.now() - timedelta(days=days)).date()
+
+        return list(Job.objects.filter(
             is_active=True,
-            is_deleted=False
-        ).order_by('-posted_date')[:limit])
+            is_deleted=False,
+            posted_date__gte=cutoff_date,
+            platform__is_active=True
+        ).select_related('platform').order_by('-posted_date')[:limit])
 
     @staticmethod
-    def get_remote_jobs(limit: int = 50) -> List[JobListing]:
-        """Get remote job listings"""
-        return list(JobListing.objects.filter(
+    def get_remote_jobs(limit: int = 50) -> List[Job]:
+        """
+        Get remote job listings.
+
+        Args:
+            limit: Maximum results
+
+        Returns:
+            List[Job]: Remote jobs
+        """
+        return list(Job.objects.filter(
             is_remote=True,
             is_active=True,
-            is_deleted=False
-        ).order_by('-posted_date')[:limit])
+            is_deleted=False,
+            platform__is_active=True
+        ).select_related('platform').order_by('-posted_date')[:limit])
 
     @staticmethod
-    def match_jobs_for_user(
-        user: User,
-        limit: int = 20
-    ) -> List[Dict[str, Any]]:
+    def match_jobs_for_user(user: User, limit: int = 20) -> List[Dict[str, Any]]:
         """
-        Find jobs matching user's skills and experience.
+        Find jobs matching user's skills.
+
+        SRS FR-19: Job-Skill Matching
 
         Args:
             user: User instance
             limit: Maximum matches
 
         Returns:
-            List of dicts with job and match_score
+            List of dicts with:
+            - job: Job instance
+            - match_score: Percentage match (0-100)
+            - matching_skills: List of matched skill names
         """
         # Get user's skills
         user_skills = set(
@@ -134,221 +183,376 @@ class JobService:
         )
 
         if not user_skills:
-            # No skills - return recent jobs
-            jobs = JobService.get_recent_jobs(limit)
-            return [{'job': job, 'match_score': 0} for job in jobs]
+            # No skills - return recent jobs with 0 match score
+            jobs = JobService.get_recent_jobs(limit=limit)
+            return [{'job': job, 'match_score': 0, 'matching_skills': []} for job in jobs]
 
-        # Get all active jobs
-        jobs = JobListing.objects.filter(
+        # Get active jobs with their required skills
+        jobs = Job.objects.filter(
             is_active=True,
-            is_deleted=False
-        )
+            is_deleted=False,
+            platform__is_active=True
+        ).select_related('platform').prefetch_related('job_skills__skill')
 
-        # Calculate match scores
         matches = []
-        for job in jobs[:100]:  # Limit to first 100 for performance
-            # Parse required skills from job
-            required_skills = set()
-            if job.required_skills:
-                if isinstance(job.required_skills, list):
-                    required_skills = set(job.required_skills)
-                elif isinstance(job.required_skills, str):
-                    required_skills = {
-                        s.strip().lower()
-                        for s in job.required_skills.split(',')
-                    }
+        for job in jobs[:200]:  # Limit to 200 for performance
+            # Get required skills for this job
+            job_required_skills = set(
+                job.job_skills.filter(
+                    is_required=True
+                ).values_list('skill__name', flat=True)
+            )
 
-            # Calculate match percentage
-            if required_skills:
-                user_skills_lower = {s.lower() for s in user_skills}
-                required_skills_lower = {s.lower() for s in required_skills}
+            if not job_required_skills:
+                continue
 
-                matching_skills = user_skills_lower & required_skills_lower
-                match_score = int((len(matching_skills) / len(required_skills_lower)) * 100)
-            else:
-                match_score = 0
+            # Calculate match
+            matching_skills = user_skills & job_required_skills
+            match_score = int((len(matching_skills) / len(job_required_skills)) * 100)
 
             if match_score > 0:
                 matches.append({
                     'job': job,
                     'match_score': match_score,
-                    'matching_skills': list(user_skills & required_skills)
+                    'matching_skills': list(matching_skills),
+                    'missing_skills': list(job_required_skills - user_skills)
                 })
 
-        # Sort by match score
+        # Sort by match score descending
         matches.sort(key=lambda x: x['match_score'], reverse=True)
-
-        # Emit signals for high matches (>70%)
-        for match in matches[:5]:
-            if match['match_score'] >= 70:
-                job_match_found.send(
-                    sender=JobListing,
-                    instance=match['job'],
-                    user=user,
-                    match_score=match['match_score']
-                )
 
         return matches[:limit]
 
     @staticmethod
     @transaction.atomic
-    def create_job_listing(
+    def create_job(
+        platform: JobPlatform,
+        external_id: str,
         title: str,
         company_name: str,
-        description: str,
-        location: str,
-        job_type: str,
-        experience_level: str,
+        location_city: str = "",
+        location_country: str = "Egypt",
         **kwargs
-    ) -> JobListing:
-        """Create a new job listing (from external API sync)"""
-        job = JobListing.objects.create(
-            title=title,
-            company_name=company_name,
-            description=description,
-            location=location,
-            job_type=job_type,
-            experience_level=experience_level,
-            is_active=True,
-            posted_date=timezone.now(),
-            **kwargs
+    ) -> Job:
+        """
+        Create or update job listing (for scraping/API sync).
+
+        Args:
+            platform: JobPlatform instance
+            external_id: Platform's unique job ID
+            title: Job title
+            company_name: Company name
+            location_city: City
+            location_country: Country
+            **kwargs: Additional Job model fields
+
+        Returns:
+            Job instance
+        """
+        # Check if job already exists (prevent duplicates)
+        job, created = Job.objects.update_or_create(
+            platform=platform,
+            external_id=external_id,
+            defaults={
+                'title': title,
+                'company_name': company_name,
+                'location_city': location_city,
+                'location_country': location_country,
+                'is_active': True,
+                **kwargs
+            }
         )
+
         return job
 
+    @staticmethod
+    def get_jobs_by_platform(platform_slug: str, limit: int = 50) -> List[Job]:
+        """
+        Get jobs from specific platform.
 
-class JobApplicationService:
-    """Service for job application management"""
+        Args:
+            platform_slug: Platform slug (e.g., 'wuzzuf', 'linkedin')
+            limit: Maximum results
+
+        Returns:
+            List[Job]: Jobs from platform
+        """
+        try:
+            platform = JobPlatform.objects.get(slug=platform_slug, is_active=True)
+            return list(Job.objects.filter(
+                platform=platform,
+                is_active=True,
+                is_deleted=False
+            ).order_by('-posted_date')[:limit])
+        except JobPlatform.DoesNotExist:
+            return []
+
+    @staticmethod
+    def add_skills_to_job(job: Job, skill_names: List[str], is_required: bool = True) -> None:
+        """
+        Add skills to a job.
+
+        Args:
+            job: Job instance
+            skill_names: List of skill names
+            is_required: Whether skills are required or nice-to-have
+        """
+        from django.utils.text import slugify
+
+        for skill_name in skill_names:
+            skill_name = skill_name.strip()
+
+            # Try to get existing skill by name (case-insensitive)
+            try:
+                skill = Skill.objects.get(name__iexact=skill_name)
+            except Skill.DoesNotExist:
+                # Create new skill
+                skill = Skill.objects.create(
+                    name=skill_name,
+                    slug=slugify(skill_name),
+                    category='technical'
+                )
+
+            # Create JobSkill relationship
+            JobSkill.objects.get_or_create(
+                job=job,
+                skill=skill,
+                defaults={'is_required': is_required}
+            )
+
+
+class MarketInsightService:
+    """Service for market insights and analytics."""
+
+    @staticmethod
+    def get_insights_by_career(
+        career_field: str,
+        country: str = "Egypt"
+    ) -> List[MarketInsight]:
+        """
+        Get market insights for a career field.
+
+        SRS FR-20: Market Insights
+
+        Args:
+            career_field: Career field name
+            country: Country filter
+
+        Returns:
+            List[MarketInsight]: Recent insights
+        """
+        return list(MarketInsight.objects.filter(
+            career_field__icontains=career_field,
+            country=country,
+            is_deleted=False
+        ).order_by('-generated_at')[:10])
 
     @staticmethod
     @transaction.atomic
-    def apply_to_job(
-        user: User,
-        job: JobListing,
-        cover_letter: str = "",
-        resume_id: Optional[str] = None
-    ) -> JobApplication:
+    def generate_job_demand_insight(
+        career_field: str,
+        country: str = "Egypt",
+        period_days: int = 30
+    ) -> MarketInsight:
         """
-        Submit job application.
+        Generate job demand insight for a career field.
 
         Args:
-            user: User applying
-            job: Job listing
-            cover_letter: Optional cover letter
-            resume_id: Optional resume ID to attach
+            career_field: Career field to analyze
+            country: Country to analyze
+            period_days: Analysis period in days
 
         Returns:
-            JobApplication: Created application
+            MarketInsight: Generated insight
         """
-        # Check for existing application
-        existing = JobApplication.objects.filter(
-            user=user,
-            job=job,
+        period_start = (timezone.now() - timedelta(days=period_days)).date()
+        period_end = timezone.now().date()
+
+        # Query jobs in this field
+        jobs = Job.objects.filter(
+            title__icontains=career_field,
+            location_country=country,
+            posted_date__gte=period_start,
+            posted_date__lte=period_end,
             is_deleted=False
+        )
+
+        # Calculate statistics
+        total_jobs = jobs.count()
+        avg_salary = jobs.aggregate(
+            avg_min=Avg('salary_min'),
+            avg_max=Avg('salary_max')
+        )
+
+        # Get top skills
+        top_skills = JobSkill.objects.filter(
+            job__in=jobs,
+            is_required=True
+        ).values('skill__name').annotate(
+            count=Count('id')
+        ).order_by('-count')[:10]
+
+        # Get top companies
+        top_companies = jobs.values('company_name').annotate(
+            count=Count('id')
+        ).order_by('-count')[:10]
+
+        # Create insight
+        insight = MarketInsight.objects.create(
+            insight_type='job_demand',
+            career_field=career_field,
+            country=country,
+            data_period_start=period_start,
+            data_period_end=period_end,
+            total_jobs_analyzed=total_jobs,
+            insights_data={
+                'total_jobs': total_jobs,
+                'average_salary_min': float(avg_salary['avg_min'] or 0),
+                'average_salary_max': float(avg_salary['avg_max'] or 0),
+                'top_skills': [
+                    {'skill': s['skill__name'], 'count': s['count']}
+                    for s in top_skills
+                ],
+                'top_companies': [
+                    {'company': c['company_name'], 'count': c['count']}
+                    for c in top_companies
+                ],
+                'trend_direction': 'stable',  # TODO: Calculate actual trend
+                'trend_percentage': 0.0
+            }
+        )
+
+        return insight
+
+
+class SkillDemandService:
+    """Service for skill demand analytics."""
+
+    @staticmethod
+    def get_trending_skills(
+        country: str = "Egypt",
+        limit: int = 20
+    ) -> List[SkillDemand]:
+        """
+        Get trending skills (rising demand).
+
+        SRS FR-21: Skill Demand Analysis
+
+        Args:
+            country: Country filter
+            limit: Maximum results
+
+        Returns:
+            List[SkillDemand]: Trending skills ordered by growth
+        """
+        return list(SkillDemand.objects.filter(
+            country=country,
+            trend_direction='rising',
+            is_deleted=False
+        ).select_related('skill').order_by('-trend_percentage')[:limit])
+
+    @staticmethod
+    def get_skill_demand_history(
+        skill: Skill,
+        country: str = "Egypt",
+        months: int = 6
+    ) -> List[SkillDemand]:
+        """
+        Get historical demand data for a skill.
+
+        Args:
+            skill: Skill instance
+            country: Country filter
+            months: Number of months to retrieve
+
+        Returns:
+            List[SkillDemand]: Historical demand data
+        """
+        cutoff_date = (timezone.now() - timedelta(days=months * 30)).date()
+
+        return list(SkillDemand.objects.filter(
+            skill=skill,
+            country=country,
+            month__gte=cutoff_date,
+            is_deleted=False
+        ).order_by('month'))
+
+    @staticmethod
+    @transaction.atomic
+    def calculate_skill_demand(
+        skill: Skill,
+        country: str = "Egypt",
+        month_date: Optional[timezone.datetime] = None
+    ) -> SkillDemand:
+        """
+        Calculate demand metrics for a skill in a given month.
+
+        Args:
+            skill: Skill to analyze
+            country: Country to analyze
+            month_date: Month to analyze (defaults to current month)
+
+        Returns:
+            SkillDemand: Calculated demand data
+        """
+        if not month_date:
+            month_date = timezone.now().date().replace(day=1)
+
+        # Get jobs requiring this skill in this month
+        jobs_with_skill = JobSkill.objects.filter(
+            skill=skill,
+            job__location_country=country,
+            job__posted_date__year=month_date.year,
+            job__posted_date__month=month_date.month,
+            job__is_deleted=False
+        ).select_related('job')
+
+        demand_count = jobs_with_skill.count()
+
+        # Calculate average salaries
+        salary_stats = jobs_with_skill.aggregate(
+            avg_min=Avg('job__salary_min'),
+            avg_max=Avg('job__salary_max')
+        )
+
+        # Get top job titles
+        top_titles = jobs_with_skill.values('job__title').annotate(
+            count=Count('id')
+        ).order_by('-count')[:5]
+
+        # Calculate trend (compare to previous month)
+        prev_month = (month_date - timedelta(days=30)).replace(day=1)
+        prev_demand = SkillDemand.objects.filter(
+            skill=skill,
+            country=country,
+            month=prev_month
         ).first()
 
-        if existing:
-            return existing
+        if prev_demand and prev_demand.demand_count > 0:
+            trend_percentage = ((demand_count - prev_demand.demand_count) / prev_demand.demand_count) * 100
+            if trend_percentage > 5:
+                trend_direction = 'rising'
+            elif trend_percentage < -5:
+                trend_direction = 'declining'
+            else:
+                trend_direction = 'stable'
+        else:
+            trend_percentage = Decimal('0.00')
+            trend_direction = 'stable'
 
-        application = JobApplication.objects.create(
-            user=user,
-            job=job,
-            status='applied',
-            applied_at=timezone.now(),
-            cover_letter=cover_letter,
-            resume_snapshot={
-                'resume_id': resume_id
-            } if resume_id else {}
+        # Create or update demand record
+        demand, _ = SkillDemand.objects.update_or_create(
+            skill=skill,
+            country=country,
+            month=month_date,
+            defaults={
+                'demand_count': demand_count,
+                'trend_direction': trend_direction,
+                'trend_percentage': Decimal(str(round(trend_percentage, 2))),
+                'average_salary_min': salary_stats['avg_min'],
+                'average_salary_max': salary_stats['avg_max'],
+                'top_job_titles': [t['job__title'] for t in top_titles]
+            }
         )
 
-        # Increment application count on job
-        job.application_count += 1
-        job.save(update_fields=['application_count', 'updated_at'])
-
-        # Emit signal
-        job_application_submitted.send(
-            sender=JobApplication,
-            instance=application,
-            user=user,
-            job=job
-        )
-
-        return application
-
-    @staticmethod
-    def get_user_applications(user: User) -> List[JobApplication]:
-        """Get all applications for user"""
-        return list(JobApplication.objects.filter(
-            user=user,
-            is_deleted=False
-        ).select_related('job').order_by('-applied_at'))
-
-    @staticmethod
-    def update_application_status(
-        application_id: str,
-        status: str,
-        notes: str = ""
-    ) -> Optional[JobApplication]:
-        """Update application status"""
-        try:
-            application = JobApplication.objects.get(id=application_id)
-            application.status = status
-
-            if notes:
-                application.notes = notes
-
-            if status == 'rejected':
-                application.rejected_at = timezone.now()
-            elif status == 'accepted':
-                application.interview_scheduled_at = timezone.now()
-
-            application.save()
-            return application
-        except JobApplication.DoesNotExist:
-            return None
-
-
-class SavedJobService:
-    """Service for saved job management"""
-
-    @staticmethod
-    def save_job(user: User, job: JobListing, notes: str = "") -> SavedJob:
-        """Save a job for later"""
-        saved_job, created = SavedJob.objects.get_or_create(
-            user=user,
-            job=job,
-            defaults={'notes': notes}
-        )
-
-        if not created and notes:
-            saved_job.notes = notes
-            saved_job.save()
-
-        return saved_job
-
-    @staticmethod
-    def unsave_job(user: User, job: JobListing) -> bool:
-        """Remove saved job"""
-        try:
-            saved_job = SavedJob.objects.get(user=user, job=job)
-            saved_job.is_deleted = True
-            saved_job.save(update_fields=['is_deleted', 'updated_at'])
-            return True
-        except SavedJob.DoesNotExist:
-            return False
-
-    @staticmethod
-    def get_saved_jobs(user: User) -> List[SavedJob]:
-        """Get all saved jobs for user"""
-        return list(SavedJob.objects.filter(
-            user=user,
-            is_deleted=False
-        ).select_related('job').order_by('-created_at'))
-
-    @staticmethod
-    def is_job_saved(user: User, job: JobListing) -> bool:
-        """Check if job is saved by user"""
-        return SavedJob.objects.filter(
-            user=user,
-            job=job,
-            is_deleted=False
-        ).exists()
+        return demand
