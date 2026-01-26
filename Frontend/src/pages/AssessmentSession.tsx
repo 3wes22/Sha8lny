@@ -268,11 +268,10 @@ export default function AssessmentSession() {
           )}
 
           {currentQuestion.type === "scale" && (() => {
-            const scaleValues = useMemo(() => {
-              const min = currentQuestion.min_value ?? 1;
-              const max = currentQuestion.max_value ?? 5;
-              return Array.from({ length: max - min + 1 }, (_, idx) => min + idx);
-            }, [currentQuestion.min_value, currentQuestion.max_value]);
+            // Calculate scale values without useMemo (moved outside hooks context)
+            const min = currentQuestion.min_value ?? 1;
+            const max = currentQuestion.max_value ?? 5;
+            const scaleValues = Array.from({ length: max - min + 1 }, (_, idx) => min + idx);
 
             return (
               <div className="space-y-3">

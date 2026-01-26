@@ -70,15 +70,8 @@ export default function Dashboard() {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   // Calculate recent and upcoming milestones from roadmap
+  // NOTE: These hooks must be called BEFORE any conditional return
   const allMilestones = useMemo(() => {
     const milestones: Array<RoadmapMilestone & { phaseName?: string }> = [];
     roadmap?.phases?.forEach(phase => {
@@ -108,6 +101,30 @@ export default function Dashboard() {
         .slice(0, 2),
     [allMilestones]
   );
+
+  const formatTimeAgo = (dateString?: string) => {
+    if (!dateString) return 'Recently';
+
+    const now = new Date();
+    const past = new Date(dateString);
+    const diffMs = now.getTime() - past.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+    return `${Math.floor(diffDays / 30)} months ago`;
+  };
+
+  // Loading state - AFTER all hooks are called
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const dashboardStats = [
     {
@@ -139,21 +156,6 @@ export default function Dashboard() {
       color: "text-accent",
     },
   ];
-
-  const formatTimeAgo = (dateString?: string) => {
-    if (!dateString) return 'Recently';
-
-    const now = new Date();
-    const past = new Date(dateString);
-    const diffMs = now.getTime() - past.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    return `${Math.floor(diffDays / 30)} months ago`;
-  };
 
   return (
     <div className="space-y-8">
