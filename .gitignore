@@ -74,3 +74,25 @@ wandb/
 # Misc
 IMPLEMENTATION_STATUS.md
 *.log
+
+# Local configs and temp files
+.claude/
+.mcp.json
+thesis_content.txt
+slides/
+
+# Workspace temp files
+workspace/node_modules/
+workspace/pptx_unpacked/
+workspace/slide-images/
+workspace/slides/
+workspace/~$*
+
+# Binary presentation files (keep generated ones in workspace/)
+Sha8lny_Presentation_Academic.pptx
+Sha8lny_Presentation_Final.pptx
+*.pptx
+!workspace/Sha8lny_Presentation_Refined.pptx
+
+# Thesis source (keep docs/thesis for markdown)
+Grad*.docx
