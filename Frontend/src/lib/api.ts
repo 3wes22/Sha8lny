@@ -53,6 +53,29 @@ export interface ValidationError {
   message: string;
 }
 
+export function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    if (typeof error.data === "string" && error.data.trim()) {
+      return error.data;
+    }
+
+    if (error.data && typeof error.data === "object") {
+      const detail = (error.data as { detail?: string; message?: string }).detail
+        ?? (error.data as { detail?: string; message?: string }).message;
+
+      if (detail) {
+        return detail;
+      }
+    }
+
+    if (error.status === 401) {
+      return "Your session expired. Please sign in again.";
+    }
+  }
+
+  return fallback;
+}
+
 // ============================================================================
 // Core API Function
 // ============================================================================
@@ -190,8 +213,13 @@ export interface User {
   phone_number?: string;
   is_premium: boolean;
   onboarding_completed: boolean;
+  onboarding_step?: number;
   preferred_language: string;
   timezone?: string;
+  account_status?: string;
+  user_skills?: UserSkill[];
+  preferences?: UserPreferences;
+  last_login_at?: string;
   created_at: string;
   updated_at?: string;
 }
@@ -237,24 +265,6 @@ export interface UserSkill {
   is_verified: boolean;
 }
 
-export interface AssessmentResult {
-  id: string;
-  assessment: string;
-  overall_score: number;
-  skill_level: string;
-  skill_scores: Record<string, Record<string, number>>;
-  strengths: string[];
-  weaknesses: string[];
-  recommended_careers: RecommendedCareer[];
-  created_at: string;
-}
-
-export interface RecommendedCareer {
-  title: string;
-  match_score: number;
-  reasoning: string;
-}
-
 // Roadmap Template
 export interface RoadmapTemplate {
   id: string;
@@ -276,16 +286,43 @@ export interface RoadmapTemplate {
 // Roadmap Course
 export interface RoadmapCourse {
   id: string;
-  course: any; // Reference to Course model
+  course: {
+    id?: string;
+    title?: string;
+    provider_name?: string;
+    difficulty_level?: string;
+    duration_hours?: number;
+  };
   order: number;
   is_primary: boolean;
   match_score: string;
   recommendation_reason: string;
   is_enrolled: boolean;
   is_completed: boolean;
+  node_type?: "course";
 }
 
-// Roadmap Milestone
+export interface RoadmapJourneySummary {
+  focus_label: string;
+  next_action_title: string;
+  next_action_summary: string;
+  next_action_type: "phase" | "milestone" | "course" | "roadmap";
+  next_action_id?: string;
+  completion_ratio: number;
+}
+
+export interface RoadmapJourneyNode {
+  id: string;
+  node_type: "phase" | "milestone" | "course";
+  title: string;
+  parent_id?: string;
+  status: "locked" | "available" | "active" | "completed";
+  completion_percentage?: number;
+  estimated_effort?: string;
+  next_action?: string;
+  children?: RoadmapJourneyNode[];
+}
+
 export interface RoadmapMilestone {
   id: string;
   title: string;
@@ -300,6 +337,9 @@ export interface RoadmapMilestone {
   completed_at?: string;
   courses?: RoadmapCourse[];
   total_courses?: number;
+  node_type?: "milestone";
+  estimated_effort?: string;
+  next_action?: string;
 }
 
 // Roadmap Phase
@@ -317,6 +357,9 @@ export interface RoadmapPhase {
   milestones?: RoadmapMilestone[];
   completed_milestones?: number;
   total_milestones?: number;
+  node_type?: "phase";
+  estimated_effort?: string;
+  next_action?: string;
 }
 
 // Complete Roadmap
@@ -337,17 +380,21 @@ export interface Roadmap {
   completed_at?: string;
   ai_processing_status: 'pending' | 'processing' | 'completed' | 'failed';
   ai_processed_at?: string;
-  ai_insights?: any;
+  ai_insights?: Record<string, unknown> | string;
   llm_model_used?: string;
   llm_prompt_tokens?: number;
   llm_completion_tokens?: number;
   processing_time_seconds?: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
   phases?: RoadmapPhase[];
   total_phases?: number;
   completed_phases?: number;
   is_active?: boolean;
   is_complete?: boolean;
+  presentation_mode?: "atlas" | "stacked" | "detail";
+  journey_summary?: RoadmapJourneySummary;
+  current_focus_node_id?: string;
+  journey_nodes?: RoadmapJourneyNode[];
   created_at: string;
   updated_at: string;
 }
@@ -368,7 +415,7 @@ export interface RoadmapListItem {
 export interface RoadmapCreateFromTemplateRequest {
   template_id: string;
   weekly_hours_commitment?: number;
-  customizations?: any;
+  customizations?: Record<string, unknown>;
 }
 
 export interface RoadmapCreateAIRequest {
@@ -430,6 +477,9 @@ export interface JobListItem {
   salary_currency: string;
   is_remote: boolean;
   posted_date: string;
+  is_saved?: boolean;
+  external_action_available?: boolean;
+  skill_match_summary?: string;
 }
 
 // Job interface (detail view - full data)
@@ -460,6 +510,9 @@ export interface Job {
   application_deadline?: string;
   posted_date: string;
   skills: JobSkill[];
+  is_saved?: boolean;
+  external_action_available?: boolean;
+  skill_match_summary?: string;
   created_at: string;
 }
 
@@ -469,6 +522,7 @@ export interface JobSearchParams {
   job_type?: string;
   experience_level?: string;
   skills?: string[];
+  is_remote?: string;
   page?: number;
   page_size?: number;
 }
@@ -489,12 +543,17 @@ export interface ChatMessage {
 
 export interface ChatRequest {
   message: string;
-  conversation_id?: string;
+  conversation_history?: Array<{ role: 'user' | 'assistant'; content: string }>;
 }
 
 export interface ChatResponse {
-  message: ChatMessage;
-  conversation_id: string;
+  response: string;
+  delay_ms: number;
+  metadata: {
+    source: 'llm' | 'fallback';
+    processing_time_ms: number;
+    model: string | null;
+  };
 }
 
 export interface Conversation {
@@ -519,6 +578,56 @@ export interface UserPreferences {
   updated_at: string;
 }
 
+export interface RoadmapStats {
+  total_phases: number;
+  completed_phases: number;
+  total_milestones: number;
+  completed_milestones: number;
+  total_courses: number;
+  estimated_total_hours: number;
+  completion_percentage: number;
+  current_focus_node_id?: string;
+  next_action?: {
+    type: "phase" | "milestone" | "course" | "roadmap";
+    id?: string;
+    title: string;
+    summary: string;
+  };
+}
+
+export interface SavedJob {
+  id: string;
+  job: JobListItem;
+  notes: string;
+  created_at: string;
+}
+
+export interface NotificationListItem {
+  id: string;
+  notification_type: string;
+  title: string;
+  message: string;
+  priority: "low" | "normal" | "high" | "urgent";
+  is_read: boolean;
+  action_url?: string;
+  created_at: string;
+  time_ago?: string;
+  display_type?: string;
+  is_actionable?: boolean;
+}
+
+export interface NotificationStats {
+  total_count: number;
+  unread_count: number;
+  urgent_count: number;
+  by_type: Record<string, number>;
+  recent_notifications: NotificationListItem[];
+  nav_summary?: {
+    unread_count: number;
+    recent_notifications: NotificationListItem[];
+  };
+}
+
 export interface AssessmentQuestion {
   id: number;
   type: 'multiple_choice' | 'scale' | 'text';
@@ -533,6 +642,8 @@ export interface AssessmentQuestion {
   min_value?: number;
   max_value?: number;
   labels?: Record<string, string>;
+  interaction_mode?: "single_select" | "scale" | "text" | "visual_choice";
+  estimated_seconds?: number;
 }
 
 export interface AssessmentResponse {
@@ -557,6 +668,15 @@ export interface Assessment {
   time_spent_seconds: number;
   is_complete: boolean;
   has_result: boolean;
+  presentation?: {
+    question_count: number;
+    current_index: number;
+    progress_ratio: number;
+    interaction_modes: string[];
+    submission_state: "draft" | "submitting" | "processing" | "completed" | "failed";
+    result_summary_available: boolean;
+    estimated_minutes: number;
+  };
   created_at: string;
 }
 
@@ -576,6 +696,7 @@ export interface AssessmentSubmitResponse {
   message: string;
   assessment: Assessment;
   result_id: string;
+  submission_state?: "processing" | "completed";
 }
 
 export interface AssessmentResult {
@@ -606,6 +727,13 @@ export interface AssessmentResult {
     skill: string;
     score: number;
     category: string;
+  }>;
+  status_message?: string;
+  submission_state?: "processing" | "completed" | "failed";
+  next_actions?: Array<{
+    label: string;
+    route: string;
+    kind: "roadmap" | "jobs" | "assessment";
   }>;
   version: string;
   is_shared: boolean;
@@ -708,7 +836,7 @@ export const roadmapApi = {
 
   // Get roadmap statistics
   getStats: (id: string) =>
-    apiClient.get<any>(`/roadmap/${id}/stats/`),
+    apiClient.get<RoadmapStats>(`/roadmap/${id}/stats/`),
 };
 
 // Roadmap Template API
@@ -759,7 +887,7 @@ export const jobApi = {
 
   // Save a job
   saveJob: (jobId: string, notes?: string) =>
-    apiClient.post<{ id: string; job: JobListItem; notes: string; created_at: string }>('/jobs/saved-jobs/', {
+    apiClient.post<SavedJob>('/jobs/saved-jobs/', {
       job: jobId,
       notes: notes || ''
     }),
@@ -770,11 +898,30 @@ export const jobApi = {
 
   // Toggle save status (convenience method)
   toggleSaveJob: (jobId: string) =>
-    apiClient.post<{ detail: string; is_saved: boolean; saved_job?: any }>(`/jobs/saved-jobs/toggle/${jobId}/`, {}),
+    apiClient.post<{ detail: string; is_saved: boolean; saved_job?: SavedJob }>(`/jobs/saved-jobs/toggle/${jobId}/`, {}),
 
   // Get all saved jobs
   getSavedJobs: () =>
-    apiClient.get<{ id: string; job: JobListItem; notes: string; created_at: string }[]>('/jobs/saved-jobs/'),
+    apiClient.get<SavedJob[]>('/jobs/saved-jobs/'),
+};
+
+export const notificationApi = {
+  list: (params?: { unread_only?: boolean }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.unread_only) {
+      searchParams.append("unread_only", "true");
+    }
+
+    const queryString = searchParams.toString();
+    return apiClient.get<PaginatedResponse<NotificationListItem>>(
+      `/notifications/notifications/${queryString ? `?${queryString}` : ""}`,
+    );
+  },
+
+  getStats: () => apiClient.get<NotificationStats>("/notifications/stats/"),
+
+  markAllRead: () =>
+    apiClient.post<{ message: string; count: number }>("/notifications/notifications/mark_all_read/", {}),
 };
 
 export const advisorApi = {
@@ -793,7 +940,7 @@ export const assessmentApi = {
     const searchParams = new URLSearchParams();
     if (params?.assessment_type) searchParams.append('assessment_type', params.assessment_type);
     if (params?.status) searchParams.append('status', params.status);
-    return apiClient.get<AssessmentListItem[]>(`/assessment/?${searchParams.toString()}`);
+    return apiClient.get<PaginatedResponse<AssessmentListItem>>(`/assessment/?${searchParams.toString()}`);
   },
 
   get: (id: string) =>

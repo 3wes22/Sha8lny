@@ -50,6 +50,9 @@ class JobListSerializer(serializers.ModelSerializer):
     """Minimal job info for list views."""
     platform_name = serializers.CharField(source='platform.name', read_only=True)
     location = serializers.SerializerMethodField()
+    is_saved = serializers.SerializerMethodField()
+    external_action_available = serializers.SerializerMethodField()
+    skill_match_summary = serializers.SerializerMethodField()
 
     class Meta:
         model = Job
@@ -69,6 +72,9 @@ class JobListSerializer(serializers.ModelSerializer):
             'salary_currency',
             'is_remote',
             'posted_date',
+            'is_saved',
+            'external_action_available',
+            'skill_match_summary',
         ]
 
     def get_location(self, obj):
@@ -77,12 +83,43 @@ class JobListSerializer(serializers.ModelSerializer):
             return f"{obj.location_city}, {obj.location_country}"
         return obj.location_city or obj.location_country or "Not specified"
 
+    def get_is_saved(self, obj):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if not user or not user.is_authenticated:
+            return False
+        return SavedJob.objects.filter(user=user, job=obj, is_deleted=False).exists()
+
+    def get_external_action_available(self, obj):
+        return bool(obj.external_url)
+
+    def get_skill_match_summary(self, obj):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if not user or not user.is_authenticated:
+            return "Sign in to compare this role with your skills."
+
+        user_skill_names = set(
+            user.user_skills.filter(is_deleted=False).values_list('skill__name', flat=True)
+        )
+        if not user_skill_names:
+            return "Add skills to your profile to see a better match signal."
+
+        job_skill_names = set(obj.job_skills.values_list('skill__name', flat=True))
+        overlap = user_skill_names.intersection(job_skill_names)
+        if overlap:
+            return f"Matches {len(overlap)} of your tracked skills."
+        return "Few direct matches yet. Review this role against your roadmap focus."
+
 
 class JobSerializer(serializers.ModelSerializer):
     """Complete job information."""
     platform = JobPlatformSerializer(read_only=True)
     skills = JobSkillSerializer(many=True, read_only=True, source='job_skills')
     location = serializers.SerializerMethodField()
+    is_saved = serializers.SerializerMethodField()
+    external_action_available = serializers.SerializerMethodField()
+    skill_match_summary = serializers.SerializerMethodField()
 
     class Meta:
         model = Job
@@ -113,6 +150,9 @@ class JobSerializer(serializers.ModelSerializer):
             'application_deadline',
             'posted_date',
             'skills',
+            'is_saved',
+            'external_action_available',
+            'skill_match_summary',
             'created_at',
         ]
 
@@ -121,6 +161,15 @@ class JobSerializer(serializers.ModelSerializer):
         if obj.location_city and obj.location_country:
             return f"{obj.location_city}, {obj.location_country}"
         return obj.location_city or obj.location_country or "Not specified"
+
+    def get_is_saved(self, obj):
+        return JobListSerializer(context=self.context).get_is_saved(obj)
+
+    def get_external_action_available(self, obj):
+        return bool(obj.external_url)
+
+    def get_skill_match_summary(self, obj):
+        return JobListSerializer(context=self.context).get_skill_match_summary(obj)
 
 
 class SavedJobSerializer(serializers.ModelSerializer):

@@ -1,146 +1,121 @@
+# Sha8alny
 
----
+Sha8alny is an AI-powered career development platform focused on the Egyptian job market. The active product code lives in three main work areas:
 
-# Sha8lny – AI-Powered Career Empowerment Platform
+- `Frontend/`: React 18 + Vite + TypeScript client
+- `Backend/`: Django REST Framework modular monolith
+- `ai-models/`: AI and RAG support code
 
-## 1. Project Overview
+The frontend has been rebuilt around a feature-first structure and a new "career atlas" visual system. Public and auth surfaces now use poster-style layouts, authenticated flows share a unified atlas shell, and route-level code splitting is enabled through lazy-loaded route entrypoints.
 
-Sha8lny is an intelligent platform designed to bridge the gap between students, graduates, and the job market.
-The system provides personalized career guidance through AI-driven assessments, adaptive learning pathways, and integration with local industry data.
+## Current Repository Layout
 
-The platform's primary objective is to help users identify their strengths, develop relevant skills, and connect with suitable job opportunities in the Egyptian market.
-
----
-
-## 2. Project Vision
-
-To empower students and young professionals in Egypt with data-driven insights, personalized learning paths, and real-time market information, enabling them to make informed career decisions and improve employability.
-
----
-
-## 3. Key Features
-
-1. **Intelligent Career Assessment**
-   AI-powered evaluation combining:
-
-   * Technical skills testing
-   * Soft skills and personality profiling
-   * Personalized career recommendations
-
-2. **Dynamic Learning Pathways**
-   Automatically updated learning curricula that adapt based on:
-
-   * Market trends
-   * Individual progress and interests
-   * Job role evolution
-
-3. **Local Market Integration**
-   Real-time access to:
-
-   * Salary benchmarking
-   * Company culture and skills demand
-   * Industry-specific requirements
-
-4. **Gamified Learning Experience**
-
-   * Progress tracking and achievements
-   * Peer competition features
-   * Motivation through rewards and milestones
-
-5. **Corporate Partnership Network**
-   Direct collaboration with Egyptian companies for:
-
-   * Internships
-   * Graduation projects
-   * Job placements
-
-6. **Certification and Credentialing**
-   Industry-recognized certificates validated by local professional bodies and institutions.
-
----
-
-## 4. Project Structure
-
-```
-Sha8lny/
-├── Backend/                # Django REST API (Python)
-│   ├── apps/
-│   │   ├── users/         # User authentication & profiles
-│   │   ├── courses/       # Learning content management
-│   │   ├── assessments/   # Skills assessment system
-│   │   ├── roadmaps/      # Career path generation
-│   │   ├── progress/      # User progress tracking
-│   │   ├── jobs/          # Job listings & matching
-│   │   ├── advisory/      # AI career advisor
-│   │   ├── career_tools/  # Resume builder, etc.
-│   │   └── notifications/ # User notifications
-│   ├── config/            # Django settings
-│   └── requirements.txt
-│
-├── Frontend/              # React + Vite + TypeScript
-│   ├── src/
-│   │   ├── pages/        # 14 pages (Dashboard, Jobs, etc.)
-│   │   ├── components/   # Reusable UI components
-│   │   └── hooks/        # Custom React hooks
-│   ├── package.json
-│   └── FRONTEND_INTEGRATION.md  # API integration guide
-│
-├── ai-models/             # ML/AI Infrastructure (Python)
-│   ├── src/
-│   │   ├── llm/          # Language model inference
-│   │   ├── rag/          # Retrieval Augmented Generation
-│   │   └── recommendations/  # Recommendation engine
-│   └── requirements.txt
-│
-├── docs/                  # Documentation
-│   ├── SRS.md            # Software Requirements Specification
-│   ├── DATABASE_SCHEMA.md
-│   ├── ARCHITECTURE.md
-│   ├── ERD.svg           # Entity Relationship Diagram
-│   └── TECH_STACK.md
-│
-├── CLAUDE.md             # AI assistant instructions
-└── README.md             # This file
+```text
+Grad-Project/
+├── Backend/                  # Active backend code
+├── Frontend/                 # Active frontend code
+├── ai-models/                # Active AI code
+├── docs/
+│   └── product/              # Current product documentation
+├── archive/                  # Presentations, thesis material, reference datasets
+├── CLAUDE.md
+└── README.md
 ```
 
----
+## Frontend Structure
 
-## 5. Tech Stack
+The frontend is organized by feature. Route entrypoints are thin; shared layout, primitives, and API contracts live outside feature folders.
 
-| Layer           | Technologies                          |
-| --------------- | ------------------------------------- |
-| Frontend        | React 18, Vite, TypeScript, TailwindCSS, shadcn/ui |
-| Backend         | Django 5.x, Django REST Framework     |
-| Database        | PostgreSQL                            |
-| AI/ML           | Python, PyTorch, LangChain            |
-| Deployment      | Docker, AWS / Vercel                  |
-| Version Control | Git & GitHub                          |
+```text
+Frontend/src/
+├── app/                      # Providers, route map, error boundary
+├── features/
+│   ├── advisory/
+│   ├── assessment/
+│   ├── auth/
+│   ├── dashboard/
+│   ├── jobs/
+│   ├── marketing/
+│   ├── notifications/
+│   ├── profile/
+│   ├── roadmap/
+│   └── settings/
+├── shared/
+│   ├── components/
+│   └── layout/
+├── components/ui/            # Shared shadcn-style UI primitives
+├── hooks/
+├── lib/                      # Typed API client and helpers
+└── test/
+```
 
----
+## Current Frontend Highlights
 
-## 6. Getting Started
+- `Frontend/src/app/AppProviders.tsx`: Browser router, React Query, auth provider, toaster providers.
+- `Frontend/src/app/AppRoutes.tsx`: lazy-loaded public and protected routes.
+- `Frontend/src/shared/layout/MainLayout.tsx`: shared authenticated shell with route-aware navigation and notifications summary.
+- `Frontend/src/lib/api.ts`: typed REST client with token refresh, shared error handling, and feature contracts.
+- `Frontend/src/index.css`: editorial design tokens, type system, atlas surfaces, gradients, and motion helpers.
 
-### Backend Setup
+## Validation Status
+
+The visual reconstruction and contract upgrade were validated on April 4, 2026 with:
+
+- `cd Frontend && npm run build`
+- `cd Frontend && npm run test:run`
+- `cd Backend && ./venv/bin/python manage.py check`
+- `cd Backend && ./venv/bin/python -m pytest apps/roadmaps/tests/test_frontend_contracts.py apps/assessments/tests/test_frontend_contracts.py apps/jobs/tests/test_frontend_contracts.py apps/notifications/tests.py`
+
+All four command groups passed.
+
+## Documentation
+
+Current product documentation is under `docs/product/`:
+
+- `docs/product/ARCHITECTURE.md`
+- `docs/product/FRONTEND_INTEGRATION.md`
+- `docs/product/FRONTEND_PERFORMANCE_REFERENCE.md`
+- `docs/product/SRS.md`
+- `docs/product/TECH_STACK.md`
+- `docs/product/DATABASE_SCHEMA.md`
+
+Feature planning and task artifacts for the frontend rebuild are under `specs/001-frontend-visual-rebuild/`.
+
+Archived presentation material, thesis notes, and reference datasets are under `archive/`.
+
+## Development Workflow
+
+Recommended branch naming:
+
+- `cleanup/...` for repo cleanup and structural work
+- `refactor/...` for non-trivial internal improvements
+- `fix/...` for behavior bugs and contract repairs
+- `feature/...` for net-new product features
+
+Keep backend contract changes isolated from visual redesign work whenever possible.
+
+## Getting Started
+
+### Backend
 
 ```bash
 cd Backend
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env      # Configure environment variables
 python manage.py migrate
 python manage.py runserver
 ```
 
-### Frontend Setup
+### Frontend
 
 ```bash
 cd Frontend
 npm install
-npm run dev               # Runs on http://localhost:5173
+npm run dev
 ```
 
-### AI Models Setup
+### AI Models
 
 ```bash
 cd ai-models
@@ -148,49 +123,3 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
-
----
-
-## 7. Team Members
-
-| Name          | Role               | Responsibility                               |
-| ------------- | ------------------ | -------------------------------------------- |
-| Mahmoud Ahmed | Team Leader        | Project coordination, architecture design    |
-| [Member 2]    | Backend Developer  | API and database implementation              |
-| [Member 3]    | Frontend Developer | UI/UX and React development                  |
-| [Member 4]    | AI/ML Engineer     | Career assessment and recommendation systems |
-| [Member 5]    | Documentation & QA | Reports, testing, and quality assurance      |
-
----
-
-## 8. Project Milestones
-
-| Milestone | Description                                | Status      |
-| --------- | ------------------------------------------ | ----------- |
-| 0         | Project setup, repository creation         | ✅ Completed |
-| 1         | Requirements analysis (SRS)                | ✅ Completed |
-| 2         | System design (ERD, Architecture)          | ✅ Completed |
-| 3         | Backend API development                    | ✅ Completed |
-| 4         | Frontend UI development                    | ✅ Completed |
-| 5         | AI/ML infrastructure setup                 | ✅ Completed |
-| 6         | Frontend-Backend integration               | 🔄 In Progress |
-| 7         | Testing and deployment                     | Pending     |
-| 8         | Final documentation and presentation       | Pending     |
-
----
-
-## 9. Documentation
-
-- **API Integration**: See `Frontend/FRONTEND_INTEGRATION.md`
-- **Database Schema**: See `docs/DATABASE_SCHEMA.md`
-- **Architecture**: See `docs/ARCHITECTURE.md`
-- **Requirements**: See `docs/SRS.md`
-
----
-
-## 10. License
-
-This project is developed for the **Nile University Graduation Project (ITCS Department, 2025)**.
-All rights reserved © Team Sha8lny.
-
----

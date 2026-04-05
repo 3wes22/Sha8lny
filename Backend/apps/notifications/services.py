@@ -86,14 +86,14 @@ class NotificationService:
         queryset = Notification.objects.for_user(user)
 
         if unread_only:
-            queryset = queryset.unread()
+            queryset = queryset.filter(is_read=False)
 
         return list(queryset[:limit])
 
     @staticmethod
     def get_unread_count(user: User) -> int:
         """Get count of unread notifications for user"""
-        return Notification.objects.for_user(user).unread().count()
+        return Notification.objects.for_user(user).filter(is_read=False).count()
 
     @staticmethod
     def mark_as_read(notification_id: str) -> Optional[Notification]:
@@ -131,7 +131,7 @@ class NotificationService:
     @staticmethod
     def get_urgent_notifications(user: User) -> List[Notification]:
         """Get urgent notifications for user"""
-        return list(Notification.objects.for_user(user).urgent())
+        return list(Notification.objects.for_user(user).filter(priority='urgent'))
 
     @staticmethod
     def get_notifications_by_type(
@@ -139,7 +139,7 @@ class NotificationService:
         notification_type: str
     ) -> List[Notification]:
         """Get notifications of a specific type"""
-        return list(Notification.objects.for_user(user).by_type(notification_type))
+        return list(Notification.objects.for_user(user).filter(notification_type=notification_type))
 
 
 class NotificationPreferenceService:

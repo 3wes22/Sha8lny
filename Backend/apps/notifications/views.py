@@ -368,7 +368,11 @@ class NotificationStatsView(APIView):
             'unread_count': unread_count,
             'urgent_count': urgent_count,
             'by_type': by_type,
-            'recent_notifications': NotificationListSerializer(recent, many=True).data
+            'recent_notifications': NotificationListSerializer(recent, many=True).data,
+            'nav_summary': {
+                'unread_count': unread_count,
+                'recent_notifications': NotificationListSerializer(recent, many=True).data,
+            },
         }
 
         serializer = NotificationStatsSerializer(data=stats)

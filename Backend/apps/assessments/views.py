@@ -292,7 +292,8 @@ class AssessmentViewSet(viewsets.ModelViewSet):
             {
                 'message': 'Assessment submitted successfully',
                 'assessment': AssessmentSerializer(assessment).data,
-                'result_id': str(result.id)
+                'result_id': str(result.id),
+                'submission_state': 'completed',
             },
             status=status.HTTP_200_OK
         )
@@ -325,7 +326,12 @@ class AssessmentViewSet(viewsets.ModelViewSet):
             return Response(
                 {
                     'message': 'Assessment is queued for AI processing',
-                    'status': 'pending'
+                    'status': 'pending',
+                    'submission_state': 'processing',
+                    'status_message': 'Your answers are saved and waiting for analysis.',
+                    'next_actions': [
+                        {'label': 'Return to dashboard', 'route': '/dashboard', 'kind': 'assessment'}
+                    ],
                 },
                 status=status.HTTP_202_ACCEPTED
             )
@@ -333,7 +339,12 @@ class AssessmentViewSet(viewsets.ModelViewSet):
             return Response(
                 {
                     'message': 'AI is currently processing your assessment',
-                    'status': 'processing'
+                    'status': 'processing',
+                    'submission_state': 'processing',
+                    'status_message': 'We are building your strengths, gaps, and recommended next steps.',
+                    'next_actions': [
+                        {'label': 'Return to dashboard', 'route': '/dashboard', 'kind': 'assessment'}
+                    ],
                 },
                 status=status.HTTP_202_ACCEPTED
             )
@@ -353,7 +364,14 @@ class AssessmentViewSet(viewsets.ModelViewSet):
                 is_deleted=False
             )
             serializer = AssessmentResultSerializer(result)
-            return Response(serializer.data)
+            data = serializer.data
+            data['submission_state'] = 'completed'
+            data['status_message'] = 'Your assessment is ready. Review the outcome and continue to roadmap or jobs.'
+            data['next_actions'] = [
+                {'label': 'View roadmap', 'route': '/roadmap', 'kind': 'roadmap'},
+                {'label': 'Explore jobs', 'route': '/jobs', 'kind': 'jobs'},
+            ]
+            return Response(data)
 
         except AssessmentResult.DoesNotExist:
             return Response(

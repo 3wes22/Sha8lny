@@ -60,7 +60,7 @@ urlpatterns = [
     # ============================================================================
 
     # Notification Service endpoints
-    # path("api/v1/notifications/", include('apps.notifications.urls')),
+    path("api/v1/notifications/", include('apps.notifications.urls')),
 
     # Course Service endpoints
     # path("api/v1/courses/", include('apps.courses.urls')),

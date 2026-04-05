@@ -393,6 +393,20 @@ class RoadmapViewSet(viewsets.ModelViewSet):
         """
         roadmap = self.get_object()
         stats = RoadmapService.get_roadmap_statistics(roadmap)
+        serializer = RoadmapSerializer(roadmap)
+        summary = serializer.data.get('journey_summary', {})
+
+        stats.update(
+            {
+                'current_focus_node_id': serializer.data.get('current_focus_node_id'),
+                'next_action': {
+                    'type': summary.get('next_action_type', 'roadmap'),
+                    'id': summary.get('next_action_id'),
+                    'title': summary.get('next_action_title', roadmap.title),
+                    'summary': summary.get('next_action_summary', roadmap.description or ''),
+                },
+            }
+        )
 
         return Response(stats, status=status.HTTP_200_OK)
 

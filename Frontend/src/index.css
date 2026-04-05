@@ -1,176 +1,323 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Base design tokens & global styles */
 @layer base {
   :root {
-    /* Base background & text */
-    --background: 230 40% 98%;       /* #F4F4FB */
-    --foreground: 222 47% 11%;       /* #0F172A */
-
-    /* Surfaces */
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-
-    /* Primary (soft indigo) */
-    --primary: 239 84% 67%;          /* #6366F1 */
+    --background: 44 33% 96%;
+    --foreground: 216 18% 16%;
+    --card: 42 36% 98%;
+    --card-foreground: 216 18% 16%;
+    --popover: 42 36% 98%;
+    --popover-foreground: 216 18% 16%;
+    --primary: 20 92% 52%;
     --primary-foreground: 0 0% 100%;
-
-    /* Secondary (teal) */
-    --secondary: 188 75% 53%;        /* #06B6D4 */
-    --secondary-foreground: 0 0% 100%;
-
-    /* Muted / subtle surfaces */
-    --muted: 220 20% 95%;
-    --muted-foreground: 220 10% 45%; /* #6B7280 */
-
-    /* Accent (amber) */
-    --accent: 28 92% 61%;            /* #F97316 */
-    --accent-foreground: 20 20% 15%;
-
-    /* Destructive (errors, danger) */
+    --secondary: 210 18% 90%;
+    --secondary-foreground: 216 18% 16%;
+    --muted: 40 23% 91%;
+    --muted-foreground: 214 12% 32%;
+    --accent: 188 74% 41%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-
-    /* Semantic colors */
-    --success: 142 76% 36%;          /* Green */
+    --success: 142 56% 36%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;           /* Amber */
+    --warning: 40 90% 49%;
     --warning-foreground: 0 0% 100%;
-    --info: 199 89% 48%;             /* Blue */
+    --info: 208 87% 42%;
     --info-foreground: 0 0% 100%;
-
-    /* Borders & inputs */
-    --border: 220 20% 88%;           /* #E2E8F0 */
-    --input: 220 20% 88%;
-    --ring: 239 84% 67%;             /* primary-colored focus ring */
-
-    /* Radii - increased for premium feel */
-    --radius: 1rem;
+    --border: 33 17% 82%;
+    --input: 33 17% 82%;
+    --ring: 20 92% 52%;
+    --radius: 1.25rem;
+    --font-display: "Space Grotesk", "IBM Plex Sans", sans-serif;
+    --font-body: "IBM Plex Sans", "Segoe UI", sans-serif;
+    --page-wash:
+      radial-gradient(ellipse 62% 38% at 50% -6%, rgba(255, 255, 255, 0.82), transparent 72%),
+      radial-gradient(circle at 14% 11%, hsla(20, 92%, 52%, 0.17), transparent 23%),
+      radial-gradient(circle at 82% 8%, hsla(188, 74%, 41%, 0.12), transparent 19%),
+      radial-gradient(circle at 48% 22%, rgba(255, 255, 255, 0.28), transparent 28%),
+      linear-gradient(180deg, rgba(255, 252, 246, 0.98) 0%, rgba(248, 243, 234, 0.96) 52%, rgba(243, 238, 229, 0.96) 100%);
+    --paper-grid: linear-gradient(rgba(53, 60, 72, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(53, 60, 72, 0.05) 1px, transparent 1px);
+    --shadow-atlas: 0 22px 64px rgba(61, 41, 24, 0.14);
+    --shadow-quiet: 0 12px 30px rgba(39, 33, 24, 0.09);
+    --motion-enter: 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    --motion-hover: 180ms ease;
+    --interactive-hover-scale: 1.012;
+    --interactive-active-scale: 0.992;
   }
 
   .dark {
-    --background: 222 47% 7%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 47% 9%;
-    --popover-foreground: 210 40% 98%;
-
-    --muted: 222 30% 15%;
-    --muted-foreground: 215 20% 75%;
-
-    --border: 222 30% 20%;
-    --input: 222 30% 20%;
-    --ring: 239 84% 70%;
-
-    --primary: 239 84% 70%;
-    --primary-foreground: 222 47% 10%;
-
-    --secondary: 188 75% 53%;
-    --secondary-foreground: 222 47% 10%;
-
-    --accent: 28 92% 61%;
-    --accent-foreground: 222 47% 10%;
-
+    --background: 216 22% 10%;
+    --foreground: 42 33% 96%;
+    --card: 215 18% 14%;
+    --card-foreground: 42 33% 96%;
+    --popover: 215 18% 14%;
+    --popover-foreground: 42 33% 96%;
+    --secondary: 214 18% 20%;
+    --secondary-foreground: 42 33% 96%;
+    --muted: 215 16% 18%;
+    --muted-foreground: 220 10% 78%;
+    --border: 214 15% 24%;
+    --input: 214 15% 24%;
+    --ring: 20 92% 58%;
+    --primary: 20 92% 58%;
+    --primary-foreground: 216 22% 10%;
+    --accent: 188 74% 48%;
+    --accent-foreground: 216 22% 10%;
     --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-
-    /* Semantic colors - dark mode */
-    --success: 142 70% 45%;
+    --destructive-foreground: 42 33% 96%;
+    --success: 142 56% 46%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 55%;
+    --warning: 40 90% 55%;
     --warning-foreground: 0 0% 100%;
-    --info: 199 89% 55%;
+    --info: 208 87% 52%;
     --info-foreground: 0 0% 100%;
+    --page-wash:
+      radial-gradient(ellipse 62% 38% at 50% -10%, rgba(255, 255, 255, 0.08), transparent 70%),
+      radial-gradient(circle at 16% 10%, hsla(20, 92%, 58%, 0.15), transparent 20%),
+      radial-gradient(circle at 84% 8%, hsla(188, 74%, 48%, 0.14), transparent 18%),
+      linear-gradient(180deg, rgba(20, 24, 31, 0.97) 0%, rgba(16, 18, 23, 0.985) 58%, rgba(13, 15, 20, 1) 100%);
+    color-scheme: dark;
   }
 
   * {
     @apply border-border;
   }
 
-  body {
-    @apply bg-background text-foreground antialiased;
+  html {
+    scroll-behavior: smooth;
+    color-scheme: light;
   }
 
-  /* Tighter heading tracking for professional typography */
+  body {
+    @apply bg-background text-foreground antialiased;
+    background-image: var(--page-wash);
+    background-repeat: no-repeat;
+    background-size: cover;
+    font-family: var(--font-body);
+    text-rendering: optimizeLegibility;
+  }
+
   h1, h2, h3, h4, h5, h6 {
-    letter-spacing: -0.025em;
+    font-family: var(--font-display);
+    letter-spacing: -0.035em;
+    line-height: 0.95;
+  }
+
+  h1 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
   }
 }
 
-/* Custom utilities for gradients, shadows, smooth transitions */
 @layer utilities {
-  /* Smooth transitions on hover/focus */
+  .poster-surface {
+    background-image: var(--page-wash);
+    position: relative;
+    isolation: isolate;
+    contain: paint;
+  }
+
+  .poster-surface::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: var(--paper-grid);
+    background-size: 72px 72px;
+    opacity: 0.18;
+    mix-blend-mode: multiply;
+    pointer-events: none;
+  }
+
+  .poster-surface::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 54% 30% at 50% 4%, rgba(255, 255, 255, 0.5), transparent 68%),
+      radial-gradient(circle at 50% 18%, rgba(15, 23, 42, 0.03), transparent 48%);
+    pointer-events: none;
+  }
+
+  .panel-paper {
+    background: hsl(var(--card) / 0.92);
+    box-shadow: var(--shadow-quiet);
+    @apply border border-border/70 backdrop-blur-sm;
+  }
+
+  .atlas-panel {
+    box-shadow: var(--shadow-atlas);
+    @apply rounded-[1.75rem] border border-border/70 bg-card/95 backdrop-blur-sm;
+  }
+
+  .atlas-rule {
+    @apply border-l border-dashed border-border/80;
+  }
+
+  .type-kicker {
+    @apply text-[0.7rem] font-semibold uppercase tracking-[0.24em] text-foreground/60;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .motion-rise {
+    animation: rise-in var(--motion-enter) both;
+    will-change: transform, opacity;
+  }
+
+  .motion-fade {
+    animation: fade-in var(--motion-enter) both;
+    will-change: opacity;
+  }
+
+  .motion-drift {
+    animation: drift 9s ease-in-out infinite;
+  }
+
   .transition-smooth {
-    transition: all 180ms ease-out;
+    transition:
+      transform var(--motion-hover),
+      background-color var(--motion-hover),
+      border-color var(--motion-hover),
+      color var(--motion-hover),
+      opacity var(--motion-hover);
   }
 
-  /* Premium calm gradient for CTAs, buttons, and important sections */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  .interactive-scale {
+    --interactive-lift: 0px;
+    --interactive-scale-to: var(--interactive-hover-scale);
+    --interactive-scale-active-to: var(--interactive-active-scale);
+    transform: translate3d(0, 0, 0) scale(1);
+    transform-origin: center;
+    will-change: transform;
+  }
+
+  .interactive-scale:hover,
+  .interactive-scale:focus-visible {
+    transform: translate3d(0, calc(var(--interactive-lift) * -1), 0) scale(var(--interactive-scale-to));
+  }
+
+  .interactive-scale:active {
+    transform: translate3d(0, 0, 0) scale(var(--interactive-scale-active-to));
+  }
+
   .gradient-primary {
-    background-image: linear-gradient(
-      135deg,
-      hsl(239 84% 67%),
-      hsl(188 75% 53%)
-    );
+    background-image: linear-gradient(135deg, hsl(20 92% 52%), hsl(14 86% 47%));
   }
 
-  /* Softer gradient for backgrounds / panels */
   .gradient-soft {
-    background-image: linear-gradient(
-      135deg,
-      hsla(239, 84%, 67%, 0.08),
-      hsla(188, 75%, 53%, 0.04)
-    );
+    background-image: linear-gradient(140deg, hsla(20, 92%, 52%, 0.1), hsla(188, 74%, 41%, 0.04));
   }
 
-  /* Soft, premium shadow for key cards and panels */
   .shadow-soft-lg {
-    box-shadow:
-      0 18px 45px rgba(15, 23, 42, 0.12),
-      0 0 0 1px rgba(148, 163, 184, 0.25);
+    box-shadow: var(--shadow-atlas);
   }
 
-  /* Card elevation - subtle always-on shadow */
   .shadow-card {
-    box-shadow: 
-      0 1px 3px 0 rgb(0 0 0 / 0.05), 
-      0 1px 2px -1px rgb(0 0 0 / 0.05);
+    box-shadow: var(--shadow-quiet);
   }
 
-  /* Card hover elevation */
   .shadow-card-hover {
-    box-shadow: 
-      0 4px 6px -1px rgb(0 0 0 / 0.07), 
-      0 2px 4px -2px rgb(0 0 0 / 0.07);
+    box-shadow: var(--shadow-atlas);
   }
 
-  /* Explicit surface helper (if you want to use it separately from bg-card) */
   .bg-surface {
     background-color: hsl(var(--card));
   }
 
-  /* Subtle border helper class */
   .border-subtle {
     border-color: hsl(var(--border) / 0.5);
   }
 
-  /* Button scale effect for tactile feedback */
   .btn-scale {
-    @apply hover:scale-[1.01] active:scale-[0.99] transition-transform duration-100;
+    @apply transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0;
   }
 
-  /* Card with elevation transition */
   .card-elevated {
-    @apply shadow-card hover:shadow-card-hover transition-shadow duration-200;
+    @apply transition-smooth shadow-card hover:-translate-y-0.5 hover:shadow-card-hover;
   }
 
-  /* Section divider */
   .section-divider {
     @apply border-t border-border/50 my-8;
   }
+
+  .content-auto {
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 900px;
+  }
+
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .motion-rise,
+  .motion-fade,
+  .motion-drift {
+    animation: none;
+  }
+
+  .transition-smooth,
+  .interactive-scale {
+    transition-duration: 0.01ms;
+  }
+
+  .interactive-scale:hover,
+  .interactive-scale:focus-visible,
+  .interactive-scale:active {
+    transform: none;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes drift {
+  0%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  50% {
+    transform: translate3d(0, -10px, 0);
+  }
+}
