@@ -55,17 +55,46 @@ export interface ValidationError {
 
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
-    if (typeof error.data === "string" && error.data.trim()) {
-      return error.data;
-    }
-
-    if (error.data && typeof error.data === "object") {
-      const detail = (error.data as { detail?: string; message?: string }).detail
-        ?? (error.data as { detail?: string; message?: string }).message;
-
-      if (detail) {
-        return detail;
+    const extractMessage = (value: unknown): string | null => {
+      if (typeof value === "string" && value.trim()) {
+        return value;
       }
+
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          const nested = extractMessage(item);
+          if (nested) {
+            return nested;
+          }
+        }
+        return null;
+      }
+
+      if (value && typeof value === "object") {
+        const record = value as Record<string, unknown>;
+
+        const prioritizedKeys = ["details", "detail", "message", "non_field_errors"];
+        for (const key of prioritizedKeys) {
+          const nested = extractMessage(record[key]);
+          if (nested) {
+            return nested;
+          }
+        }
+
+        for (const nestedValue of Object.values(record)) {
+          const nested = extractMessage(nestedValue);
+          if (nested) {
+            return nested;
+          }
+        }
+      }
+
+      return null;
+    };
+
+    const message = extractMessage(error.data);
+    if (message) {
+      return message;
     }
 
     if (error.status === 401) {
@@ -257,11 +286,13 @@ export interface Skill {
   description?: string;
 }
 
+export type SkillProficiency = "beginner" | "intermediate" | "advanced" | "expert";
+
 export interface UserSkill {
   id: string;
   skill: Skill;
-  proficiency_level: number;
-  years_experience?: number;
+  proficiency_level: SkillProficiency;
+  years_of_experience?: number;
   is_verified: boolean;
 }
 
@@ -386,6 +417,7 @@ export interface Roadmap {
   llm_completion_tokens?: number;
   processing_time_seconds?: string;
   metadata?: Record<string, unknown>;
+  ai_metadata?: AIInvocationMetadata;
   phases?: RoadmapPhase[];
   total_phases?: number;
   completed_phases?: number;
@@ -420,9 +452,9 @@ export interface RoadmapCreateFromTemplateRequest {
 
 export interface RoadmapCreateAIRequest {
   assessment_id?: string;
-  target_career: string;
-  current_level: string;
-  target_level: string;
+  target_career?: string;
+  current_level?: string;
+  target_level?: string;
   weekly_hours_commitment?: number;
 }
 
@@ -543,17 +575,26 @@ export interface ChatMessage {
 
 export interface ChatRequest {
   message: string;
+  conversation_id?: string;
   conversation_history?: Array<{ role: 'user' | 'assistant'; content: string }>;
 }
 
+export interface AIInvocationMetadata {
+  source: 'llm' | 'fallback' | 'baseline';
+  processing_time_ms: number;
+  model: string | null;
+  provider?: string | null;
+  version?: string | null;
+  trace_id?: string | null;
+  fallback_used?: boolean;
+  error_code?: string | null;
+}
+
 export interface ChatResponse {
+  conversation_id: string;
   response: string;
   delay_ms: number;
-  metadata: {
-    source: 'llm' | 'fallback';
-    processing_time_ms: number;
-    model: string | null;
-  };
+  metadata: AIInvocationMetadata;
 }
 
 export interface Conversation {
@@ -655,6 +696,7 @@ export interface AssessmentResponse {
 export interface Assessment {
   id: string;
   assessment_type: 'skills' | 'career_interests' | 'personality' | 'learning_style' | 'comprehensive';
+  target_career?: string;
   questions: AssessmentQuestion[];
   responses: AssessmentResponse[];
   ai_processing_status: 'pending' | 'processing' | 'completed' | 'failed';
@@ -723,6 +765,7 @@ export interface AssessmentResult {
   llm_completion_tokens?: number;
   total_tokens_used: number;
   processing_time_seconds?: number;
+  ai_metadata?: AIInvocationMetadata;
   top_skills: Array<{
     skill: string;
     score: number;
@@ -771,7 +814,7 @@ export const userApi = {
     apiClient.get<User>('/users/me/'),
 
   updateProfile: (data: Partial<User>) =>
-    apiClient.put<User>('/users/me/', data),
+    apiClient.patch<User>('/users/me/', data),
 
   getPreferences: () =>
     apiClient.get<UserPreferences>('/users/me/preferences/'),
@@ -780,16 +823,19 @@ export const userApi = {
     apiClient.put<UserPreferences>('/users/me/preferences/', data),
 
   getSkills: () =>
-    apiClient.get<UserSkill[]>('/users/user-skills/'),
+    apiClient.get<PaginatedResponse<UserSkill>>('/users/user-skills/'),
 
-  addSkill: (skillId: string, proficiency: number) =>
-    apiClient.post<UserSkill>('/users/user-skills/', { skill: skillId, proficiency_level: proficiency }),
+  addSkill: (skillId: string, proficiency: SkillProficiency) =>
+    apiClient.post<UserSkill>('/users/user-skills/', {
+      skill_id: skillId,
+      proficiency_level: proficiency,
+    }),
 
   removeSkill: (userSkillId: string) =>
     apiClient.delete<void>(`/users/user-skills/${userSkillId}/`),
 
   getAllSkills: () =>
-    apiClient.get<Skill[]>('/users/skills/'),
+    apiClient.get<PaginatedResponse<Skill>>('/users/skills/'),
 };
 
 // assessmentApi is defined below with complete implementation

@@ -26,6 +26,7 @@ class AssessmentSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'assessment_type',
+            'target_career',
             'questions',
             'responses',
             'ai_processing_status',
@@ -188,6 +189,7 @@ class AssessmentCreateSerializer(serializers.Serializer):
         assessment = Assessment.objects.create(
             user=user,
             assessment_type=assessment_type,
+            target_career=(validated_data.get('target_career') or '').strip(),
             questions=questions,
             status='draft',
             total_questions=len(questions),
@@ -216,6 +218,7 @@ class AssessmentResultSerializer(serializers.ModelSerializer):
     """
     top_skills = serializers.JSONField(read_only=True)
     total_tokens_used = serializers.IntegerField(read_only=True)
+    ai_metadata = serializers.SerializerMethodField()
 
     class Meta:
         model = AssessmentResult
@@ -235,12 +238,26 @@ class AssessmentResultSerializer(serializers.ModelSerializer):
             'llm_completion_tokens',
             'total_tokens_used',
             'processing_time_seconds',
+            'ai_metadata',
             'top_skills',
             'version',
             'is_shared',
             'created_at',
         ]
         read_only_fields = ['id', 'created_at']
+
+    def get_ai_metadata(self, obj):
+        assessment = getattr(obj, 'assessment', None)
+        return {
+            'source': 'baseline',
+            'processing_time_ms': int(float(obj.processing_time_seconds or 0) * 1000),
+            'model': obj.llm_model_used or None,
+            'provider': 'sha8alny',
+            'version': obj.version,
+            'trace_id': assessment.id.hex if assessment else None,
+            'fallback_used': False,
+            'error_code': assessment.ai_processing_error if assessment and assessment.ai_processing_status == 'failed' else None,
+        }
 
 
 class AssessmentListSerializer(serializers.ModelSerializer):
@@ -251,6 +268,7 @@ class AssessmentListSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'assessment_type',
+            'target_career',
             'status',
             'completion_percentage',
             'created_at',

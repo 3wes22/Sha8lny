@@ -16,6 +16,7 @@ from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema, OpenApiResponse
 
 from apps.advisory.models import Conversation, Message
+from apps.advisory.chat_service import AdvisoryConversationService
 from apps.advisory.serializers import (
     ConversationSerializer,
     ConversationListSerializer,
@@ -30,8 +31,9 @@ from apps.advisory.serializers import (
 class ChatResponseSerializer(drf_serializers.Serializer):
     """Response serializer for chat endpoint (for OpenAPI schema)."""
     conversation_id = drf_serializers.UUIDField()
-    user_message = MessageSerializer()
-    assistant_message = MessageSerializer()
+    response = drf_serializers.CharField()
+    delay_ms = drf_serializers.IntegerField()
+    metadata = drf_serializers.DictField()
 
 
 class ChatView(APIView):
@@ -41,8 +43,8 @@ class ChatView(APIView):
     SRS FR-13: AI Chatbot Interface
     SRS Appendix B: POST /advisory/chat
     
-    Note: This is session-only storage - messages are not persisted to DB.
-    Conversation history is maintained in the frontend session.
+    Messages are persisted to the user's conversation history so follow-up requests
+    can reuse the same context contract.
     """
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = ChatMessageSerializer
@@ -59,9 +61,8 @@ class ChatView(APIView):
         - message: The user's message (required)
         - conversation_history: Optional list of previous messages for context
 
-        Returns the AI assistant's response with suggested delay for typing indicator.
-        
-        Note: Messages are NOT persisted to database (session-only).
+        Returns the AI assistant's response with suggested delay for typing indicator
+        and the persisted conversation id for future turns.
         """
     )
     def post(self, request):
@@ -72,6 +73,7 @@ class ChatView(APIView):
         serializer.is_valid(raise_exception=True)
 
         message_content = serializer.validated_data['message']
+        conversation_id = serializer.validated_data.get('conversation_id')
         conversation_history = serializer.validated_data.get('conversation_history', [])
 
         # Get LLM service
@@ -79,15 +81,31 @@ class ChatView(APIView):
         
         # Build user context from profile
         user_context = llm_service.build_user_context(request.user)
+        conversation = AdvisoryConversationService.get_or_create_conversation(
+            user=request.user,
+            conversation_id=str(conversation_id) if conversation_id else None,
+            first_message=message_content,
+            context_snapshot=user_context,
+        )
+        resolved_history = AdvisoryConversationService.build_history(conversation, conversation_history)
+        AdvisoryConversationService.add_user_message(conversation, message_content, user_context)
         
         # Generate response
         response_text, delay_seconds, metadata = llm_service.generate_response(
             message=message_content,
-            conversation_history=conversation_history,
+            conversation_history=resolved_history,
             user_context=user_context,
         )
+        AdvisoryConversationService.add_assistant_message(
+            conversation,
+            response_text,
+            user_context,
+            metadata,
+        )
+        AdvisoryConversationService.refresh_conversation(conversation)
 
         return Response({
+            'conversation_id': str(conversation.id),
             'response': response_text,
             'delay_ms': int(delay_seconds * 1000),
             'metadata': metadata,

@@ -52,9 +52,13 @@ class TestAssessmentAPI:
         assert response.status_code == status.HTTP_201_CREATED
         assert 'id' in response.data
         assert response.data['assessment_type'] == 'skills'
+        assert response.data['target_career'] == 'Software Engineer'
         assert response.data['status'] == 'draft'
         assert response.data['total_questions'] == 6  # Predefined questions
         assert len(response.data['questions']) == 6
+
+        assessment = Assessment.objects.get(id=response.data['id'])
+        assert assessment.target_career == 'Software Engineer'
 
     def test_create_assessment_unauthenticated(self):
         """Test creating assessment without authentication fails."""

@@ -260,6 +260,7 @@ class RoadmapSerializer(serializers.ModelSerializer):
     current_focus_node_id = serializers.SerializerMethodField()
     journey_summary = serializers.SerializerMethodField()
     journey_nodes = serializers.SerializerMethodField()
+    ai_metadata = serializers.SerializerMethodField()
 
     class Meta:
         model = Roadmap
@@ -286,6 +287,7 @@ class RoadmapSerializer(serializers.ModelSerializer):
             'llm_completion_tokens',
             'processing_time_seconds',
             'metadata',
+            'ai_metadata',
             'phases',
             'total_phases',
             'completed_phases',
@@ -384,6 +386,19 @@ class RoadmapSerializer(serializers.ModelSerializer):
             nodes.append(phase_node)
         return nodes
 
+    def get_ai_metadata(self, obj):
+        generation = obj.metadata.get('generation', {}) if isinstance(obj.metadata, dict) else {}
+        return {
+            'source': generation.get('source', 'baseline'),
+            'processing_time_ms': int(float(obj.processing_time_seconds or 0) * 1000),
+            'model': obj.llm_model_used or None,
+            'provider': 'sha8alny',
+            'version': generation.get('version'),
+            'trace_id': generation.get('trace_id') or str(obj.id),
+            'fallback_used': False,
+            'error_code': obj.ai_processing_error or None,
+        }
+
     def get_next_action_for_phase(self, phase):
         return RoadmapPhaseSerializer().get_next_action(phase)
 
@@ -436,17 +451,20 @@ class RoadmapCreateAISerializer(serializers.Serializer):
         help_text="Assessment result to base roadmap on"
     )
     target_career = serializers.CharField(
-        required=True,
+        required=False,
+        allow_blank=True,
         max_length=255,
         help_text="Target job title/career goal"
     )
     current_level = serializers.CharField(
-        required=True,
+        required=False,
+        allow_blank=True,
         max_length=255,
         help_text="Current skill level"
     )
     target_level = serializers.CharField(
-        required=True,
+        required=False,
+        allow_blank=True,
         max_length=255,
         help_text="Target skill level to achieve"
     )
@@ -473,6 +491,44 @@ class RoadmapCreateAISerializer(serializers.Serializer):
             return value
         except AssessmentResult.DoesNotExist:
             raise serializers.ValidationError("Assessment result not found")
+
+    def validate(self, data):
+        """Derive missing creation fields from the assessment when available."""
+        from apps.assessments.models import AssessmentResult
+        from apps.roadmaps.services import RoadmapService
+
+        assessment = None
+        assessment_id = data.get('assessment_id')
+        if assessment_id:
+            assessment = AssessmentResult.objects.get(
+                id=assessment_id,
+                assessment__user=self.context['request'].user,
+                is_deleted=False,
+            )
+
+        target_career = (data.get('target_career') or '').strip()
+        current_level = (data.get('current_level') or '').strip()
+        target_level = (data.get('target_level') or '').strip()
+
+        if assessment:
+            if not target_career:
+                target_career = RoadmapService.derive_target_career_from_assessment(assessment) or ''
+            if not current_level:
+                current_level = RoadmapService.derive_current_level_from_assessment(assessment)
+            if not target_level:
+                target_level = RoadmapService.default_target_level(target_career)
+
+        if not target_career:
+            raise serializers.ValidationError(
+                {'target_career': 'Provide a target career or use an assessment result with recommended careers.'}
+            )
+
+        data['assessment'] = assessment
+        data['target_career'] = target_career
+        data['current_level'] = current_level or 'beginner'
+        data['target_level'] = target_level or RoadmapService.default_target_level(target_career)
+
+        return data
 
 
 class RoadmapUpdateSerializer(serializers.ModelSerializer):

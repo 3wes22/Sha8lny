@@ -85,6 +85,7 @@ class ConversationSerializer(serializers.ModelSerializer):
 class ChatMessageSerializer(serializers.Serializer):
     """Send chat message with optional conversation history."""
     message = serializers.CharField(required=True, min_length=1, max_length=2000)
+    conversation_id = serializers.UUIDField(required=False, allow_null=True)
     conversation_history = serializers.ListField(
         child=serializers.DictField(),
         required=False,

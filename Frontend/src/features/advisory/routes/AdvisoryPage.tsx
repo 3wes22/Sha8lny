@@ -23,6 +23,7 @@ export default function AdvisoryPage() {
       content: "Ask about career direction, roadmap choices, or job strategy and I’ll help you reason through the next move.",
     },
   ]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -42,12 +43,14 @@ export default function AdvisoryPage() {
     try {
       const request: ChatRequest = {
         message: userMessage.content,
+        ...(conversationId ? { conversation_id: conversationId } : {}),
         conversation_history: messages
           .filter((message) => message.id !== "intro")
           .map((message) => ({ role: message.role, content: message.content })),
       };
 
       const response = await advisorApi.chat(request);
+      setConversationId(response.conversation_id);
       setMessages((previous) => [
         ...previous,
         { id: `${Date.now()}-assistant`, role: "assistant", content: response.response },

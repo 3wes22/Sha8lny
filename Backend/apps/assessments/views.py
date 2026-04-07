@@ -25,7 +25,12 @@ from apps.assessments.serializers import (
     AssessmentResultSerializer,
     AssessmentListSerializer,
 )
-from apps.assessments.services import AssessmentService
+from apps.assessments.services import (
+    AssessmentService,
+    AssessmentResultService,
+    BaselineAssessmentAnalyzer,
+)
+from apps.core.ai_contracts import AssessmentAnalysisInput
 
 
 # ============================================================================
@@ -241,51 +246,32 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         assessment.answered_questions = len(responses)
         assessment.save()
 
-        # TODO: Trigger AI processing task
-        # from apps.assessments.tasks import process_assessment_results
-        # process_assessment_results.delay(str(assessment.id))
-
-        # For MVP: Create a basic result immediately (simulated AI processing)
-        # In production, this would be done by Celery task
-        from decimal import Decimal
-
-        # Simple scoring logic for MVP
-        score_sum = 0
-        scored_responses = 0
-
-        for response in responses:
-            # Try to extract numeric scores from responses
-            answer = response.get('answer', '')
-            if isinstance(answer, (int, float)):
-                score_sum += float(answer)
-                scored_responses += 1
-            elif isinstance(answer, str) and answer.isdigit():
-                score_sum += float(answer)
-                scored_responses += 1
-
-        overall_score = Decimal(str((score_sum / scored_responses * 20) if scored_responses > 0 else 50))
-
-        # Create result if doesn't exist
-        result, created = AssessmentResult.objects.get_or_create(
+        analysis = BaselineAssessmentAnalyzer.analyze(
+            AssessmentAnalysisInput(
+                assessment_id=str(assessment.id),
+                assessment_type=assessment.assessment_type,
+                target_career=assessment.target_career,
+                responses=responses,
+            )
+        )
+        result = AssessmentResultService.create_assessment_result(
             assessment=assessment,
-            defaults={
-                'overall_score': overall_score,
-                'skill_scores': {},
-                'strengths': ['Quick learner', 'Problem solver'],
-                'areas_for_improvement': ['Practice more projects', 'Deep dive into fundamentals'],
-                'recommended_careers': [
-                    {'title': 'Software Engineer', 'match_score': 85, 'reasoning': 'Good technical foundation'},
-                    {'title': 'Full Stack Developer', 'match_score': 78, 'reasoning': 'Versatile skills'}
-                ],
-                'ai_insights': 'Based on your responses, you show promise in technical skills. Continue building projects and learning.',
-                'llm_model_used': 'mock-v1',
-                'ai_confidence_score': Decimal('75.0'),
-            }
+            overall_score=analysis.overall_score,
+            skill_scores=analysis.skill_scores,
+            strengths=analysis.strengths,
+            areas_for_improvement=analysis.areas_for_improvement,
+            recommended_careers=analysis.recommended_careers,
+            recommended_learning_paths=analysis.recommended_learning_paths,
+            ai_insights=analysis.ai_insights,
+            ai_confidence_score=analysis.ai_confidence_score,
+            llm_model_used=analysis.metadata.model or '',
+            processing_time_seconds=analysis.metadata.processing_time_ms / 1000,
         )
 
         # Update assessment AI status
         assessment.ai_processing_status = 'completed'
         assessment.ai_processed_at = timezone.now()
+        assessment.ai_processing_error = ''
         assessment.save()
 
         return Response(

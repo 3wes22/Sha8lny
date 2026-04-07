@@ -5,6 +5,8 @@ Handles roadmap generation, template management, and roadmap operations.
 This is where AI-powered roadmap generation will be integrated.
 """
 
+import math
+from time import monotonic
 from typing import Optional, List, Dict, Any
 from decimal import Decimal
 from django.db import transaction, models
@@ -58,6 +60,9 @@ class RoadmapTemplateService:
 
 class RoadmapService:
     """Service for roadmap management and AI generation"""
+
+    GENERATOR_VERSION = 'roadmap-generator-v1'
+    GENERATOR_MODEL = 'sha8alny-roadmap-v1'
 
     @staticmethod
     @transaction.atomic
@@ -330,6 +335,224 @@ class RoadmapService:
                 )
 
     @staticmethod
+    def derive_target_career_from_assessment(assessment: Optional[AssessmentResult]) -> Optional[str]:
+        """Derive target career from assessment recommendations."""
+        if not assessment:
+            return None
+
+        selected_target = (getattr(assessment.assessment, 'target_career', '') or '').strip()
+        if selected_target:
+            return selected_target
+
+        recommended_careers = assessment.recommended_careers or []
+        for item in recommended_careers:
+            title = (item or {}).get('title') if isinstance(item, dict) else None
+            if isinstance(title, str) and title.strip():
+                return title.strip()
+
+        return None
+
+    @staticmethod
+    def derive_current_level_from_assessment(assessment: Optional[AssessmentResult]) -> str:
+        """Map assessment score to a readable current level."""
+        if not assessment:
+            return 'beginner'
+
+        score = float(assessment.overall_score or 0)
+        if score >= 80:
+            return 'advanced'
+        if score >= 55:
+            return 'intermediate'
+        return 'beginner'
+
+    @staticmethod
+    def default_target_level(_: Optional[str] = None) -> str:
+        """Default target outcome for generated roadmaps."""
+        return 'job-ready'
+
+    @staticmethod
+    def _dedupe_preserve_order(values: List[str]) -> List[str]:
+        """Deduplicate strings while preserving order and removing blanks."""
+        deduped: List[str] = []
+        seen = set()
+
+        for value in values:
+            cleaned = (value or '').strip()
+            if not cleaned:
+                continue
+            lowered = cleaned.lower()
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            deduped.append(cleaned)
+
+        return deduped
+
+    @staticmethod
+    def _extract_priority_skills(assessment: Optional[AssessmentResult]) -> List[str]:
+        """Get prioritized skills from assessment recommendations."""
+        if not assessment:
+            return []
+
+        learning_paths = assessment.recommended_learning_paths or []
+        extracted: List[str] = []
+        for item in learning_paths:
+            if isinstance(item, dict):
+                skill = item.get('skill')
+                if isinstance(skill, str):
+                    extracted.append(skill)
+            elif isinstance(item, str):
+                extracted.append(item)
+
+        return RoadmapService._dedupe_preserve_order(extracted)[:4]
+
+    @staticmethod
+    def _extract_top_skills(assessment: Optional[AssessmentResult]) -> List[str]:
+        """Get strongest current skills from assessment results."""
+        if not assessment:
+            return []
+
+        return RoadmapService._dedupe_preserve_order(
+            [item.get('skill', '') for item in assessment.top_skills if isinstance(item, dict)]
+        )[:3]
+
+    @staticmethod
+    def _portfolio_project_title(target_career: str) -> str:
+        """Return a role-specific proof-of-work milestone title."""
+        career_lower = target_career.lower()
+
+        if 'backend' in career_lower:
+            return 'Ship a production-style backend API project'
+        if 'frontend' in career_lower:
+            return 'Ship a responsive frontend portfolio project'
+        if 'data' in career_lower or 'scientist' in career_lower:
+            return 'Publish an end-to-end data analysis case study'
+        if 'fullstack' in career_lower or 'full stack' in career_lower or 'full-stack' in career_lower:
+            return 'Ship a full-stack portfolio application'
+
+        return f'Ship a portfolio project aligned with {target_career}'
+
+    @staticmethod
+    def _build_personalized_phase_blueprint(
+        target_career: str,
+        current_level: str,
+        strengths: List[str],
+        gaps: List[str],
+        priority_skills: List[str],
+        top_skills: List[str],
+        weekly_hours: int,
+    ) -> List[Dict[str, Any]]:
+        """Create a deterministic, assessment-aware roadmap structure."""
+        total_focus_items = max(1, len(priority_skills) + len(gaps))
+        base_hours = {
+            'beginner': 96,
+            'intermediate': 72,
+            'advanced': 54,
+        }.get(current_level, 72)
+        total_hours = base_hours + (total_focus_items * 10)
+        estimated_weeks = max(8, math.ceil(total_hours / max(weekly_hours, 1)))
+
+        first_skill = priority_skills[0] if priority_skills else (top_skills[0] if top_skills else target_career)
+        second_skill = priority_skills[1] if len(priority_skills) > 1 else first_skill
+        first_gap = gaps[0] if gaps else f'{target_career} fundamentals'
+        second_gap = gaps[1] if len(gaps) > 1 else 'project execution'
+        lead_strength = strengths[0] if strengths else 'your strongest skills'
+
+        phase_weeks = [
+            max(2, math.ceil(estimated_weeks * 0.3)),
+            max(2, math.ceil(estimated_weeks * 0.4)),
+            max(2, estimated_weeks - max(2, math.ceil(estimated_weeks * 0.3)) - max(2, math.ceil(estimated_weeks * 0.4))),
+        ]
+        if phase_weeks[2] < 2:
+            phase_weeks[1] = max(2, phase_weeks[1] - (2 - phase_weeks[2]))
+            phase_weeks[2] = 2
+
+        return [
+            {
+                'title': f'Stabilize your {target_career} baseline',
+                'description': (
+                    f'Anchor the roadmap around your current {current_level} signal and '
+                    f'build repeatable confidence with {first_skill}.'
+                ),
+                'weeks': phase_weeks[0],
+                'objectives': [
+                    f'Clarify what job-ready {target_career} performance looks like.',
+                    f'Strengthen {first_skill} with deliberate practice.',
+                    'Create momentum before the heavier gap-closing work starts.',
+                ],
+                'milestones': [
+                    {'title': f'Audit your current {target_career} baseline', 'type': 'practice', 'hours': 6, 'skills': top_skills[:2] or [first_skill]},
+                    {'title': f'Strengthen {first_skill} foundations', 'type': 'course', 'hours': 14, 'skills': [first_skill]},
+                    {'title': f'Build a scoped practice project using {first_skill}', 'type': 'project', 'hours': 18, 'skills': [first_skill]},
+                ],
+            },
+            {
+                'title': 'Close the highest-priority gaps',
+                'description': (
+                    f'Turn the assessment gaps into explicit milestones so the roadmap stays '
+                    f'personal instead of generic.'
+                ),
+                'weeks': phase_weeks[1],
+                'objectives': [
+                    f'Close the {first_gap} gap with focused work.',
+                    f'Build working confidence with {second_skill}.',
+                    'Translate weak spots into visible progress.',
+                ],
+                'milestones': [
+                    {'title': f'Close the {first_gap} gap', 'type': 'practice', 'hours': 12, 'skills': [first_gap]},
+                    {'title': f'Build working confidence with {second_skill}', 'type': 'course', 'hours': 12, 'skills': [second_skill]},
+                    {'title': f'Apply {second_gap} in a guided project sprint', 'type': 'project', 'hours': 20, 'skills': [second_gap, second_skill]},
+                ],
+            },
+            {
+                'title': 'Ship proof and become job-ready',
+                'description': (
+                    f'Use {lead_strength} as an advantage while packaging your work for real '
+                    f'{target_career} opportunities.'
+                ),
+                'weeks': phase_weeks[2],
+                'objectives': [
+                    'Produce portfolio evidence that matches the target role.',
+                    'Turn project work into resume and interview stories.',
+                    'Run a focused job search with clear next actions.',
+                ],
+                'milestones': [
+                    {'title': RoadmapService._portfolio_project_title(target_career), 'type': 'project', 'hours': 24, 'skills': [first_skill, second_skill]},
+                    {'title': f'Turn {lead_strength} into resume-ready and interview-ready stories', 'type': 'practice', 'hours': 8, 'skills': strengths[:2] or [lead_strength]},
+                    {'title': f'Run a targeted {target_career} job search sprint', 'type': 'practice', 'hours': 8, 'skills': [target_career]},
+                ],
+            },
+        ]
+
+    @staticmethod
+    def _create_personalized_structure(roadmap: Roadmap, phases_data: List[Dict[str, Any]]) -> None:
+        """Persist the generated roadmap hierarchy."""
+        for phase_idx, phase_data in enumerate(phases_data, start=1):
+            phase = RoadmapPhase.objects.create(
+                roadmap=roadmap,
+                title=phase_data['title'],
+                description=phase_data['description'],
+                order=phase_idx,
+                estimated_duration_weeks=phase_data['weeks'],
+                status='not_started',
+                objectives=phase_data.get('objectives', []),
+            )
+
+            for milestone_idx, milestone_data in enumerate(phase_data.get('milestones', []), start=1):
+                RoadmapMilestone.objects.create(
+                    phase=phase,
+                    title=milestone_data['title'],
+                    description=f"Complete {milestone_data['title']} during the {phase.title} phase.",
+                    milestone_type=milestone_data['type'],
+                    order=milestone_idx,
+                    estimated_duration_hours=Decimal(str(milestone_data['hours'])),
+                    status='not_started',
+                    is_required=True,
+                    skills=milestone_data.get('skills', []),
+                    resources=[],
+                )
+
+    @staticmethod
     @transaction.atomic
     def generate_ai_roadmap(
         user: User,
@@ -356,23 +579,87 @@ class RoadmapService:
         Returns:
             Roadmap: Created roadmap with AI processing status
         """
+        if assessment:
+            existing = Roadmap.objects.filter(
+                user=user,
+                assessment=assessment,
+                status__in=[Roadmap.DRAFT, Roadmap.ACTIVE, Roadmap.IN_PROGRESS],
+                is_deleted=False,
+            ).order_by('-created_at').first()
+            if existing:
+                return existing
+
+        started_at = monotonic()
+        matched_template = RoadmapTemplateService.get_template_by_career(target_career)
+        template = matched_template[0] if matched_template else None
+        strengths = assessment.strengths[:3] if assessment else []
+        gaps = assessment.areas_for_improvement[:3] if assessment else []
+        priority_skills = RoadmapService._extract_priority_skills(assessment)
+        top_skills = RoadmapService._extract_top_skills(assessment)
+        phases_data = RoadmapService._build_personalized_phase_blueprint(
+            target_career=target_career,
+            current_level=current_level,
+            strengths=strengths,
+            gaps=gaps,
+            priority_skills=priority_skills,
+            top_skills=top_skills,
+            weekly_hours=weekly_hours,
+        )
+        estimated_duration_weeks = sum(phase['weeks'] for phase in phases_data)
+        metadata = {
+            'generation': {
+                'source': 'assessment_result' if assessment else 'manual_request',
+                'version': RoadmapService.GENERATOR_VERSION,
+                'assessment_id': str(assessment.id) if assessment else None,
+                'template_basis_id': str(template.id) if template else None,
+                'input_summary': {
+                    'target_career': target_career,
+                    'current_level': current_level,
+                    'target_level': target_level,
+                    'weekly_hours_commitment': weekly_hours,
+                    'top_strengths': strengths,
+                    'priority_skills': priority_skills,
+                    'top_skills': top_skills,
+                    'gaps': gaps,
+                },
+            }
+        }
+        ai_insights = {
+            'summary': (
+                f'This roadmap prioritizes {", ".join(priority_skills[:2]) or target_career} and closes '
+                f'the most visible gaps from your latest assessment.'
+            ),
+            'strengths': strengths,
+            'gaps': gaps,
+            'priority_skills': priority_skills,
+            'top_skills': top_skills,
+            'job_readiness_focus': target_career,
+        }
+
         roadmap = Roadmap.objects.create(
             user=user,
+            template=template,
             assessment=assessment,
-            title=f"Personalized {target_career} Roadmap",
-            description=f"AI-generated learning path to become a {target_career}",
+            title=f"{target_career} roadmap for {user.full_name or user.username or user.email}",
+            description=(
+                f'Personalized roadmap for {target_career}, built from your latest assessment '
+                f'and paced for {weekly_hours} focused hours each week.'
+            ),
             target_career=target_career,
             current_level=current_level,
             target_level=target_level,
             weekly_hours_commitment=weekly_hours,
-            estimated_duration_weeks=24,  # Default, will be calculated by AI
+            estimated_duration_weeks=estimated_duration_weeks,
             status='draft',
-            ai_processing_status='pending'  # Will be updated by async task
+            ai_processing_status='completed',
+            ai_processed_at=timezone.now(),
+            llm_model_used=RoadmapService.GENERATOR_MODEL,
+            ai_insights=ai_insights,
+            metadata=metadata,
         )
-
-        # TODO: Trigger async Celery task for AI generation
-        # For now, we mark it as pending
-        # tasks.generate_roadmap_with_ai.delay(roadmap.id)
+        RoadmapService._create_personalized_structure(roadmap, phases_data)
+        roadmap.processing_time_seconds = Decimal(f"{monotonic() - started_at:.2f}")
+        roadmap.save(update_fields=['processing_time_seconds', 'updated_at'])
 
         # Emit signal
         roadmap_generated.send(

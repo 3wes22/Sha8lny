@@ -13,6 +13,8 @@ from typing import Dict, Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+from apps.core.ai_contracts import AIInvocationMetadata
+
 # Add ai-models to path for imports
 AI_MODELS_PATH = Path(__file__).parent.parent.parent.parent.parent / "ai-models" / "src"
 if str(AI_MODELS_PATH) not in sys.path:
@@ -82,11 +84,16 @@ class LLMAdvisoryService:
                 )
                 
                 processing_time = time.time() - start_time
-                
+
+                metadata = AIInvocationMetadata(
+                    source="llm",
+                    processing_time_ms=int(processing_time * 1000),
+                    model="mistral",
+                    provider="ollama",
+                    version="rag-local-v1",
+                )
                 return response_text, delay, {
-                    "source": "llm",
-                    "processing_time_ms": int(processing_time * 1000),
-                    "model": "mistral",
+                    **metadata.to_dict(),
                 }
                 
             except Exception as e:
@@ -132,11 +139,15 @@ class LLMAdvisoryService:
         
         delay = 1.0  # Fixed delay for fallback
         
-        return response, delay, {
-            "source": "fallback",
-            "processing_time_ms": 0,
-            "model": None,
-        }
+        metadata = AIInvocationMetadata(
+            source="fallback",
+            processing_time_ms=0,
+            model=None,
+            provider="sha8alny",
+            version="fallback-v1",
+            fallback_used=True,
+        )
+        return response, delay, metadata.to_dict()
     
     def build_user_context(self, user) -> Dict[str, Any]:
         """
@@ -169,6 +180,36 @@ class LLMAdvisoryService:
             context["skills"] = list(user_skills)
         except Exception:
             context["skills"] = []
+
+        try:
+            from apps.assessments.models import Assessment
+
+            latest_assessment = Assessment.objects.filter(
+                user=user,
+                is_deleted=False,
+            ).order_by("-created_at").first()
+            if latest_assessment and latest_assessment.target_career:
+                context["target_career"] = latest_assessment.target_career
+        except Exception:
+            pass
+
+        try:
+            from apps.roadmaps.models import Roadmap
+
+            active_roadmap = Roadmap.objects.filter(
+                user=user,
+                is_deleted=False,
+                status__in=[Roadmap.ACTIVE, Roadmap.IN_PROGRESS, Roadmap.DRAFT],
+            ).order_by("-updated_at").first()
+            if active_roadmap:
+                context["active_roadmap"] = {
+                    "id": str(active_roadmap.id),
+                    "target_career": active_roadmap.target_career,
+                    "current_level": active_roadmap.current_level,
+                    "target_level": active_roadmap.target_level,
+                }
+        except Exception:
+            pass
         
         return context
 
