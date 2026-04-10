@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Loader2, Map, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -11,29 +11,39 @@ import { RoadmapProgressView } from "@/features/roadmap/components/RoadmapProgre
 import { roadmapTemplateApi, roadmapApi, type RoadmapTemplate, type Roadmap as RoadmapType } from "@/lib/api";
 import { toast } from "sonner";
 
+const CURRENT_ROADMAP_STATUSES = ["in_progress", "active", "draft"] as const;
+
 const RoadmapPage: React.FC = () => {
   const [templates, setTemplates] = useState<RoadmapTemplate[]>([]);
   const [activeRoadmap, setActiveRoadmap] = useState<RoadmapType | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    void fetchData();
+  const loadCurrentRoadmap = useCallback(async () => {
+    for (const status of CURRENT_ROADMAP_STATUSES) {
+      const response = await roadmapApi.list({ status });
+      const roadmapSummary = response.results[0];
+
+      if (roadmapSummary) {
+        return roadmapSummary;
+      }
+    }
+
+    return null;
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [templatesRes, roadmapsRes] = await Promise.all([
+      const [templatesRes, currentRoadmap] = await Promise.all([
         roadmapTemplateApi.list(),
-        roadmapApi.list({ status: "active" }),
+        loadCurrentRoadmap(),
       ]);
 
       setTemplates(templatesRes.results || []);
 
-      const activeRoadmaps = roadmapsRes.results || [];
-      if (activeRoadmaps.length > 0) {
-        setActiveRoadmap(await roadmapApi.get(activeRoadmaps[0].id));
+      if (currentRoadmap) {
+        setActiveRoadmap(await roadmapApi.get(currentRoadmap.id));
       } else {
         setActiveRoadmap(null);
       }
@@ -42,7 +52,11 @@ const RoadmapPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [loadCurrentRoadmap]);
+
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
 
   const handleCreateRoadmap = async (templateId: string) => {
     try {
@@ -87,7 +101,11 @@ const RoadmapPage: React.FC = () => {
       actions={
         <Button className="gradient-primary">
           <Map className="mr-2 h-4 w-4" />
-          {activeRoadmap ? "Atlas active" : "Choose a direction"}
+          {activeRoadmap
+            ? activeRoadmap.status === "draft"
+              ? "Draft ready"
+              : "Atlas active"
+            : "Choose a direction"}
         </Button>
       }
       description="The roadmap view should feel like a navigable learning atlas, not a pile of unrelated progress widgets."

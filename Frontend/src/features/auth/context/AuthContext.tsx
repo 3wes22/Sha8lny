@@ -16,6 +16,7 @@ import {
   userApi,
   tokenStorage,
   ApiError,
+  getApiErrorMessage,
 } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
@@ -112,13 +113,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setState(prev => ({ ...prev, isLoading: false }));
 
       if (error instanceof ApiError) {
-        const message = error.status === 401
-          ? 'Invalid email or password'
-          : 'Login failed. Please try again.';
-
         toast({
           title: 'Login Failed',
-          description: message,
+          description: getApiErrorMessage(error, 'Login failed. Please try again.'),
           variant: 'destructive',
         });
       }
@@ -151,20 +148,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setState(prev => ({ ...prev, isLoading: false }));
 
       if (error instanceof ApiError) {
-        let message = 'Registration failed. Please try again.';
-
-        if (error.status === 400 && error.data) {
-          // Extract validation errors
-          const errors = error.data as Record<string, string[]>;
-          const firstError = Object.values(errors)[0];
-          if (firstError && firstError[0]) {
-            message = firstError[0];
-          }
-        }
-
         toast({
           title: 'Registration Failed',
-          description: message,
+          description: getApiErrorMessage(error, 'Registration failed. Please try again.'),
           variant: 'destructive',
         });
       }

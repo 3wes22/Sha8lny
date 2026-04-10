@@ -46,8 +46,8 @@ export default function ProfilePage() {
           userApi.getSkills(),
           userApi.getAllSkills(),
         ]);
-        setUserSkills(skillsResponse);
-        setAllSkills(allSkillsResponse);
+        setUserSkills(skillsResponse.results ?? []);
+        setAllSkills(allSkillsResponse.results ?? []);
       } catch {
         toast({
           title: "Error loading profile",
@@ -94,7 +94,7 @@ export default function ProfilePage() {
     }
 
     try {
-      const addedSkill = await userApi.addSkill(matchedSkill.id, 3);
+      const addedSkill = await userApi.addSkill(matchedSkill.id, "intermediate");
       setUserSkills((previous) => [...previous, addedSkill]);
       setNewSkill("");
     } catch (error) {

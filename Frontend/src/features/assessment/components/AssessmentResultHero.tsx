@@ -1,4 +1,4 @@
-import { ArrowRight, BriefcaseBusiness, Map, Sparkles } from "lucide-react";
+import { BriefcaseBusiness, Loader2, Map, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { ROUTES } from "@/app/routes";
@@ -7,9 +7,15 @@ import type { AssessmentResult } from "@/lib/api";
 
 interface AssessmentResultHeroProps {
   result: AssessmentResult;
+  onCreateRoadmap?: () => void;
+  creatingRoadmap?: boolean;
 }
 
-export function AssessmentResultHero({ result }: AssessmentResultHeroProps) {
+export function AssessmentResultHero({
+  result,
+  onCreateRoadmap,
+  creatingRoadmap = false,
+}: AssessmentResultHeroProps) {
   return (
     <section className="poster-surface overflow-hidden rounded-[2rem] border border-border/70">
       <div className="relative grid gap-8 px-6 py-8 md:px-8 lg:grid-cols-[1.1fr_0.9fr]">
@@ -22,12 +28,19 @@ export function AssessmentResultHero({ result }: AssessmentResultHeroProps) {
             {result.ai_insights}
           </p>
           <div className="flex flex-wrap gap-3">
-            <Button asChild className="gradient-primary">
-              <Link to={ROUTES.roadmap}>
-                View roadmap
-                <Map className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
+            {onCreateRoadmap ? (
+              <Button className="gradient-primary" disabled={creatingRoadmap} onClick={onCreateRoadmap}>
+                {creatingRoadmap ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Map className="mr-2 h-4 w-4" />}
+                Generate personalized roadmap
+              </Button>
+            ) : (
+              <Button asChild className="gradient-primary">
+                <Link to={ROUTES.roadmap}>
+                  View roadmap
+                  <Map className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            )}
             <Button asChild variant="outline">
               <Link to={ROUTES.jobs}>
                 Explore jobs

@@ -1,18 +1,22 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
-import { ApiError, assessmentApi, type AssessmentResult, getApiErrorMessage } from "@/lib/api";
+import { ROUTES } from "@/app/routes";
+import { ApiError, assessmentApi, roadmapApi, type AssessmentResult, getApiErrorMessage } from "@/lib/api";
 import { AssessmentOutcomeCards } from "@/features/assessment/components/AssessmentOutcomeCards";
 import { AssessmentResultHero } from "@/features/assessment/components/AssessmentResultHero";
 import { PageShell } from "@/shared/components/PageShell";
 import { StatePanel } from "@/shared/components/StatePanel";
+import { toast } from "sonner";
 
 export default function AssessmentResultsPage() {
   const { assessmentId } = useParams<{ assessmentId: string }>();
+  const navigate = useNavigate();
   const [result, setResult] = useState<AssessmentResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [creatingRoadmap, setCreatingRoadmap] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -59,6 +63,23 @@ export default function AssessmentResultsPage() {
     };
   }, [assessmentId]);
 
+  const handleCreateRoadmap = async () => {
+    if (!result || creatingRoadmap) {
+      return;
+    }
+
+    try {
+      setCreatingRoadmap(true);
+      await roadmapApi.createAI({ assessment_id: result.id });
+      toast.success("Personalized roadmap ready.");
+      navigate(ROUTES.roadmap);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Could not generate a personalized roadmap."));
+    } finally {
+      setCreatingRoadmap(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
@@ -93,7 +114,11 @@ export default function AssessmentResultsPage() {
       eyebrow="Assessment results"
       title="Outcome ready"
     >
-      <AssessmentResultHero result={result} />
+      <AssessmentResultHero
+        creatingRoadmap={creatingRoadmap}
+        onCreateRoadmap={handleCreateRoadmap}
+        result={result}
+      />
       <AssessmentOutcomeCards result={result} />
     </PageShell>
   );

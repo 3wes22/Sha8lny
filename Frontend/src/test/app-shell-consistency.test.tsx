@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 
 vi.mock("@/features/auth/context/AuthContext", () => ({
   useAuth: () => ({
@@ -40,5 +40,25 @@ describe("app shell consistency", () => {
     PRIMARY_NAV_ITEMS.forEach((item) => {
       expect(within(navigation).getByText(item.title)).toBeInTheDocument();
     });
+  });
+
+  it("renders the mobile atlas menu outside the clipped header shell", async () => {
+    render(<MainLayout><div>shell content</div></MainLayout>, { route: ROUTES.dashboard });
+    await screen.findByText("Roadmap updated");
+
+    fireEvent.click(screen.getByRole("button", { name: /open atlas navigation/i }));
+
+    const headerShell = screen.getByTestId("atlas-header-shell");
+    const menuLayer = screen.getByTestId("mobile-atlas-menu-layer");
+    const menuPanel = screen.getByTestId("mobile-atlas-menu-panel");
+    const mobileNavigation = within(menuPanel).getByRole("navigation", {
+      name: /primary navigation/i,
+    });
+
+    expect(mobileNavigation).toBeInTheDocument();
+    expect(within(headerShell).queryByTestId("mobile-atlas-menu-panel")).not.toBeInTheDocument();
+    expect(menuLayer).toContainElement(menuPanel);
+    expect(menuPanel.className).toMatch(/overflow-y-auto/);
+    expect(menuPanel.className).toMatch(/max-h-/);
   });
 });

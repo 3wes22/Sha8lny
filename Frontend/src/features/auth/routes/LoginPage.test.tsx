@@ -57,4 +57,11 @@ describe('Login Page', () => {
     const passwordInput = screen.getByLabelText(/password/i);
     expect(passwordInput).toHaveAttribute('type', 'password');
   });
+
+  it('provides browser autocomplete hints for auth fields', () => {
+    render(<LoginPage />);
+
+    expect(screen.getByLabelText(/email/i)).toHaveAttribute('autocomplete', 'email');
+    expect(screen.getByLabelText(/password/i)).toHaveAttribute('autocomplete', 'current-password');
+  });
 });

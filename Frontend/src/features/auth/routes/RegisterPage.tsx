@@ -61,27 +61,27 @@ export default function RegisterPage() {
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
-              <Input id="username" onChange={(event) => setFormData((previous) => ({ ...previous, username: event.target.value }))} value={formData.username} />
+              <Input autoComplete="username" id="username" onChange={(event) => setFormData((previous) => ({ ...previous, username: event.target.value }))} value={formData.username} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="full_name">Full name</Label>
-              <Input id="full_name" onChange={(event) => setFormData((previous) => ({ ...previous, full_name: event.target.value }))} value={formData.full_name} />
+              <Input autoComplete="name" id="full_name" onChange={(event) => setFormData((previous) => ({ ...previous, full_name: event.target.value }))} value={formData.full_name} />
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" onChange={(event) => setFormData((previous) => ({ ...previous, email: event.target.value }))} type="email" value={formData.email} />
+              <Input autoComplete="email" id="email" onChange={(event) => setFormData((previous) => ({ ...previous, email: event.target.value }))} type="email" value={formData.email} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" onChange={(event) => setFormData((previous) => ({ ...previous, password: event.target.value }))} type="password" value={formData.password} />
+              <Input autoComplete="new-password" id="password" onChange={(event) => setFormData((previous) => ({ ...previous, password: event.target.value }))} type="password" value={formData.password} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password_confirm">Confirm password</Label>
-              <Input id="password_confirm" onChange={(event) => setFormData((previous) => ({ ...previous, password_confirm: event.target.value }))} type="password" value={formData.password_confirm} />
+              <Input autoComplete="new-password" id="password_confirm" onChange={(event) => setFormData((previous) => ({ ...previous, password_confirm: event.target.value }))} type="password" value={formData.password_confirm} />
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="date_of_birth">Date of birth</Label>
-              <Input id="date_of_birth" onChange={(event) => setFormData((previous) => ({ ...previous, date_of_birth: event.target.value }))} type="date" value={formData.date_of_birth} />
+              <Input autoComplete="bday" id="date_of_birth" onChange={(event) => setFormData((previous) => ({ ...previous, date_of_birth: event.target.value }))} type="date" value={formData.date_of_birth} />
             </div>
           </div>
 

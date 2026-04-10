@@ -172,14 +172,66 @@ export function MainLayout({ children }: MainLayoutProps) {
   const utilityLinks = APP_ROUTE_META.filter((route) =>
     [ROUTES.notifications, ROUTES.profile, ROUTES.settings].includes(route.path),
   );
+  const mobileAtlasMenu = mobileMenuOpen ? (
+    <div
+      className="pointer-events-none absolute inset-x-0 top-0 z-50 lg:hidden"
+      data-testid="mobile-atlas-menu-layer"
+    >
+      <div
+        className="motion-rise pointer-events-auto ml-auto mr-4 mt-[4.5rem] w-[min(22rem,calc(100vw-1.5rem))] max-h-[min(30rem,calc(100dvh-6rem))] overflow-y-auto rounded-[2rem] border border-border/70 bg-card/96 p-4 shadow-soft-lg backdrop-blur-md sm:mr-6"
+        data-testid="mobile-atlas-menu-panel"
+        id="mobile-atlas-navigation"
+        ref={mobileMenuRef}
+      >
+        <nav aria-label="Primary navigation" className="grid gap-2">
+          {PRIMARY_NAV_ITEMS.map((item) => (
+            <AtlasNavLink
+              active={isPrimaryNavActive(location.pathname, item.path)}
+              item={item}
+              key={item.key}
+              onNavigate={() => setMobileMenuOpen(false)}
+            />
+          ))}
+        </nav>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          {utilityLinks.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link
+                className="focus-ring interactive-scale inline-flex items-center justify-center gap-2 rounded-[1.35rem] border border-border/70 px-3 py-3 text-sm transition-smooth [--interactive-lift:1px] hover:bg-background/72"
+                key={item.key}
+                onClick={() => setMobileMenuOpen(false)}
+                to={item.path}
+              >
+                {Icon ? <Icon className="h-4 w-4" /> : null}
+                {item.title}
+              </Link>
+            );
+          })}
+          <button
+            className="focus-ring interactive-scale inline-flex items-center justify-center gap-2 rounded-[1.35rem] border border-destructive/30 px-3 py-3 text-sm text-destructive transition-smooth [--interactive-lift:1px] hover:bg-destructive/10 sm:col-span-3"
+            onClick={logout}
+            type="button"
+          >
+            <LogOut className="h-4 w-4" />
+            Log out
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div className="poster-surface min-h-screen overflow-x-clip">
       <div className="pointer-events-none absolute left-[-8rem] top-4 h-80 w-80 bg-[radial-gradient(circle,hsla(20,92%,52%,0.18),transparent_68%)] opacity-80" />
       <div className="pointer-events-none absolute right-[-7rem] top-10 h-72 w-72 bg-[radial-gradient(circle,hsla(188,74%,41%,0.14),transparent_70%)] opacity-80" />
       <div className="relative mx-auto flex min-h-screen w-full max-w-[1600px] flex-col px-3 pb-8 pt-3 sm:px-4 lg:px-6">
-        <header className="motion-fade">
-          <section className="gradient-soft relative overflow-hidden rounded-[2.75rem] border border-border/70 bg-card/85 shadow-soft-lg backdrop-blur-md">
+        <header className="motion-fade relative">
+          <section
+            className="gradient-soft relative overflow-hidden rounded-[2.75rem] border border-border/70 bg-card/85 shadow-soft-lg backdrop-blur-md"
+            data-testid="atlas-header-shell"
+          >
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.75),transparent_28%),radial-gradient(circle_at_left_center,rgba(31,41,55,0.05),transparent_38%)]" />
             <div className="pointer-events-none absolute inset-y-10 left-[34%] hidden w-px bg-border/60 lg:block" />
 
@@ -223,50 +275,6 @@ export function MainLayout({ children }: MainLayoutProps) {
                   >
                     {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
                   </Button>
-
-                  {mobileMenuOpen ? (
-                    <div
-                      className="motion-rise absolute right-0 top-[calc(100%+0.75rem)] z-50 w-[min(22rem,calc(100vw-1.5rem))] rounded-[2rem] border border-border/70 bg-card/96 p-4 shadow-soft-lg backdrop-blur-md lg:hidden"
-                      id="mobile-atlas-navigation"
-                      ref={mobileMenuRef}
-                    >
-                      <nav aria-label="Primary navigation" className="grid gap-2">
-                        {PRIMARY_NAV_ITEMS.map((item) => (
-                          <AtlasNavLink
-                            active={isPrimaryNavActive(location.pathname, item.path)}
-                            item={item}
-                            key={item.key}
-                            onNavigate={() => setMobileMenuOpen(false)}
-                          />
-                        ))}
-                      </nav>
-
-                      <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                        {utilityLinks.map((item) => {
-                          const Icon = item.icon;
-                          return (
-                            <Link
-                              className="focus-ring interactive-scale inline-flex items-center justify-center gap-2 rounded-[1.35rem] border border-border/70 px-3 py-3 text-sm transition-smooth [--interactive-lift:1px] hover:bg-background/72"
-                              key={item.key}
-                              onClick={() => setMobileMenuOpen(false)}
-                              to={item.path}
-                            >
-                              {Icon ? <Icon className="h-4 w-4" /> : null}
-                              {item.title}
-                            </Link>
-                          );
-                        })}
-                        <button
-                          className="focus-ring interactive-scale inline-flex items-center justify-center gap-2 rounded-[1.35rem] border border-destructive/30 px-3 py-3 text-sm text-destructive transition-smooth [--interactive-lift:1px] hover:bg-destructive/10 sm:col-span-3"
-                          onClick={logout}
-                          type="button"
-                        >
-                          <LogOut className="h-4 w-4" />
-                          Log out
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
                 </div>
               </div>
 
@@ -407,6 +415,7 @@ export function MainLayout({ children }: MainLayoutProps) {
               </div>
             </div>
           </section>
+          {mobileAtlasMenu}
 
         </header>
 
