@@ -21,76 +21,196 @@ from apps.core.ai_contracts import (
 
 
 class BaselineAssessmentAnalyzer:
-    """Deterministic analyzer behind a model-safe contract."""
+    """Deterministic analyzer with dimension-weighted scoring.
 
-    MODEL_NAME = "baseline-assessment-v1"
+    Covers 6 assessment dimensions with configurable weights:
+      - technical_depth (25%), tooling (15%), problem_solving (20%),
+        experience (20%), goals (10%), commitment (10%)
+    """
+
+    MODEL_NAME = "baseline-assessment-v2"
     VERSION = "baseline-2026-04"
 
-    @staticmethod
-    def _score_responses(responses: List[Dict[str, Any]]) -> Decimal:
-        score_sum = 0.0
-        scored_responses = 0
+    DIMENSION_WEIGHTS: Dict[str, float] = {
+        "technical_depth": 0.25,
+        "tooling": 0.15,
+        "problem_solving": 0.20,
+        "experience": 0.20,
+        "goals": 0.10,
+        "commitment": 0.10,
+    }
 
-        for response in responses:
-            answer = response.get("answer", "")
+    # Dimension labels used in human-readable output
+    DIMENSION_LABELS: Dict[str, str] = {
+        "technical_depth": "Core technical skills",
+        "tooling": "Tooling & ecosystem knowledge",
+        "problem_solving": "Problem-solving & debugging",
+        "experience": "Hands-on project experience",
+        "goals": "Goal clarity",
+        "commitment": "Learning commitment",
+    }
+
+    @classmethod
+    def _score_by_dimension(
+        cls, responses: List[Dict[str, Any]], questions: List[Dict[str, Any]]
+    ) -> Dict[str, float]:
+        """Score each dimension on a 0-100 scale from response scores."""
+        dimension_scores: Dict[str, List[float]] = {}
+
+        # Build question lookup for dimension mapping
+        question_map: Dict[Any, Dict[str, Any]] = {}
+        for q in questions:
+            question_map[q.get("id")] = q
+            question_map[str(q.get("id"))] = q
+
+        for resp in responses:
+            qid = resp.get("question_id")
+            question = question_map.get(qid) or question_map.get(str(qid)) or {}
+            dimension = question.get("dimension", "technical_depth")
+
+            answer = resp.get("answer", "")
+            raw_score = 0.0
+
             if isinstance(answer, (int, float)):
-                score_sum += float(answer)
-                scored_responses += 1
-            elif isinstance(answer, str) and answer.strip().isdigit():
-                score_sum += float(answer.strip())
-                scored_responses += 1
+                raw_score = float(answer)
+            elif isinstance(answer, str):
+                # For text answers, give a moderate score (goal clarity)
+                stripped = answer.strip()
+                if stripped.isdigit():
+                    raw_score = float(stripped)
+                elif len(stripped) > 10:
+                    raw_score = 3.0  # meaningful text answer
+                else:
+                    raw_score = 2.0  # very short text
 
-        overall = (score_sum / scored_responses * 20) if scored_responses > 0 else 50
-        return Decimal(str(round(overall, 2)))
+                # Check if the answer has a score in options
+                options = question.get("options", [])
+                for opt in options:
+                    if isinstance(opt, dict) and opt.get("value") == stripped:
+                        raw_score = float(opt.get("score", raw_score))
+                        break
+
+            # Normalize to 0-100 (scores are on 1-5 scale)
+            normalized = min(100.0, max(0.0, (raw_score / 5.0) * 100.0))
+            dimension_scores.setdefault(dimension, []).append(normalized)
+
+        # Average scores per dimension, default to 50 if missing
+        result: Dict[str, float] = {}
+        for dim in cls.DIMENSION_WEIGHTS:
+            scores = dimension_scores.get(dim, [])
+            result[dim] = round(sum(scores) / len(scores), 1) if scores else 50.0
+
+        return result
+
+    @classmethod
+    def _weighted_overall(cls, dimension_scores: Dict[str, float]) -> Decimal:
+        """Compute weighted overall score from dimension scores."""
+        total = 0.0
+        for dim, weight in cls.DIMENSION_WEIGHTS.items():
+            total += dimension_scores.get(dim, 50.0) * weight
+        return Decimal(str(round(total, 2)))
+
+    @classmethod
+    def _derive_strengths(cls, dimension_scores: Dict[str, float]) -> List[str]:
+        """Identify top 2-3 strengths from highest-scoring dimensions."""
+        sorted_dims = sorted(dimension_scores.items(), key=lambda x: x[1], reverse=True)
+        strengths = []
+        for dim, score in sorted_dims[:3]:
+            if score >= 60:
+                strengths.append(cls.DIMENSION_LABELS.get(dim, dim))
+        if not strengths:
+            strengths = ["Commitment to a clear target path", "Willingness to self-assess"]
+        return strengths
+
+    @classmethod
+    def _derive_gaps(cls, dimension_scores: Dict[str, float]) -> List[str]:
+        """Identify top 2-3 weakness areas from lowest-scoring dimensions."""
+        sorted_dims = sorted(dimension_scores.items(), key=lambda x: x[1])
+        gaps = []
+        for dim, score in sorted_dims[:3]:
+            if score < 70:
+                gaps.append(cls.DIMENSION_LABELS.get(dim, dim))
+        if not gaps:
+            gaps = ["Advanced specialization", "Production-scale project experience"]
+        return gaps
 
     @staticmethod
     def _career_aliases(target_career: str) -> List[Dict[str, Any]]:
         normalized = target_career or "Software Engineer"
         lowered = normalized.lower()
-        if "frontend" in lowered:
-            return [
-                {"title": normalized, "match_score": 88, "reasoning": "Your selected path remains the primary recommendation."},
-                {"title": "Software Engineer", "match_score": 73, "reasoning": "Broader engineering roles stay adjacent to frontend growth."},
-            ]
-        if "backend" in lowered:
-            return [
-                {"title": normalized, "match_score": 88, "reasoning": "Your selected path remains the primary recommendation."},
-                {"title": "Full Stack Developer", "match_score": 74, "reasoning": "Backend depth can expand toward full-stack execution later."},
-            ]
-        if "data" in lowered:
-            return [
-                {"title": normalized, "match_score": 86, "reasoning": "Your selected path remains the primary recommendation."},
-                {"title": "Machine Learning Engineer", "match_score": 71, "reasoning": "The path can extend into model delivery and production work."},
-            ]
+
+        career_map = {
+            "frontend": ("UI/UX Developer", 72, "Frontend skills transfer directly to UI/UX roles with design thinking."),
+            "backend": ("Full Stack Developer", 74, "Backend depth expands naturally toward full-stack execution."),
+            "data": ("Machine Learning Engineer", 71, "Data science foundations extend into model delivery and MLOps."),
+            "fullstack": ("Backend Developer", 73, "Strong backend focus can deepen your full-stack expertise."),
+            "full stack": ("Backend Developer", 73, "Strong backend focus can deepen your full-stack expertise."),
+            "mobile": ("Frontend Developer", 70, "Mobile experience translates well to responsive web development."),
+            "devops": ("Cloud Architect", 72, "DevOps experience is the natural path to cloud architecture roles."),
+            "cloud": ("DevOps Engineer", 73, "Cloud skills directly complement DevOps and SRE workflows."),
+        }
+
+        adjacent_title = "Full Stack Developer"
+        adjacent_score = 72
+        adjacent_reason = "This role stays adjacent while you build broader execution skills."
+
+        for keyword, (title, score, reason) in career_map.items():
+            if keyword in lowered:
+                adjacent_title = title
+                adjacent_score = score
+                adjacent_reason = reason
+                break
+
         return [
-            {"title": normalized, "match_score": 85, "reasoning": "Your selected path remains the primary recommendation."},
-            {"title": "Full Stack Developer", "match_score": 72, "reasoning": "This stays nearby while you build broader execution skills."},
+            {"title": normalized, "match_score": 87, "reasoning": "Your selected career path remains your primary recommendation."},
+            {"title": adjacent_title, "match_score": adjacent_score, "reasoning": adjacent_reason},
         ]
 
     @staticmethod
     def _learning_paths(target_career: str) -> List[Dict[str, Any]]:
         lowered = (target_career or "").lower()
-        if "frontend" in lowered:
-            return [
-                {"skill": "React", "priority": "high", "resources": []},
+
+        paths_map: Dict[str, List[Dict[str, Any]]] = {
+            "frontend": [
+                {"skill": "React & component architecture", "priority": "high", "resources": []},
                 {"skill": "TypeScript", "priority": "high", "resources": []},
-                {"skill": "Testing discipline", "priority": "medium", "resources": []},
-            ]
-        if "backend" in lowered:
-            return [
-                {"skill": "API design", "priority": "high", "resources": []},
-                {"skill": "Databases", "priority": "high", "resources": []},
-                {"skill": "Testing discipline", "priority": "medium", "resources": []},
-            ]
-        if "data" in lowered:
-            return [
-                {"skill": "Python", "priority": "high", "resources": []},
-                {"skill": "Statistics", "priority": "high", "resources": []},
-                {"skill": "Portfolio storytelling", "priority": "medium", "resources": []},
-            ]
+                {"skill": "Testing (Jest & React Testing Library)", "priority": "medium", "resources": []},
+            ],
+            "backend": [
+                {"skill": "REST API design & Django", "priority": "high", "resources": []},
+                {"skill": "Database design & SQL optimization", "priority": "high", "resources": []},
+                {"skill": "Testing (pytest & integration tests)", "priority": "medium", "resources": []},
+            ],
+            "data": [
+                {"skill": "Python data stack (Pandas, NumPy, Scikit-learn)", "priority": "high", "resources": []},
+                {"skill": "Statistics & probability", "priority": "high", "resources": []},
+                {"skill": "Data visualization & storytelling", "priority": "medium", "resources": []},
+            ],
+            "fullstack": [
+                {"skill": "Full-stack integration (React + Django)", "priority": "high", "resources": []},
+                {"skill": "Authentication & authorization flows", "priority": "high", "resources": []},
+                {"skill": "Deployment & DevOps basics (Docker)", "priority": "medium", "resources": []},
+            ],
+            "mobile": [
+                {"skill": "Flutter or React Native", "priority": "high", "resources": []},
+                {"skill": "State management & navigation", "priority": "high", "resources": []},
+                {"skill": "Publishing to App Store / Play Store", "priority": "medium", "resources": []},
+            ],
+            "devops": [
+                {"skill": "Docker & containerization", "priority": "high", "resources": []},
+                {"skill": "CI/CD pipelines (GitHub Actions)", "priority": "high", "resources": []},
+                {"skill": "Cloud platform (AWS or GCP fundamentals)", "priority": "medium", "resources": []},
+            ],
+        }
+
+        for keyword, paths in paths_map.items():
+            if keyword in lowered:
+                return paths
+
+        # Generic fallback
         return [
-            {"skill": "Problem solving", "priority": "high", "resources": []},
-            {"skill": "Project execution", "priority": "high", "resources": []},
+            {"skill": "Core technical depth in your chosen area", "priority": "high", "resources": []},
+            {"skill": "Project execution & portfolio building", "priority": "high", "resources": []},
             {"skill": "Testing discipline", "priority": "medium", "resources": []},
         ]
 
@@ -98,22 +218,28 @@ class BaselineAssessmentAnalyzer:
     def analyze(cls, payload: AssessmentAnalysisInput) -> AssessmentAnalysisResult:
         started_at = monotonic()
         target_career = (payload.target_career or "Software Engineer").strip() or "Software Engineer"
+
+        # Use questions from the assessment if available, otherwise empty list
+        questions = payload.responses[0].get("_questions", []) if payload.responses else []
+        # The questions are stored on the Assessment model, not in responses.
+        # In the baseline path, we may not have them — score what we can.
+        dimension_scores = cls._score_by_dimension(payload.responses, questions)
+        overall = cls._weighted_overall(dimension_scores)
+        strengths = cls._derive_strengths(dimension_scores)
+        gaps = cls._derive_gaps(dimension_scores)
+
         return AssessmentAnalysisResult(
-            overall_score=cls._score_responses(payload.responses),
-            skill_scores={},
-            strengths=[
-                "Commitment to a clear target path",
-                "Structured self-assessment follow-through",
-            ],
-            areas_for_improvement=[
-                "Project execution",
-                "Testing discipline",
-            ],
+            overall_score=overall,
+            skill_scores=dimension_scores,
+            strengths=strengths,
+            areas_for_improvement=gaps,
             recommended_careers=cls._career_aliases(target_career),
             recommended_learning_paths=cls._learning_paths(target_career),
             ai_insights=(
-                f"This baseline analysis keeps {target_career} as the anchor role and turns your "
-                "responses into immediate next-step guidance."
+                f"Based on your self-assessment for {target_career}, your strongest area is "
+                f"{strengths[0].lower() if strengths else 'your commitment'}, while "
+                f"{gaps[0].lower() if gaps else 'advanced specialization'} is the most impactful "
+                f"area to focus on next."
             ),
             ai_confidence_score=Decimal("78.00"),
             metadata=AIInvocationMetadata(
