@@ -44,6 +44,7 @@ class AssessmentAnalysisInput:
     assessment_type: str
     target_career: str
     responses: List[Dict[str, Any]]
+    questions: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

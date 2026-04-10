@@ -38,6 +38,7 @@ from apps.assessments.tasks import (
 from apps.assessments.services import (
     AssessmentResultService,
 )
+from apps.core.ai_throttles import AIBurstThrottle, AISustainedThrottle
 
 
 # ============================================================================
@@ -65,6 +66,14 @@ class AssessmentViewSet(viewsets.ModelViewSet):
     - GET /assessment/{id}/result/ - Get AI-processed result (FR-8)
     """
     permission_classes = [permissions.IsAuthenticated]
+
+    # AI-heavy actions that queue Celery tasks
+    _AI_ACTIONS = {'create', 'submit'}
+
+    def get_throttles(self):
+        if self.action in self._AI_ACTIONS:
+            return [AIBurstThrottle(), AISustainedThrottle()]
+        return super().get_throttles()
 
     def get_queryset(self):
         """Return assessments for current user only."""

@@ -47,6 +47,7 @@ from apps.roadmaps.tasks import (
     run_generate_ai_roadmap,
 )
 from apps.assessments.models import AssessmentResult
+from apps.core.ai_throttles import AIBurstThrottle, AISustainedThrottle
 
 
 # ============================================================================
@@ -124,6 +125,14 @@ class RoadmapViewSet(viewsets.ModelViewSet):
     - GET /roadmap/{id}/stats/ - Get roadmap statistics
     """
     permission_classes = [permissions.IsAuthenticated]
+
+    # AI-heavy actions that queue Celery tasks
+    _AI_ACTIONS = {'create'}
+
+    def get_throttles(self):
+        if self.action in self._AI_ACTIONS:
+            return [AIBurstThrottle(), AISustainedThrottle()]
+        return super().get_throttles()
 
     def get_queryset(self):
         """Return roadmaps for current user only."""

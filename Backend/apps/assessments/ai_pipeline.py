@@ -21,6 +21,7 @@ from apps.assessments.models import Assessment
 from apps.assessments.services import BaselineAssessmentAnalyzer
 from apps.core.ai_contracts import AssessmentAnalysisInput, AssessmentAnalysisResult
 from apps.core.ai_logging import build_ai_metadata
+from apps.core.ai_validation import sanitize_evaluation_payload
 from apps.core.gemma_client import GemmaClient, GemmaResponse
 
 
@@ -28,14 +29,8 @@ from apps.core.gemma_client import GemmaClient, GemmaResponse
 # DIMENSION WEIGHTS — used by both baseline scorer and LLM rubric
 # ============================================================================
 
-DIMENSION_WEIGHTS: Dict[str, float] = {
-    "technical_depth": 0.25,
-    "tooling": 0.15,
-    "problem_solving": 0.20,
-    "experience": 0.20,
-    "goals": 0.10,
-    "commitment": 0.10,
-}
+# Single source of truth — defined in BaselineAssessmentAnalyzer.DIMENSION_WEIGHTS
+DIMENSION_WEIGHTS = BaselineAssessmentAnalyzer.DIMENSION_WEIGHTS
 
 
 # ============================================================================
@@ -695,6 +690,7 @@ class AssessmentAIService:
                 assessment_type=assessment.assessment_type,
                 target_career=target_career,
                 responses=assessment.responses or [],
+                questions=assessment.questions or [],
             )
         )
 
@@ -722,16 +718,21 @@ class AssessmentAIService:
                     "ai_confidence_score",
                 ),
             )
-            payload = result.payload or {}
+            raw_payload = result.payload or {}
+            payload = sanitize_evaluation_payload(
+                raw_payload,
+                fallback_strengths=baseline.strengths,
+                fallback_gaps=baseline.areas_for_improvement,
+            )
             return AssessmentAnalysisResult(
-                overall_score=Decimal(str(payload.get("overall_score", baseline.overall_score))),
-                skill_scores=payload.get("skill_scores") or baseline.skill_scores,
-                strengths=payload.get("strengths") or baseline.strengths,
-                areas_for_improvement=payload.get("areas_for_improvement") or baseline.areas_for_improvement,
-                recommended_careers=payload.get("recommended_careers") or baseline.recommended_careers,
-                recommended_learning_paths=payload.get("recommended_learning_paths") or baseline.recommended_learning_paths,
-                ai_insights=str(payload.get("ai_insights") or baseline.ai_insights),
-                ai_confidence_score=Decimal(str(payload.get("ai_confidence_score", baseline.ai_confidence_score or 75))),
+                overall_score=Decimal(str(payload["overall_score"])),
+                skill_scores=payload["skill_scores"],
+                strengths=payload["strengths"],
+                areas_for_improvement=payload["areas_for_improvement"],
+                recommended_careers=payload["recommended_careers"] or baseline.recommended_careers,
+                recommended_learning_paths=payload["recommended_learning_paths"] or baseline.recommended_learning_paths,
+                ai_insights=payload["ai_insights"] or baseline.ai_insights,
+                ai_confidence_score=Decimal(str(payload["ai_confidence_score"])),
                 metadata=build_ai_metadata(
                     source="llm",
                     processing_time_ms=result.metadata.processing_time_ms,

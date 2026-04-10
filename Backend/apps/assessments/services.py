@@ -219,10 +219,8 @@ class BaselineAssessmentAnalyzer:
         started_at = monotonic()
         target_career = (payload.target_career or "Software Engineer").strip() or "Software Engineer"
 
-        # Use questions from the assessment if available, otherwise empty list
-        questions = payload.responses[0].get("_questions", []) if payload.responses else []
-        # The questions are stored on the Assessment model, not in responses.
-        # In the baseline path, we may not have them — score what we can.
+        # Use questions from the contract — they carry dimension metadata.
+        questions = payload.questions or []
         dimension_scores = cls._score_by_dimension(payload.responses, questions)
         overall = cls._weighted_overall(dimension_scores)
         strengths = cls._derive_strengths(dimension_scores)

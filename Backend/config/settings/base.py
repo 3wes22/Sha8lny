@@ -175,6 +175,10 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',  # For API documentation
     'EXCEPTION_HANDLER': 'apps.core.exceptions.custom_exception_handler',
     'DATETIME_FORMAT': '%Y-%m-%d %H:%M:%S',
+    'DEFAULT_THROTTLE_RATES': {
+        'ai_burst': '3/min',
+        'ai_sustained': '20/hour',
+    },
 }
 
 
