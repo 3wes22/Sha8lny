@@ -1,10 +1,12 @@
+from decimal import Decimal
+from datetime import date, timedelta
+
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
-from datetime import date, timedelta
 
 from apps.core.models import BaseModel
 from apps.users.managers import UserManager
@@ -355,7 +357,7 @@ class UserSkill(BaseModel):
         decimal_places=2,
         blank=True,
         null=True,
-        validators=[MinValueValidator(0), MaxValueValidator(99.99)],
+        validators=[MinValueValidator(0), MaxValueValidator(Decimal("99.99"))],
         help_text=_('Years of experience with this skill')
     )
 

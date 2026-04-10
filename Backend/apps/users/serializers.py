@@ -12,11 +12,13 @@ SRS References:
 - FR-5: Skill Tracking
 """
 
+from decimal import Decimal
+from datetime import date
+
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from datetime import date
 
 from apps.users.models import User, Skill, UserSkill, UserPreferences
 from apps.users.services import UserService, SkillService
@@ -114,7 +116,7 @@ class UserSkillCreateSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
         min_value=0,
-        max_value=99.99
+        max_value=Decimal("99.99")
     )
     skill_type = serializers.ChoiceField(
         choices=['hard', 'soft'],
@@ -163,7 +165,7 @@ class UserSkillUpdateSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
         min_value=0,
-        max_value=99.99
+        max_value=Decimal("99.99")
     )
 
     def update(self, instance, validated_data):

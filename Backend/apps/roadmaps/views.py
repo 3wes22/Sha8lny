@@ -206,11 +206,7 @@ class RoadmapViewSet(viewsets.ModelViewSet):
             )
         else:
             # AI-generated roadmap
-            assessment = None
-            if serializer.validated_data.get('assessment_id'):
-                assessment = AssessmentResult.objects.get(
-                    id=serializer.validated_data['assessment_id']
-                )
+            assessment = serializer.validated_data.get('assessment')
 
             roadmap = RoadmapService.generate_ai_roadmap(
                 user=request.user,
