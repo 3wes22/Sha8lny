@@ -1,6 +1,10 @@
 # Software Requirements Specification (SRS)
 ## Sha8alny – AI-Powered Career Development Platform
 
+> **Implementation note (April 2026):** This SRS was written when the project
+> assumed cloud LLM APIs (OpenAI, Anthropic). The implementation uses local
+> Gemma 4 E4B via Ollama instead — see [ADR-001](ADR-001-LOCAL-GEMMA-ARCHITECTURE.md).
+> All functional requirements remain the same; only the AI provider has changed.
 
 ---
 

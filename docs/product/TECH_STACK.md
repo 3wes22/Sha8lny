@@ -1,5 +1,10 @@
 # Sha8alny - Technology Stack
 
+> **⚠️ AI STACK UPDATE — April 2026**
+>
+> The AI/ML section below has been updated to reflect the current local Gemma architecture.
+> See [ADR-001](ADR-001-LOCAL-GEMMA-ARCHITECTURE.md) for rationale.
+
 ## Overview
 This document outlines the complete technology stack for the Sha8alny platform, including backend, frontend, database, AI/ML infrastructure, and supporting services.
 
@@ -39,13 +44,11 @@ This document outlines the complete technology stack for the Sha8alny platform, 
 **Database:**
 - **psycopg2-binary**: PostgreSQL adapter for Python/Django
 
-**AI/ML Integration:**
-- **openai**: OpenAI API client (if using GPT models)
-- **anthropic**: Anthropic API client (if using Claude)
-- **langchain**: LLM orchestration and chaining
-- **pinecone-client**: Vector database client for RAG
-- **sentence-transformers**: For embeddings generation
-- **transformers**: Hugging Face library for custom models
+**AI/ML Integration (Local Gemma — see ADR-001):**
+- **httpx**: HTTP client for Ollama API communication
+- **chromadb**: Local vector database for RAG
+- **sentence-transformers**: Embeddings generation (all-MiniLM-L6-v2)
+- ~~openai, anthropic, langchain, pinecone-client~~ — *RETIRED, see ADR-001*
 
 **Testing & Quality:**
 - **pytest-django**: Testing framework
@@ -155,59 +158,51 @@ This document outlines the complete technology stack for the Sha8alny platform, 
 
 ## AI/ML Infrastructure
 
+> Updated April 2026 — see [ADR-001](ADR-001-LOCAL-GEMMA-ARCHITECTURE.md)
+
 ### LLM Strategy
-**Hybrid Multi-Model Approach:**
+**Single Local Model — Deterministic Workflow:**
 
-1. **Commercial LLM APIs:**
-   - **OpenAI GPT-4/GPT-4-Turbo**: Complex reasoning, roadmap generation
-   - **Anthropic Claude**: Long-context tasks, detailed assessments
-   - **Google Gemini**: Cost-effective alternative for specific tasks
-   
-2. **Custom Fine-Tuned Models:**
-   - Domain-specific models trained on career/education data
-   - Egyptian job market specific understanding
-   - Cost optimization for high-frequency operations
+- **Model:** Google Gemma 4 E4B (4-bit quantized, ~6 GB)
+- **Runtime:** Ollama (local inference server)
+- **Concurrency:** One active inference at a time (single-lane Celery queue)
+- **Cost:** $0 — entirely local, no API keys required
+- **Config:** `Backend/apps/core/ai_settings.py`
 
-3. **Open-Source Models (Future):**
-   - **Llama 2/3**: Self-hosted for privacy-sensitive operations
-   - **Mistral**: European alternative with good performance
-   - Self-hosted deployment for cost control at scale
+**What the model handles:**
+- Assessment question generation and response evaluation
+- Roadmap content personalization (within deterministic structure)
+- RAG-powered career advisory chat
+- Optional job skill extraction from descriptions
+
+**What stays deterministic (no LLM):**
+- Workflow routing and scope classification
+- Roadmap phase structure and ordering
+- Course-to-milestone matching (embedding similarity)
+- Progress tracking and notification triggers
 
 ### RAG (Retrieval Augmented Generation)
 **Vector Database:**
-- **Pinecone**: Managed vector database
-  - Store course embeddings
-  - Store job description embeddings
-  - Store skill knowledge base
-  - Fast similarity search
+- **ChromaDB**: Local persistent vector database
+  - Career knowledge base chunks
+  - Course metadata embeddings
+  - Job skill embeddings (future)
+  - HNSW indexing for fast similarity search
 
 **RAG Pipeline:**
 ```
-User Query → Embedding → Vector Search → Context Retrieval → 
-LLM Augmented Generation → Response
+User Query → Embedding → ChromaDB Search → Context Retrieval →
+Prompt Assembly → Gemma Generation → Validation → Response
 ```
 
-**Embedding Models:**
-- **OpenAI text-embedding-ada-002**: General purpose
-- **Sentence-Transformers**: Open-source alternative
-- Custom fine-tuned embeddings for domain specificity
-
-### Model Fine-Tuning
-**Planned Fine-Tuning:**
-- Skill assessment accuracy
-- Egyptian market terminology
-- Career domain expertise
-- Course recommendation optimization
-
-**Tools:**
-- **Hugging Face Transformers**: Training pipeline
-- **Weights & Biases**: Experiment tracking
-- **PyTorch** / **TensorFlow**: Model training
+**Embedding Model:**
+- **all-MiniLM-L6-v2**: Lightweight, runs on CPU, good quality for semantic search
 
 ### AI Orchestration
-- **LangChain**: Chain complex AI workflows
-- **LangSmith**: Monitoring and debugging AI chains
-- **Prompt Templates**: Version-controlled prompt engineering
+- **No LangChain.** Orchestration is deterministic Python service functions.
+- **Prompt templates:** Version-controlled in service modules
+- **Output validation:** Pydantic / manual JSON parsing with retry
+- **Fallback:** Every LLM feature has a deterministic fallback path
 
 ---
 
@@ -357,9 +352,10 @@ LLM Augmented Generation → Response
 - Custom event tracking via Django
 
 ### AI/LLM Monitoring
-- **LangSmith**: LLM chain debugging
-- **Weights & Biases**: Model performance
-- Custom logging for token usage and costs
+- **Structured logging**: Every LLM call logs prompt, model, latency, token count, trace ID
+- **`AIInvocationMetadata`**: Standard metadata contract stored with every AI result
+- **Benchmark sheet**: Local hardware latency baseline tracking
+- ~~LangSmith, Weights & Biases~~ — *Not applicable for local Gemma setup*
 
 ---
 
@@ -502,5 +498,5 @@ LLM Augmented Generation → Response
 
 ---
 
-*Last Updated: November 2025*  
-*Status: Planning Phase - Stack subject to refinement based on development needs*
+*Last Updated: April 2026*  
+*Status: AI stack finalized for local Gemma architecture (ADR-001). Other components remain as planned.*

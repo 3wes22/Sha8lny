@@ -1,5 +1,24 @@
 # Sha8alny - System Architecture
 
+> **⚠️ AI ARCHITECTURE UPDATE — April 2026**
+>
+> This document was written when the project planned to use OpenAI GPT-4,
+> Anthropic Claude, LangChain orchestration, and Pinecone vector storage.
+> **That design was never implemented.**
+>
+> The **current active AI architecture** is:
+> - **Runtime:** Gemma 4 E4B via Ollama (local, zero-cost)
+> - **Orchestration:** Deterministic Django services (no multi-agent)
+> - **Vector store:** ChromaDB (local)
+> - **Config:** `Backend/apps/core/ai_settings.py`
+>
+> See [ADR-001](ADR-001-LOCAL-GEMMA-ARCHITECTURE.md) and
+> [Gemma Architecture Adoption Plan](GEMMA_ARCHITECTURE_ADOPTION_PLAN.md)
+> for the current design.
+>
+> Sections below that reference OpenAI, Anthropic, LangChain, or Pinecone
+> describe the **original plan, not the implementation**.
+
 ## Overview
 Sha8alny follows a **modular monolithic architecture** designed for rapid development, maintainability, and future scalability. This document outlines the high-level system design, module boundaries, data flow, and integration patterns.
 
