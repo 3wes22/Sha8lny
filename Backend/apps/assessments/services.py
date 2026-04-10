@@ -379,7 +379,8 @@ class AssessmentResultService:
         llm_model_used: str = "",
         llm_prompt_tokens: Optional[int] = None,
         llm_completion_tokens: Optional[int] = None,
-        processing_time_seconds: Optional[float] = None
+        processing_time_seconds: Optional[float] = None,
+        version: str = "1.0",
     ) -> AssessmentResult:
         """
         Create AI-analyzed assessment result.
@@ -422,6 +423,7 @@ class AssessmentResultService:
             existing.llm_prompt_tokens = llm_prompt_tokens
             existing.llm_completion_tokens = llm_completion_tokens
             existing.processing_time_seconds = processing_time_seconds
+            existing.version = version
             existing.save()
             return existing
 
@@ -439,7 +441,8 @@ class AssessmentResultService:
             llm_model_used=llm_model_used,
             llm_prompt_tokens=llm_prompt_tokens,
             llm_completion_tokens=llm_completion_tokens,
-            processing_time_seconds=processing_time_seconds
+            processing_time_seconds=processing_time_seconds,
+            version=version,
         )
 
         # Update assessment AI processing status

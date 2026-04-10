@@ -77,13 +77,33 @@ class AdvisoryConversationService:
         metadata: Dict[str, object],
     ) -> Message:
         processing_time_ms = metadata.get("processing_time_ms")
+        tokens_used = metadata.get("tokens_used")
+        if not isinstance(tokens_used, int):
+            prompt_tokens = metadata.get("prompt_tokens")
+            completion_tokens = metadata.get("completion_tokens")
+            if isinstance(prompt_tokens, int) and isinstance(completion_tokens, int):
+                tokens_used = prompt_tokens + completion_tokens
+            else:
+                tokens_used = None
+
+        assistant_context = {
+            **context_used,
+            "runtime": {
+                "source": metadata.get("source"),
+                "trace_id": metadata.get("trace_id"),
+                "provider": metadata.get("provider"),
+                "version": metadata.get("version"),
+                "fallback_used": metadata.get("fallback_used"),
+                "error_code": metadata.get("error_code"),
+            },
+        }
         return Message.objects.create(
             conversation=conversation,
             role=Message.ASSISTANT,
             content=content,
-            context_used=context_used,
+            context_used=assistant_context,
             model_used=(metadata.get("model") or "") if isinstance(metadata.get("model"), str) else "",
-            tokens_used=metadata.get("tokens_used"),
+            tokens_used=tokens_used,
             response_time_ms=processing_time_ms if isinstance(processing_time_ms, int) else None,
         )
 

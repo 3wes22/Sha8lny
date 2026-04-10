@@ -58,6 +58,18 @@ const RoadmapPage: React.FC = () => {
     void fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    if (!activeRoadmap || !["pending", "processing"].includes(activeRoadmap.ai_processing_status)) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void fetchData();
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
+  }, [activeRoadmap, fetchData]);
+
   const handleCreateRoadmap = async (templateId: string) => {
     try {
       setCreating(true);
@@ -95,6 +107,7 @@ const RoadmapPage: React.FC = () => {
   }
 
   const recommendedTemplates = templates.slice(0, 3);
+  const roadmapGenerating = !!activeRoadmap && ["pending", "processing"].includes(activeRoadmap.ai_processing_status);
 
   return (
     <PageShell
@@ -102,7 +115,9 @@ const RoadmapPage: React.FC = () => {
         <Button className="gradient-primary">
           <Map className="mr-2 h-4 w-4" />
           {activeRoadmap
-            ? activeRoadmap.status === "draft"
+            ? roadmapGenerating
+              ? "Generating atlas"
+              : activeRoadmap.status === "draft"
               ? "Draft ready"
               : "Atlas active"
             : "Choose a direction"}
@@ -179,7 +194,7 @@ const RoadmapPage: React.FC = () => {
           })}
         </div>
 
-        {creating ? (
+        {creating || roadmapGenerating ? (
           <StatePanel
             description="We are generating the roadmap structure and preparing the first phase."
             state="processing"
@@ -188,7 +203,7 @@ const RoadmapPage: React.FC = () => {
         ) : null}
       </section>
 
-      {activeRoadmap ? (
+      {activeRoadmap && !roadmapGenerating ? (
         <RoadmapProgressView
           onProgressUpdate={fetchData}
           roadmap={activeRoadmap}

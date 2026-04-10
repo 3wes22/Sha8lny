@@ -542,7 +542,10 @@ class RoadmapService:
                 RoadmapMilestone.objects.create(
                     phase=phase,
                     title=milestone_data['title'],
-                    description=f"Complete {milestone_data['title']} during the {phase.title} phase.",
+                    description=(
+                        milestone_data.get('description')
+                        or f"Complete {milestone_data['title']} during the {phase.title} phase."
+                    ),
                     milestone_type=milestone_data['type'],
                     order=milestone_idx,
                     estimated_duration_hours=Decimal(str(milestone_data['hours'])),
@@ -551,6 +554,238 @@ class RoadmapService:
                     skills=milestone_data.get('skills', []),
                     resources=[],
                 )
+
+    @staticmethod
+    def _build_generation_input_summary(
+        *,
+        target_career: str,
+        current_level: str,
+        target_level: str,
+        weekly_hours: int,
+        strengths: List[str],
+        gaps: List[str],
+        priority_skills: List[str],
+        top_skills: List[str],
+    ) -> Dict[str, Any]:
+        return {
+            'target_career': target_career,
+            'current_level': current_level,
+            'target_level': target_level,
+            'weekly_hours_commitment': weekly_hours,
+            'top_strengths': strengths,
+            'priority_skills': priority_skills,
+            'top_skills': top_skills,
+            'gaps': gaps,
+        }
+
+    @staticmethod
+    @transaction.atomic
+    def create_ai_roadmap_shell(
+        user: User,
+        assessment: Optional[AssessmentResult],
+        target_career: str,
+        current_level: str,
+        target_level: str,
+        weekly_hours: int = 10,
+    ) -> Roadmap:
+        if assessment:
+            existing = Roadmap.objects.filter(
+                user=user,
+                assessment=assessment,
+                status__in=[Roadmap.DRAFT, Roadmap.ACTIVE, Roadmap.IN_PROGRESS],
+                is_deleted=False,
+            ).order_by('-created_at').first()
+            if existing:
+                return existing
+
+        matched_template = RoadmapTemplateService.get_template_by_career(target_career)
+        template = matched_template[0] if matched_template else None
+        strengths = assessment.strengths[:3] if assessment else []
+        gaps = assessment.areas_for_improvement[:3] if assessment else []
+        priority_skills = RoadmapService._extract_priority_skills(assessment)
+        top_skills = RoadmapService._extract_top_skills(assessment)
+
+        metadata = {
+            'generation': {
+                'source': 'assessment_result' if assessment else 'manual_request',
+                'version': RoadmapService.GENERATOR_VERSION,
+                'runtime_version': None,
+                'assessment_id': str(assessment.id) if assessment else None,
+                'template_basis_id': str(template.id) if template else None,
+                'status': 'pending',
+                'task_id': None,
+                'trace_id': None,
+                'fallback_used': False,
+                'error_code': None,
+                'provider': None,
+                'input_summary': RoadmapService._build_generation_input_summary(
+                    target_career=target_career,
+                    current_level=current_level,
+                    target_level=target_level,
+                    weekly_hours=weekly_hours,
+                    strengths=strengths,
+                    gaps=gaps,
+                    priority_skills=priority_skills,
+                    top_skills=top_skills,
+                ),
+            }
+        }
+
+        return Roadmap.objects.create(
+            user=user,
+            template=template,
+            assessment=assessment,
+            title=f"{target_career} roadmap for {user.full_name or user.username or user.email}",
+            description=f'Personalized roadmap for {target_career}, paced for {weekly_hours} focused hours each week.',
+            target_career=target_career,
+            current_level=current_level,
+            target_level=target_level,
+            weekly_hours_commitment=weekly_hours,
+            estimated_duration_weeks=0,
+            status='draft',
+            ai_processing_status='pending',
+            metadata=metadata,
+        )
+
+    @staticmethod
+    @transaction.atomic
+    def populate_ai_roadmap(roadmap: Roadmap, *, task_id: Optional[str] = None) -> Roadmap:
+        from apps.roadmaps.ai_pipeline import RoadmapAIService
+
+        if roadmap.ai_processing_status == 'completed' and roadmap.phases.exists():
+            return roadmap
+
+        started_at = monotonic()
+        assessment = roadmap.assessment
+        matched_template = RoadmapTemplateService.get_template_by_career(roadmap.target_career)
+        template = roadmap.template or (matched_template[0] if matched_template else None)
+        strengths = assessment.strengths[:3] if assessment else []
+        gaps = assessment.areas_for_improvement[:3] if assessment else []
+        priority_skills = RoadmapService._extract_priority_skills(assessment)
+        top_skills = RoadmapService._extract_top_skills(assessment)
+
+        generation = roadmap.metadata.get('generation', {}) if isinstance(roadmap.metadata, dict) else {}
+        generation.update(
+            {
+                'status': 'processing',
+                'task_id': task_id or generation.get('task_id'),
+                'template_basis_id': str(template.id) if template else None,
+                'input_summary': RoadmapService._build_generation_input_summary(
+                    target_career=roadmap.target_career,
+                    current_level=roadmap.current_level,
+                    target_level=roadmap.target_level,
+                    weekly_hours=roadmap.weekly_hours_commitment,
+                    strengths=strengths,
+                    gaps=gaps,
+                    priority_skills=priority_skills,
+                    top_skills=top_skills,
+                ),
+            }
+        )
+
+        roadmap.ai_processing_status = 'processing'
+        roadmap.ai_processing_error = ''
+        roadmap.metadata = {**(roadmap.metadata if isinstance(roadmap.metadata, dict) else {}), 'generation': generation}
+        if template and roadmap.template_id != template.id:
+            roadmap.template = template
+        roadmap.save(update_fields=['ai_processing_status', 'ai_processing_error', 'metadata', 'template', 'updated_at'])
+
+        phases_data = RoadmapService._build_personalized_phase_blueprint(
+            target_career=roadmap.target_career,
+            current_level=roadmap.current_level,
+            strengths=strengths,
+            gaps=gaps,
+            priority_skills=priority_skills,
+            top_skills=top_skills,
+            weekly_hours=roadmap.weekly_hours_commitment,
+        )
+        estimated_duration_weeks = sum(phase['weeks'] for phase in phases_data)
+        default_summary = (
+            f'This roadmap prioritizes {", ".join(priority_skills[:2]) or roadmap.target_career} and closes '
+            f'the most visible gaps from your latest assessment.'
+        )
+        personalization = RoadmapAIService.personalize_blueprint(
+            target_career=roadmap.target_career,
+            current_level=roadmap.current_level,
+            target_level=roadmap.target_level,
+            weekly_hours=roadmap.weekly_hours_commitment,
+            strengths=strengths,
+            gaps=gaps,
+            priority_skills=priority_skills,
+            top_skills=top_skills,
+            phases_data=phases_data,
+            default_summary=default_summary,
+        )
+
+        roadmap.phases.all().delete()
+        RoadmapService._create_personalized_structure(roadmap, personalization.phases)
+
+        generation.update(
+            {
+                'status': 'completed',
+                'runtime_version': personalization.metadata.version,
+                'trace_id': personalization.metadata.trace_id,
+                'fallback_used': personalization.metadata.fallback_used,
+                'error_code': personalization.metadata.error_code,
+                'provider': personalization.metadata.provider,
+            }
+        )
+        roadmap.metadata = {**(roadmap.metadata if isinstance(roadmap.metadata, dict) else {}), 'generation': generation}
+        roadmap.description = personalization.summary
+        roadmap.estimated_duration_weeks = estimated_duration_weeks
+        roadmap.ai_processing_status = 'completed'
+        roadmap.ai_processed_at = timezone.now()
+        roadmap.llm_model_used = personalization.metadata.model or ''
+        roadmap.llm_prompt_tokens = personalization.prompt_tokens
+        roadmap.llm_completion_tokens = personalization.completion_tokens
+        roadmap.processing_time_seconds = Decimal(f"{monotonic() - started_at:.2f}")
+        roadmap.ai_insights = {
+            'summary': personalization.summary,
+            'strengths': strengths,
+            'gaps': gaps,
+            'priority_skills': priority_skills,
+            'top_skills': top_skills,
+            'job_readiness_focus': roadmap.target_career,
+            'coaching_notes': personalization.coaching_notes,
+        }
+        roadmap.save(
+            update_fields=[
+                'description',
+                'estimated_duration_weeks',
+                'ai_processing_status',
+                'ai_processed_at',
+                'llm_model_used',
+                'llm_prompt_tokens',
+                'llm_completion_tokens',
+                'processing_time_seconds',
+                'ai_insights',
+                'metadata',
+                'updated_at',
+            ]
+        )
+
+        roadmap_generated.send(
+            sender=Roadmap,
+            instance=roadmap,
+            user=roadmap.user
+        )
+
+        return roadmap
+
+    @staticmethod
+    def record_generation_failure(
+        roadmap: Roadmap,
+        *,
+        error_message: str,
+        error_code: Optional[str] = None,
+    ) -> Roadmap:
+        generation = roadmap.metadata.get('generation', {}) if isinstance(roadmap.metadata, dict) else {}
+        generation.update({'status': 'failed', 'error_code': error_code or generation.get('error_code')})
+        roadmap.metadata = {**(roadmap.metadata if isinstance(roadmap.metadata, dict) else {}), 'generation': generation}
+        roadmap.ai_processing_status = 'failed'
+        roadmap.ai_processing_error = error_message
+        roadmap.save(update_fields=['metadata', 'ai_processing_status', 'ai_processing_error', 'updated_at'])
+        return roadmap
 
     @staticmethod
     @transaction.atomic
@@ -579,95 +814,15 @@ class RoadmapService:
         Returns:
             Roadmap: Created roadmap with AI processing status
         """
-        if assessment:
-            existing = Roadmap.objects.filter(
-                user=user,
-                assessment=assessment,
-                status__in=[Roadmap.DRAFT, Roadmap.ACTIVE, Roadmap.IN_PROGRESS],
-                is_deleted=False,
-            ).order_by('-created_at').first()
-            if existing:
-                return existing
-
-        started_at = monotonic()
-        matched_template = RoadmapTemplateService.get_template_by_career(target_career)
-        template = matched_template[0] if matched_template else None
-        strengths = assessment.strengths[:3] if assessment else []
-        gaps = assessment.areas_for_improvement[:3] if assessment else []
-        priority_skills = RoadmapService._extract_priority_skills(assessment)
-        top_skills = RoadmapService._extract_top_skills(assessment)
-        phases_data = RoadmapService._build_personalized_phase_blueprint(
-            target_career=target_career,
-            current_level=current_level,
-            strengths=strengths,
-            gaps=gaps,
-            priority_skills=priority_skills,
-            top_skills=top_skills,
-            weekly_hours=weekly_hours,
-        )
-        estimated_duration_weeks = sum(phase['weeks'] for phase in phases_data)
-        metadata = {
-            'generation': {
-                'source': 'assessment_result' if assessment else 'manual_request',
-                'version': RoadmapService.GENERATOR_VERSION,
-                'assessment_id': str(assessment.id) if assessment else None,
-                'template_basis_id': str(template.id) if template else None,
-                'input_summary': {
-                    'target_career': target_career,
-                    'current_level': current_level,
-                    'target_level': target_level,
-                    'weekly_hours_commitment': weekly_hours,
-                    'top_strengths': strengths,
-                    'priority_skills': priority_skills,
-                    'top_skills': top_skills,
-                    'gaps': gaps,
-                },
-            }
-        }
-        ai_insights = {
-            'summary': (
-                f'This roadmap prioritizes {", ".join(priority_skills[:2]) or target_career} and closes '
-                f'the most visible gaps from your latest assessment.'
-            ),
-            'strengths': strengths,
-            'gaps': gaps,
-            'priority_skills': priority_skills,
-            'top_skills': top_skills,
-            'job_readiness_focus': target_career,
-        }
-
-        roadmap = Roadmap.objects.create(
+        roadmap = RoadmapService.create_ai_roadmap_shell(
             user=user,
-            template=template,
             assessment=assessment,
-            title=f"{target_career} roadmap for {user.full_name or user.username or user.email}",
-            description=(
-                f'Personalized roadmap for {target_career}, built from your latest assessment '
-                f'and paced for {weekly_hours} focused hours each week.'
-            ),
             target_career=target_career,
             current_level=current_level,
             target_level=target_level,
-            weekly_hours_commitment=weekly_hours,
-            estimated_duration_weeks=estimated_duration_weeks,
-            status='draft',
-            ai_processing_status='completed',
-            ai_processed_at=timezone.now(),
-            llm_model_used=RoadmapService.GENERATOR_MODEL,
-            ai_insights=ai_insights,
-            metadata=metadata,
+            weekly_hours=weekly_hours,
         )
-        RoadmapService._create_personalized_structure(roadmap, phases_data)
-        roadmap.processing_time_seconds = Decimal(f"{monotonic() - started_at:.2f}")
-        roadmap.save(update_fields=['processing_time_seconds', 'updated_at'])
-
-        # Emit signal
-        roadmap_generated.send(
-            sender=Roadmap,
-            instance=roadmap,
-            user=user
-        )
-
+        RoadmapService.populate_ai_roadmap(roadmap)
         return roadmap
 
     @staticmethod

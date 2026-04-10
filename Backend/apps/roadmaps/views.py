@@ -9,6 +9,10 @@ SRS References:
 - FR-11: Course Association with Roadmaps
 """
 
+from types import SimpleNamespace
+from uuid import uuid4
+
+from django.conf import settings
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -37,6 +41,10 @@ from apps.roadmaps.serializers import (
 from apps.roadmaps.services import (
     RoadmapTemplateService,
     RoadmapService,
+)
+from apps.roadmaps.tasks import (
+    generate_ai_roadmap_task,
+    run_generate_ai_roadmap,
 )
 from apps.assessments.models import AssessmentResult
 
@@ -92,6 +100,14 @@ class RoadmapTemplateViewSet(viewsets.ReadOnlyModelViewSet):
 # ============================================================================
 # ROADMAP VIEWS
 # ============================================================================
+
+
+def dispatch_roadmap_task(task, eager_runner, roadmap_id: str):
+    if getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):
+        task_id = uuid4().hex
+        eager_runner(roadmap_id, task_id=task_id)
+        return SimpleNamespace(id=task_id)
+    return task.delay(roadmap_id)
 
 class RoadmapViewSet(viewsets.ModelViewSet):
     """
@@ -207,8 +223,7 @@ class RoadmapViewSet(viewsets.ModelViewSet):
         else:
             # AI-generated roadmap
             assessment = serializer.validated_data.get('assessment')
-
-            roadmap = RoadmapService.generate_ai_roadmap(
+            roadmap = RoadmapService.create_ai_roadmap_shell(
                 user=request.user,
                 assessment=assessment,
                 target_career=serializer.validated_data['target_career'],
@@ -216,10 +231,23 @@ class RoadmapViewSet(viewsets.ModelViewSet):
                 target_level=serializer.validated_data['target_level'],
                 weekly_hours=serializer.validated_data.get('weekly_hours_commitment', 10)
             )
+            generation = roadmap.metadata.get('generation', {}) if isinstance(roadmap.metadata, dict) else {}
+            needs_generation = roadmap.ai_processing_status != 'completed' or not roadmap.phases.exists()
+            task_in_flight = bool(generation.get('task_id')) and roadmap.ai_processing_status in {'pending', 'processing'}
+            if needs_generation and not task_in_flight:
+                task = dispatch_roadmap_task(
+                    generate_ai_roadmap_task,
+                    run_generate_ai_roadmap,
+                    str(roadmap.id),
+                )
+                if not getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):
+                    generation['task_id'] = getattr(task, 'id', None)
+                    roadmap.metadata = {**(roadmap.metadata if isinstance(roadmap.metadata, dict) else {}), 'generation': generation}
+                    roadmap.save(update_fields=['metadata', 'updated_at'])
 
         return Response(
             RoadmapSerializer(roadmap).data,
-            status=status.HTTP_201_CREATED
+            status=status.HTTP_202_ACCEPTED if 'template_id' not in request.data else status.HTTP_201_CREATED
         )
 
     def retrieve(self, request, *args, **kwargs):

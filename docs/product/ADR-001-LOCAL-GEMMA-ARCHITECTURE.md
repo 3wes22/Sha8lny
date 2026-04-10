@@ -30,7 +30,7 @@ is the correct architecture.
 The project adopts the following architecture:
 
 ### Runtime
-- **Model:** Google Gemma 4 E4B (4-bit quantized via Ollama)
+- **Model:** Google Gemma 4 E2B (default, fits 8GB RAM) or E4B (16GB RAM machines)
 - **Inference:** Single local Ollama instance, one inference at a time
 - **Vector store:** ChromaDB (local, persistent)
 - **Embeddings:** all-MiniLM-L6-v2 (CPU, lightweight)

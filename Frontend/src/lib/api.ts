@@ -715,7 +715,7 @@ export interface Assessment {
     current_index: number;
     progress_ratio: number;
     interaction_modes: string[];
-    submission_state: "draft" | "submitting" | "processing" | "completed" | "failed";
+    submission_state: "draft" | "generating" | "ready" | "submitting" | "processing" | "completed" | "failed";
     result_summary_available: boolean;
     estimated_minutes: number;
   };
@@ -737,7 +737,7 @@ export interface AssessmentSubmitRequest {
 export interface AssessmentSubmitResponse {
   message: string;
   assessment: Assessment;
-  result_id: string;
+  result_id: string | null;
   submission_state?: "processing" | "completed";
 }
 

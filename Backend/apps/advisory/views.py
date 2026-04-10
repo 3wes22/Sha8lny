@@ -96,10 +96,11 @@ class ChatView(APIView):
             conversation_history=resolved_history,
             user_context=user_context,
         )
+        assistant_context = metadata.get('context_used') if isinstance(metadata.get('context_used'), dict) else user_context
         AdvisoryConversationService.add_assistant_message(
             conversation,
             response_text,
-            user_context,
+            assistant_context,
             metadata,
         )
         AdvisoryConversationService.refresh_conversation(conversation)

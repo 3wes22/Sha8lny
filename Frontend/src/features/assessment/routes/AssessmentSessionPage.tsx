@@ -20,11 +20,15 @@ export default function AssessmentSessionPage() {
 
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [loading, setLoading] = useState(true);
+  const [waitingForQuestions, setWaitingForQuestions] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<AnswerMap>({});
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    let ignore = false;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
     const loadAssessment = async () => {
       if (!assessmentId) {
         navigate("/assessment");
@@ -34,6 +38,10 @@ export default function AssessmentSessionPage() {
       try {
         setLoading(true);
         const data = await assessmentApi.get(assessmentId);
+        if (ignore) {
+          return;
+        }
+
         setAssessment(data);
 
         const existingAnswers: AnswerMap = {};
@@ -41,19 +49,40 @@ export default function AssessmentSessionPage() {
           existingAnswers[response.question_id] = response.answer;
         });
         setAnswers(existingAnswers);
+
+        const questionGenerationPending =
+          data.questions.length === 0 &&
+          (data.ai_processing_status === "pending" || data.ai_processing_status === "processing");
+
+        setWaitingForQuestions(questionGenerationPending);
+
+        if (questionGenerationPending) {
+          pollTimer = setTimeout(() => void loadAssessment(), 2000);
+        }
       } catch {
-        toast({
-          title: "Error loading assessment",
-          description: "Could not load the assessment. Please try again.",
-          variant: "destructive",
-        });
-        navigate("/assessment");
+        if (!ignore) {
+          toast({
+            title: "Error loading assessment",
+            description: "Could not load the assessment. Please try again.",
+            variant: "destructive",
+          });
+          navigate("/assessment");
+        }
       } finally {
-        setLoading(false);
+        if (!ignore) {
+          setLoading(false);
+        }
       }
     };
 
     void loadAssessment();
+
+    return () => {
+      ignore = true;
+      if (pollTimer) {
+        clearTimeout(pollTimer);
+      }
+    };
   }, [assessmentId, navigate, toast]);
 
   if (loading) {
@@ -65,6 +94,16 @@ export default function AssessmentSessionPage() {
   }
 
   if (!assessment || assessment.questions.length === 0) {
+    if (waitingForQuestions || assessment?.presentation?.submission_state === "generating") {
+      return (
+        <StatePanel
+          description="We are generating the questions for this assessment. Stay on this screen and it will become ready automatically."
+          state="processing"
+          title="Preparing assessment"
+        />
+      );
+    }
+
     return (
       <StatePanel
         description="The assessment could not be loaded."

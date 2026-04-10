@@ -3,7 +3,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.roadmaps.models import RoadmapTemplate
+from apps.roadmaps.models import Roadmap, RoadmapTemplate
 from apps.roadmaps.services import RoadmapService
 from apps.users.models import User
 
@@ -75,3 +75,28 @@ def test_roadmap_stats_exposes_next_action_summary(api_client, roadmap_user, roa
     assert "current_focus_node_id" in response.data
     assert "next_action" in response.data
     assert response.data["next_action"]["title"]
+
+
+@pytest.mark.django_db
+def test_pending_roadmap_detail_exposes_generation_summary(api_client, roadmap_user):
+    api_client.force_authenticate(user=roadmap_user)
+    roadmap = Roadmap.objects.create(
+        user=roadmap_user,
+        title="Backend roadmap for Roadmap User",
+        description="Personalized roadmap for Backend Engineer.",
+        target_career="Backend Engineer",
+        current_level="beginner",
+        target_level="job-ready",
+        estimated_duration_weeks=0,
+        weekly_hours_commitment=10,
+        status="draft",
+        ai_processing_status="pending",
+        metadata={"generation": {"source": "assessment_result", "version": "roadmap-generator-v1"}},
+    )
+
+    response = api_client.get(reverse("roadmaps:roadmap-detail", args=[roadmap.id]))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["ai_processing_status"] == "pending"
+    assert response.data["journey_summary"]["next_action_title"] == "Preparing personalized phases"
+    assert response.data["journey_nodes"] == []

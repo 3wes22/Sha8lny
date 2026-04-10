@@ -1,32 +1,46 @@
 """
-Test model loading functionality
+Smoke tests for local model-loading helpers.
 """
-import pytest
-import torch
+
+from importlib import import_module
 from pathlib import Path
 import sys
 
-# Add src to path
+import pytest
+
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.llm import ModelLoader
+
+def _import_model_loader():
+    try:
+        import_module("torch")
+    except ImportError:
+        pytest.skip("torch is not importable in this environment.")
+
+    from src.llm import ModelLoader
+
+    return ModelLoader
 
 
 def test_model_loader_exists():
-    """Test that ModelLoader class exists"""
-    assert ModelLoader is not None
+    model_loader = _import_model_loader()
+    assert model_loader is not None
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="Requires GPU")
 def test_load_model_4bit():
-    """Test 4-bit model loading (requires GPU)"""
-    # This test will be skipped if no GPU available
-    # Actual testing should be done on Kaggle/Colab
-    pass
+    try:
+        torch = import_module("torch")
+    except ImportError:
+        pytest.skip("torch is not importable in this environment.")
+
+    if not torch.cuda.is_available():
+        pytest.skip("Requires GPU")
+
+    _import_model_loader()
 
 
 def test_model_paths():
-    """Test that model paths are configured"""
     from config import settings
 
     assert settings.MODELS_DIR is not None

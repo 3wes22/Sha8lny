@@ -14,7 +14,7 @@ from decouple import config
 # Ollama connection
 # ---------------------------------------------------------------------------
 OLLAMA_HOST = config("OLLAMA_HOST", default="http://127.0.0.1:11434")
-OLLAMA_MODEL = config("OLLAMA_MODEL", default="gemma4:e4b")
+OLLAMA_MODEL = config("OLLAMA_MODEL", default="gemma4:e2b")
 
 # ---------------------------------------------------------------------------
 # Inference behaviour
@@ -27,10 +27,10 @@ OLLAMA_RETRY_BACKOFF_SECONDS = config(
 OLLAMA_TEMPERATURE = config("OLLAMA_TEMPERATURE", default=0.3, cast=float)
 
 # Maximum context window tokens to request.
-# Keep conservative so the KV cache fits in GPU memory alongside the model.
-#   M1 16 GB  → safe up to ~12 000
-#   RTX 3050 8 GB → safe up to ~6 000
-OLLAMA_NUM_CTX = config("OLLAMA_NUM_CTX", default=8192, cast=int)
+# Keep conservative so the KV cache fits in memory alongside the model.
+#   M1 8 GB   → safe up to ~4 096  (default)
+#   16 GB RAM → safe up to ~8 192  (set in .env)
+OLLAMA_NUM_CTX = config("OLLAMA_NUM_CTX", default=4096, cast=int)
 
 # ---------------------------------------------------------------------------
 # Celery AI queue – single-lane by design (see ADR-001)

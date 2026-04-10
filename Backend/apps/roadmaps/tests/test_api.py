@@ -16,6 +16,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.assessments.models import Assessment, AssessmentResult
+from apps.core.ai_settings import OLLAMA_MODEL
 from apps.users.models import User
 from apps.roadmaps.models import (
     RoadmapTemplate, Roadmap, RoadmapPhase,
@@ -231,18 +232,20 @@ class TestRoadmapCreationAPI:
             format='json',
         )
 
-        assert response.status_code == status.HTTP_201_CREATED
+        assert response.status_code == status.HTTP_202_ACCEPTED
         assert response.data['target_career'] == 'Backend Developer'
         assert response.data['current_level'] == 'intermediate'
         assert response.data['target_level'] == 'job-ready'
-        assert response.data['ai_processing_status'] == 'completed'
+        assert response.data['ai_processing_status'] == 'pending'
 
         roadmap = Roadmap.objects.get(id=response.data['id'])
+        roadmap.refresh_from_db()
         assert roadmap.assessment == assessment_result
         assert roadmap.ai_processed_at is not None
-        assert roadmap.llm_model_used == 'sha8alny-roadmap-v1'
+        assert roadmap.llm_model_used == OLLAMA_MODEL
         assert roadmap.metadata['generation']['source'] == 'assessment_result'
         assert roadmap.metadata['generation']['version'] == 'roadmap-generator-v1'
+        assert roadmap.metadata['generation']['runtime_version']
         assert roadmap.ai_insights['strengths'] == ['Problem solving', 'Consistency']
         assert roadmap.ai_insights['priority_skills'] == ['Django', 'PostgreSQL']
         assert roadmap.phases.count() == 3
@@ -285,8 +288,8 @@ class TestRoadmapCreationAPI:
         first_response = api_client.post(url, {'assessment_id': str(assessment_result.id)}, format='json')
         second_response = api_client.post(url, {'assessment_id': str(assessment_result.id)}, format='json')
 
-        assert first_response.status_code == status.HTTP_201_CREATED
-        assert second_response.status_code == status.HTTP_201_CREATED
+        assert first_response.status_code == status.HTTP_202_ACCEPTED
+        assert second_response.status_code == status.HTTP_202_ACCEPTED
         assert second_response.data['id'] == first_response.data['id']
         assert Roadmap.objects.filter(user=test_user, assessment=assessment_result, is_deleted=False).count() == 1
 
@@ -323,7 +326,7 @@ class TestRoadmapCreationAPI:
             format='json',
         )
 
-        assert response.status_code == status.HTTP_201_CREATED
+        assert response.status_code == status.HTTP_202_ACCEPTED
         assert response.data['target_career'] == 'Frontend Developer'
 
 

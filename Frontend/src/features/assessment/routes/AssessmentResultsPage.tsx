@@ -71,7 +71,7 @@ export default function AssessmentResultsPage() {
     try {
       setCreatingRoadmap(true);
       await roadmapApi.createAI({ assessment_id: result.id });
-      toast.success("Personalized roadmap ready.");
+      toast.success("Personalized roadmap is being prepared.");
       navigate(ROUTES.roadmap);
     } catch (err) {
       toast.error(getApiErrorMessage(err, "Could not generate a personalized roadmap."));

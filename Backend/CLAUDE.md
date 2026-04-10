@@ -19,7 +19,7 @@ This file provides backend-specific guidance for the Sha8lny Django application.
 
 ## Project Overview
 
-**Sha8alny** is an AI-powered career development platform that provides personalized learning roadmaps, skill assessments, course recommendations, and job market insights. The backend is built using Django with a **modular monolithic architecture**, leveraging LLMs (OpenAI, Anthropic) for intelligent career guidance.
+**Sha8alny** is an AI-powered career development platform that provides personalized learning roadmaps, skill assessments, course recommendations, and job market insights. The backend is built using Django with a **modular monolithic architecture**, using local Gemma via Ollama plus the shared backend AI runtime for intelligent career guidance.
 
 **Architecture**: Modular Monolith
 - Single Django application with clear module boundaries

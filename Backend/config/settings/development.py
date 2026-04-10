@@ -77,9 +77,9 @@ REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] = [
     'rest_framework.renderers.BrowsableAPIRenderer',  # Browsable API
 ]
 
-# Celery - Use eager mode in development (execute tasks synchronously)
-# Uncomment when you want to test actual async behavior with Redis
-# CELERY_TASK_ALWAYS_EAGER = True
-# CELERY_TASK_EAGER_PROPAGATES = True
+# Celery - Use eager mode in development so async-first endpoints can be exercised
+# without requiring a running Redis broker during local verification.
+CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_EAGER_PROPAGATES = True
 
 print(">> Development settings loaded")

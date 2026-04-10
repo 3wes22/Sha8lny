@@ -36,9 +36,17 @@ def test_assessment_detail_exposes_presentation_metadata(api_client, assessment_
     )
 
     assert create_response.status_code == status.HTTP_201_CREATED
-    assert create_response.data["presentation"]["question_count"] == 6
-    assert create_response.data["presentation"]["interaction_modes"]
-    assert create_response.data["questions"][0]["interaction_mode"]
+    assert create_response.data["presentation"]["submission_state"] == "generating"
+    assert create_response.data["presentation"]["question_count"] == 0
+
+    detail_response = api_client.get(
+        reverse("assessment-detail", kwargs={"pk": str(create_response.data["id"])})
+    )
+
+    assert detail_response.status_code == status.HTTP_200_OK
+    assert detail_response.data["presentation"]["question_count"] == 6
+    assert detail_response.data["presentation"]["interaction_modes"]
+    assert detail_response.data["questions"][0]["interaction_mode"]
 
 
 @pytest.mark.django_db

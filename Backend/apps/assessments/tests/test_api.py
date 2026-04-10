@@ -40,7 +40,7 @@ class TestAssessmentAPI:
         self.client.force_authenticate(user=self.user)
 
     def test_create_assessment(self):
-        """Test creating a new assessment."""
+        """Test creating a new assessment queues question generation."""
         url = reverse('assessment-list')
         data = {
             'assessment_type': 'skills',
@@ -54,11 +54,14 @@ class TestAssessmentAPI:
         assert response.data['assessment_type'] == 'skills'
         assert response.data['target_career'] == 'Software Engineer'
         assert response.data['status'] == 'draft'
-        assert response.data['total_questions'] == 6  # Predefined questions
-        assert len(response.data['questions']) == 6
+        assert response.data['ai_processing_status'] == 'pending'
+        assert response.data['total_questions'] == 0
+        assert response.data['questions'] == []
+        assert response.data['presentation']['submission_state'] == 'generating'
 
         assessment = Assessment.objects.get(id=response.data['id'])
         assert assessment.target_career == 'Software Engineer'
+        assert assessment.ai_task_id
 
     def test_create_assessment_unauthenticated(self):
         """Test creating assessment without authentication fails."""
@@ -133,7 +136,7 @@ class TestAssessmentAPI:
         assert len(response.data['questions']) == 1
 
     def test_submit_assessment_responses(self):
-        """Test submitting assessment responses."""
+        """Test submitting assessment responses queues async evaluation."""
         assessment = Assessment.objects.create(
             user=self.user,
             assessment_type='skills',
@@ -154,16 +157,18 @@ class TestAssessmentAPI:
 
         response = self.client.post(url, data, format='json')
 
-        assert response.status_code == status.HTTP_200_OK
+        assert response.status_code == status.HTTP_202_ACCEPTED
         assert 'message' in response.data
         assert 'assessment' in response.data
-        assert 'result_id' in response.data
+        assert response.data['submission_state'] == 'processing'
+        assert response.data['result_id'] is None
 
         # Verify assessment was updated
         assessment.refresh_from_db()
         assert assessment.status == 'completed'
         assert assessment.answered_questions == 2
         assert assessment.ai_processing_status == 'completed'
+        assert AssessmentResult.objects.filter(assessment=assessment, is_deleted=False).exists()
 
     def test_submit_already_completed_assessment(self):
         """Test submitting responses to already completed assessment fails."""
@@ -353,14 +358,16 @@ class TestAssessmentQuestionGeneration:
         self.client.force_authenticate(user=self.user)
 
     def test_assessment_has_predefined_questions(self):
-        """Test created assessment has predefined questions."""
+        """Test generated assessment detail exposes the fallback/generated questions."""
         url = reverse('assessment-list')
         data = {'assessment_type': 'skills'}
 
         response = self.client.post(url, data, format='json')
 
         assert response.status_code == status.HTTP_201_CREATED
-        questions = response.data['questions']
+        detail_response = self.client.get(reverse('assessment-detail', kwargs={'pk': response.data['id']}))
+        assert detail_response.status_code == status.HTTP_200_OK
+        questions = detail_response.data['questions']
 
         assert len(questions) > 0
         assert all('id' in q for q in questions)
@@ -369,12 +376,13 @@ class TestAssessmentQuestionGeneration:
         assert all('category' in q for q in questions)
 
     def test_question_types_present(self):
-        """Test assessment contains different question types."""
+        """Test generated assessment detail contains different question types."""
         url = reverse('assessment-list')
         data = {'assessment_type': 'skills'}
 
         response = self.client.post(url, data, format='json')
-        questions = response.data['questions']
+        detail_response = self.client.get(reverse('assessment-detail', kwargs={'pk': response.data['id']}))
+        questions = detail_response.data['questions']
 
         question_types = {q['type'] for q in questions}
 

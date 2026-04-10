@@ -1,7 +1,7 @@
 """
 LLM Generator for Career Advisory
 
-Integrates with Ollama for local Mistral 7B inference.
+Integrates with Ollama for local Gemma inference.
 Handles response generation with RAG context and scope filtering.
 """
 
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 OLLAMA_BASE_URL = "http://localhost:11434"
-DEFAULT_MODEL = "mistral"
+DEFAULT_MODEL = "gemma4:e2b"
 
 # Response timing (variable delay based on length)
 MIN_DELAY_SECONDS = 0.5
@@ -34,7 +34,7 @@ MAX_DELAY_SECONDS = 3.0
 CHARS_PER_SECOND = 100  # Simulated typing speed
 
 # Model parameters
-DEFAULT_TEMPERATURE = 0.7
+DEFAULT_TEMPERATURE = 0.3
 DEFAULT_MAX_TOKENS = 1024
 
 
@@ -329,7 +329,7 @@ if __name__ == "__main__":
     
     # Check Ollama status
     print(f"Ollama available: {check_ollama_available()}")
-    print(f"Mistral model available: {check_model_available()}")
+    print(f"Gemma model available: {check_model_available()}")
     
     if check_ollama_available() and check_model_available():
         # Test generation

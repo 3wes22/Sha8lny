@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 
 const mocks = vi.hoisted(() => ({
   roadmapTemplateList: vi.fn(),
@@ -113,5 +113,46 @@ describe("RoadmapPage", () => {
     expect(await screen.findByText(/In-progress roadmap description/i)).toBeInTheDocument();
     expect(mocks.roadmapList).toHaveBeenCalledTimes(1);
     expect(mocks.roadmapList).toHaveBeenCalledWith({ status: "in_progress" });
+  });
+
+  it("polls until a pending roadmap finishes generating", async () => {
+    mocks.roadmapList
+      .mockResolvedValueOnce({ results: [] })
+      .mockResolvedValueOnce({ results: [] })
+      .mockResolvedValueOnce({ results: [{ id: "roadmap-draft-1", status: "draft" }] })
+      .mockResolvedValueOnce({ results: [] })
+      .mockResolvedValueOnce({ results: [] })
+      .mockResolvedValueOnce({ results: [{ id: "roadmap-draft-1", status: "draft" }] });
+    mocks.roadmapGet
+      .mockResolvedValueOnce({
+        id: "roadmap-draft-1",
+        title: "Backend Engineer",
+        description: "Roadmap shell",
+        status: "draft",
+        ai_processing_status: "pending",
+        completion_percentage: "0",
+        total_phases: 0,
+        phases: [],
+      })
+      .mockResolvedValueOnce({
+        id: "roadmap-draft-1",
+        title: "Backend Engineer",
+        description: "Personalized roadmap description",
+        status: "draft",
+        ai_processing_status: "completed",
+        completion_percentage: "0",
+        total_phases: 3,
+        phases: [],
+      });
+
+    render(<RoadmapPage />);
+
+    expect(await screen.findByText(/Creating roadmap/i)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(mocks.roadmapGet).toHaveBeenCalledTimes(2);
+    }, { timeout: 3000 });
+
+    expect(await screen.findByText(/Personalized roadmap description/i)).toBeInTheDocument();
   });
 });

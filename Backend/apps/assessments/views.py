@@ -9,6 +9,10 @@ SRS References:
 - FR-8: AI Processing
 """
 
+from types import SimpleNamespace
+from uuid import uuid4
+
+from django.conf import settings
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -25,17 +29,29 @@ from apps.assessments.serializers import (
     AssessmentResultSerializer,
     AssessmentListSerializer,
 )
-from apps.assessments.services import (
-    AssessmentService,
-    AssessmentResultService,
-    BaselineAssessmentAnalyzer,
+from apps.assessments.tasks import (
+    evaluate_assessment_answers_task,
+    generate_assessment_questions_task,
+    run_evaluate_assessment_answers,
+    run_generate_assessment_questions,
 )
-from apps.core.ai_contracts import AssessmentAnalysisInput
+from apps.assessments.services import (
+    AssessmentResultService,
+)
 
 
 # ============================================================================
 # ASSESSMENT VIEWS
 # ============================================================================
+
+
+def dispatch_assessment_task(task, eager_runner, assessment_id: str):
+    if getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):
+        task_id = uuid4().hex
+        eager_runner(assessment_id, task_id=task_id)
+        return SimpleNamespace(id=task_id)
+    return task.delay(assessment_id)
+
 
 class AssessmentViewSet(viewsets.ModelViewSet):
     """
@@ -94,8 +110,14 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # Create assessment using service
         assessment = serializer.save()
+        task = dispatch_assessment_task(
+            generate_assessment_questions_task,
+            run_generate_assessment_questions,
+            str(assessment.id),
+        )
+        assessment.ai_task_id = getattr(task, "id", "") or ""
+        assessment.save(update_fields=["ai_task_id", "updated_at"])
 
         return Response(
             AssessmentSerializer(assessment).data,
@@ -239,49 +261,34 @@ class AssessmentViewSet(viewsets.ModelViewSet):
 
         responses = serializer.validated_data['responses']
 
-        # Update assessment with responses
+        if not assessment.questions:
+            return Response(
+                {'error': 'Assessment questions are still being generated'},
+                status=status.HTTP_409_CONFLICT
+            )
+
         assessment.responses = responses
         assessment.status = 'completed'
         assessment.completed_at = timezone.now()
         assessment.answered_questions = len(responses)
+        assessment.ai_processing_status = 'pending'
         assessment.save()
-
-        analysis = BaselineAssessmentAnalyzer.analyze(
-            AssessmentAnalysisInput(
-                assessment_id=str(assessment.id),
-                assessment_type=assessment.assessment_type,
-                target_career=assessment.target_career,
-                responses=responses,
-            )
+        task = dispatch_assessment_task(
+            evaluate_assessment_answers_task,
+            run_evaluate_assessment_answers,
+            str(assessment.id),
         )
-        result = AssessmentResultService.create_assessment_result(
-            assessment=assessment,
-            overall_score=analysis.overall_score,
-            skill_scores=analysis.skill_scores,
-            strengths=analysis.strengths,
-            areas_for_improvement=analysis.areas_for_improvement,
-            recommended_careers=analysis.recommended_careers,
-            recommended_learning_paths=analysis.recommended_learning_paths,
-            ai_insights=analysis.ai_insights,
-            ai_confidence_score=analysis.ai_confidence_score,
-            llm_model_used=analysis.metadata.model or '',
-            processing_time_seconds=analysis.metadata.processing_time_ms / 1000,
-        )
-
-        # Update assessment AI status
-        assessment.ai_processing_status = 'completed'
-        assessment.ai_processed_at = timezone.now()
-        assessment.ai_processing_error = ''
-        assessment.save()
+        assessment.ai_task_id = getattr(task, "id", "") or ""
+        assessment.save(update_fields=["ai_task_id", "updated_at"])
 
         return Response(
             {
-                'message': 'Assessment submitted successfully',
+                'message': 'Assessment submitted successfully and queued for analysis',
                 'assessment': AssessmentSerializer(assessment).data,
-                'result_id': str(result.id),
-                'submission_state': 'completed',
+                'result_id': None,
+                'submission_state': 'processing',
             },
-            status=status.HTTP_200_OK
+            status=status.HTTP_202_ACCEPTED
         )
 
     @action(detail=True, methods=['get'])

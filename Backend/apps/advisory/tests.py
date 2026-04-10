@@ -2,6 +2,7 @@ import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from apps.advisory.llm_service import LLMAdvisoryService
 from apps.advisory.models import Conversation, Message
 from apps.users.models import User
 
@@ -68,3 +69,58 @@ def test_chat_persists_conversation_and_messages(api_client, advisory_user, monk
     assistant_message = Message.objects.get(conversation=conversation, role="assistant")
     assert assistant_message.model_used == "baseline-advisor-v1"
     assert assistant_message.response_time_ms == 250
+    assert assistant_message.context_used["runtime"]["trace_id"] == "trace-123"
+
+
+def test_llm_service_redirects_coding_requests_without_llm(monkeypatch):
+    service = LLMAdvisoryService()
+
+    monkeypatch.setattr(
+        "apps.advisory.llm_service.get_rag_runtime",
+        lambda: {
+            "classify_message": lambda message: ("coding_redirect", ""),
+            "get_redirect_response": lambda message: "I can help you learn Python for a backend role instead.",
+            "get_clarifying_question": lambda: "Clarify",
+            "system_prompt": "system",
+            "retrieve_context": lambda *args, **kwargs: [],
+        },
+    )
+
+    response, delay, metadata = service.generate_response(
+        "How do I implement a binary tree in Python?",
+        conversation_history=[],
+        user_context={},
+    )
+
+    assert response == "I can help you learn Python for a backend role instead."
+    assert delay >= 0.5
+    assert metadata["source"] == "scope_filter"
+    assert metadata["fallback_used"] is True
+
+
+def test_llm_service_falls_back_when_retrieval_fails(monkeypatch):
+    service = LLMAdvisoryService()
+
+    def failing_retrieval(*args, **kwargs):
+        raise RuntimeError("vector store unavailable")
+
+    monkeypatch.setattr(
+        "apps.advisory.llm_service.get_rag_runtime",
+        lambda: {
+            "classify_message": lambda message: ("in_scope", ""),
+            "get_redirect_response": lambda message: "redirect",
+            "get_clarifying_question": lambda: "Clarify",
+            "system_prompt": "system",
+            "retrieve_context": failing_retrieval,
+        },
+    )
+
+    response, _delay, metadata = service.generate_response(
+        "What should I learn for backend jobs?",
+        conversation_history=[],
+        user_context={"skills": ["Python"]},
+    )
+
+    assert response
+    assert metadata["source"] == "fallback"
+    assert metadata["error_code"] == "retrieval_failed"

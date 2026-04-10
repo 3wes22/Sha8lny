@@ -11,7 +11,7 @@ SRS References:
 
 from rest_framework import serializers
 from apps.assessments.models import Assessment, AssessmentResult
-from apps.assessments.services import AssessmentService
+from apps.assessments.ai_pipeline import get_default_questions
 
 
 class AssessmentSerializer(serializers.ModelSerializer):
@@ -60,7 +60,11 @@ class AssessmentSerializer(serializers.ModelSerializer):
         question_count = obj.total_questions or len(obj.questions or [])
 
         submission_state = 'draft'
-        if obj.status == 'completed' and obj.ai_processing_status == 'completed':
+        if obj.status == 'draft' and obj.ai_processing_status in ['pending', 'processing'] and question_count == 0:
+            submission_state = 'generating'
+        elif obj.status == 'draft' and question_count > 0:
+            submission_state = 'ready'
+        elif obj.status == 'completed' and obj.ai_processing_status == 'completed':
             submission_state = 'completed'
         elif obj.status == 'completed':
             submission_state = 'processing'
@@ -98,84 +102,8 @@ class AssessmentCreateSerializer(serializers.Serializer):
     target_career = serializers.CharField(required=False, allow_blank=True)
 
     def _generate_questions(self, assessment_type):
-        """Generate predefined questions based on assessment type."""
-        # In production, this would use AI to generate personalized questions
-        # For MVP, we use predefined question sets
-
-        base_questions = [
-            {
-                "id": 1,
-                "type": "multiple_choice",
-                "interaction_mode": "visual_choice",
-                "question": "How familiar are you with programming fundamentals (variables, loops, functions)?",
-                "category": "Fundamentals",
-                "estimated_seconds": 45,
-                "options": [
-                    {"value": "none", "label": "I've never written code before", "score": 1},
-                    {"value": "basic", "label": "I've done some tutorials / small scripts", "score": 2},
-                    {"value": "comfortable", "label": "I can build small apps/projects", "score": 4},
-                    {"value": "advanced", "label": "I'm very comfortable and help others learn", "score": 5}
-                ]
-            },
-            {
-                "id": 2,
-                "type": "scale",
-                "interaction_mode": "scale",
-                "question": "Rate your confidence in problem-solving and debugging.",
-                "category": "Problem Solving",
-                "estimated_seconds": 35,
-                "min_value": 1,
-                "max_value": 5,
-                "labels": {"1": "Very low", "5": "Very high"}
-            },
-            {
-                "id": 3,
-                "type": "scale",
-                "interaction_mode": "scale",
-                "question": "Rate your familiarity with web technologies (HTML, CSS, JavaScript).",
-                "category": "Web Development",
-                "estimated_seconds": 35,
-                "min_value": 1,
-                "max_value": 5,
-                "labels": {"1": "Not familiar", "5": "Expert"}
-            },
-            {
-                "id": 4,
-                "type": "multiple_choice",
-                "interaction_mode": "single_select",
-                "question": "Which best describes your current experience level?",
-                "category": "Experience",
-                "estimated_seconds": 35,
-                "options": [
-                    {"value": "student", "label": "Student / completely new", "score": 1},
-                    {"value": "junior", "label": "Junior / < 2 years experience", "score": 3},
-                    {"value": "mid", "label": "Mid-level / 2-5 years", "score": 4},
-                    {"value": "senior", "label": "Senior / 5+ years", "score": 5}
-                ]
-            },
-            {
-                "id": 5,
-                "type": "text",
-                "interaction_mode": "text",
-                "question": "What is your main goal with this career path?",
-                "category": "Goals",
-                "estimated_seconds": 60,
-                "helper": "For example: get a first job, switch from another field, grow to senior, freelancing, etc."
-            },
-            {
-                "id": 6,
-                "type": "scale",
-                "interaction_mode": "scale",
-                "question": "How much time per week can you realistically dedicate to learning?",
-                "category": "Commitment",
-                "estimated_seconds": 30,
-                "min_value": 1,
-                "max_value": 5,
-                "labels": {"1": "<3 hours", "5": "15+ hours"}
-            }
-        ]
-
-        return base_questions
+        """Return the deterministic fallback question set."""
+        return get_default_questions(assessment_type)
 
     def create(self, validated_data):
         """Create assessment with predefined questions."""
@@ -183,17 +111,16 @@ class AssessmentCreateSerializer(serializers.Serializer):
         assessment_type = validated_data['assessment_type']
 
         # Generate questions
-        questions = self._generate_questions(assessment_type)
-
         # Create assessment
         assessment = Assessment.objects.create(
             user=user,
             assessment_type=assessment_type,
             target_career=(validated_data.get('target_career') or '').strip(),
-            questions=questions,
+            questions=[],
             status='draft',
-            total_questions=len(questions),
-            answered_questions=0
+            total_questions=0,
+            answered_questions=0,
+            ai_processing_status='pending',
         )
 
         return assessment
@@ -252,10 +179,10 @@ class AssessmentResultSerializer(serializers.ModelSerializer):
             'source': 'baseline',
             'processing_time_ms': int(float(obj.processing_time_seconds or 0) * 1000),
             'model': obj.llm_model_used or None,
-            'provider': 'sha8alny',
+            'provider': 'ollama' if obj.llm_model_used else 'sha8alny',
             'version': obj.version,
-            'trace_id': assessment.id.hex if assessment else None,
-            'fallback_used': False,
+            'trace_id': assessment.ai_trace_id if assessment else None,
+            'fallback_used': bool(assessment and obj.llm_model_used == 'baseline-assessment-v1'),
             'error_code': assessment.ai_processing_error if assessment and assessment.ai_processing_status == 'failed' else None,
         }
 

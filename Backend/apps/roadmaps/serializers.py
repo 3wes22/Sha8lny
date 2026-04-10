@@ -331,6 +331,26 @@ class RoadmapSerializer(serializers.ModelSerializer):
         return str(focus.id) if focus else None
 
     def get_journey_summary(self, obj):
+        if obj.ai_processing_status in {'pending', 'processing'} and not obj.phases.exists():
+            return {
+                'focus_label': 'Roadmap generation',
+                'next_action_title': 'Preparing personalized phases',
+                'next_action_summary': 'We are turning your latest inputs into a structured roadmap with milestones.',
+                'next_action_type': 'roadmap',
+                'next_action_id': str(obj.id),
+                'completion_ratio': 0,
+            }
+
+        if obj.ai_processing_status == 'failed' and not obj.phases.exists():
+            return {
+                'focus_label': 'Roadmap unavailable',
+                'next_action_title': 'Generation failed',
+                'next_action_summary': 'Try creating the roadmap again once the AI runtime is available.',
+                'next_action_type': 'roadmap',
+                'next_action_id': str(obj.id),
+                'completion_ratio': 0,
+            }
+
         focus = self._focus_target(obj)
         if focus is None:
             return {
@@ -392,11 +412,11 @@ class RoadmapSerializer(serializers.ModelSerializer):
             'source': generation.get('source', 'baseline'),
             'processing_time_ms': int(float(obj.processing_time_seconds or 0) * 1000),
             'model': obj.llm_model_used or None,
-            'provider': 'sha8alny',
-            'version': generation.get('version'),
+            'provider': generation.get('provider') or ('ollama' if obj.llm_model_used else 'sha8alny'),
+            'version': generation.get('runtime_version') or generation.get('version'),
             'trace_id': generation.get('trace_id') or str(obj.id),
-            'fallback_used': False,
-            'error_code': obj.ai_processing_error or None,
+            'fallback_used': bool(generation.get('fallback_used')),
+            'error_code': generation.get('error_code') or obj.ai_processing_error or None,
         }
 
     def get_next_action_for_phase(self, phase):
