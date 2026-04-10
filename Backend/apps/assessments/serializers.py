@@ -11,7 +11,7 @@ SRS References:
 
 from rest_framework import serializers
 from apps.assessments.models import Assessment, AssessmentResult
-from apps.assessments.services import AssessmentService
+from apps.assessments.ai_pipeline import get_default_questions
 
 
 class AssessmentSerializer(serializers.ModelSerializer):
@@ -19,12 +19,14 @@ class AssessmentSerializer(serializers.ModelSerializer):
     completion_percentage = serializers.IntegerField(read_only=True)
     is_complete = serializers.BooleanField(read_only=True)
     has_result = serializers.BooleanField(read_only=True)
+    presentation = serializers.SerializerMethodField()
 
     class Meta:
         model = Assessment
         fields = [
             'id',
             'assessment_type',
+            'target_career',
             'questions',
             'responses',
             'ai_processing_status',
@@ -38,6 +40,7 @@ class AssessmentSerializer(serializers.ModelSerializer):
             'time_spent_seconds',
             'is_complete',
             'has_result',
+            'presentation',
             'created_at',
         ]
         read_only_fields = [
@@ -46,6 +49,37 @@ class AssessmentSerializer(serializers.ModelSerializer):
             'ai_processed_at',
             'created_at',
         ]
+
+    def get_presentation(self, obj):
+        question_types = []
+        for question in obj.questions or []:
+            mode = question.get('interaction_mode') or question.get('type')
+            if mode and mode not in question_types:
+                question_types.append(mode)
+
+        question_count = obj.total_questions or len(obj.questions or [])
+
+        submission_state = 'draft'
+        if obj.status == 'draft' and obj.ai_processing_status in ['pending', 'processing'] and question_count == 0:
+            submission_state = 'generating'
+        elif obj.status == 'draft' and question_count > 0:
+            submission_state = 'ready'
+        elif obj.status == 'completed' and obj.ai_processing_status == 'completed':
+            submission_state = 'completed'
+        elif obj.status == 'completed':
+            submission_state = 'processing'
+        elif obj.status == 'in_progress':
+            submission_state = 'submitting'
+
+        return {
+            'question_count': question_count,
+            'current_index': min(obj.answered_questions or 0, question_count),
+            'progress_ratio': obj.completion_percentage,
+            'interaction_modes': question_types,
+            'submission_state': submission_state,
+            'result_summary_available': obj.has_result,
+            'estimated_minutes': max(5, question_count * 2),
+        }
 
 
 class AssessmentCreateSerializer(serializers.Serializer):
@@ -68,72 +102,8 @@ class AssessmentCreateSerializer(serializers.Serializer):
     target_career = serializers.CharField(required=False, allow_blank=True)
 
     def _generate_questions(self, assessment_type):
-        """Generate predefined questions based on assessment type."""
-        # In production, this would use AI to generate personalized questions
-        # For MVP, we use predefined question sets
-
-        base_questions = [
-            {
-                "id": 1,
-                "type": "multiple_choice",
-                "question": "How familiar are you with programming fundamentals (variables, loops, functions)?",
-                "category": "Fundamentals",
-                "options": [
-                    {"value": "none", "label": "I've never written code before", "score": 1},
-                    {"value": "basic", "label": "I've done some tutorials / small scripts", "score": 2},
-                    {"value": "comfortable", "label": "I can build small apps/projects", "score": 4},
-                    {"value": "advanced", "label": "I'm very comfortable and help others learn", "score": 5}
-                ]
-            },
-            {
-                "id": 2,
-                "type": "scale",
-                "question": "Rate your confidence in problem-solving and debugging.",
-                "category": "Problem Solving",
-                "min_value": 1,
-                "max_value": 5,
-                "labels": {"1": "Very low", "5": "Very high"}
-            },
-            {
-                "id": 3,
-                "type": "scale",
-                "question": "Rate your familiarity with web technologies (HTML, CSS, JavaScript).",
-                "category": "Web Development",
-                "min_value": 1,
-                "max_value": 5,
-                "labels": {"1": "Not familiar", "5": "Expert"}
-            },
-            {
-                "id": 4,
-                "type": "multiple_choice",
-                "question": "Which best describes your current experience level?",
-                "category": "Experience",
-                "options": [
-                    {"value": "student", "label": "Student / completely new", "score": 1},
-                    {"value": "junior", "label": "Junior / < 2 years experience", "score": 3},
-                    {"value": "mid", "label": "Mid-level / 2-5 years", "score": 4},
-                    {"value": "senior", "label": "Senior / 5+ years", "score": 5}
-                ]
-            },
-            {
-                "id": 5,
-                "type": "text",
-                "question": "What is your main goal with this career path?",
-                "category": "Goals",
-                "helper": "For example: get a first job, switch from another field, grow to senior, freelancing, etc."
-            },
-            {
-                "id": 6,
-                "type": "scale",
-                "question": "How much time per week can you realistically dedicate to learning?",
-                "category": "Commitment",
-                "min_value": 1,
-                "max_value": 5,
-                "labels": {"1": "<3 hours", "5": "15+ hours"}
-            }
-        ]
-
-        return base_questions
+        """Return the deterministic fallback question set."""
+        return get_default_questions(assessment_type)
 
     def create(self, validated_data):
         """Create assessment with predefined questions."""
@@ -141,16 +111,16 @@ class AssessmentCreateSerializer(serializers.Serializer):
         assessment_type = validated_data['assessment_type']
 
         # Generate questions
-        questions = self._generate_questions(assessment_type)
-
         # Create assessment
         assessment = Assessment.objects.create(
             user=user,
             assessment_type=assessment_type,
-            questions=questions,
+            target_career=(validated_data.get('target_career') or '').strip(),
+            questions=[],
             status='draft',
-            total_questions=len(questions),
-            answered_questions=0
+            total_questions=0,
+            answered_questions=0,
+            ai_processing_status='pending',
         )
 
         return assessment
@@ -175,6 +145,7 @@ class AssessmentResultSerializer(serializers.ModelSerializer):
     """
     top_skills = serializers.JSONField(read_only=True)
     total_tokens_used = serializers.IntegerField(read_only=True)
+    ai_metadata = serializers.SerializerMethodField()
 
     class Meta:
         model = AssessmentResult
@@ -194,12 +165,26 @@ class AssessmentResultSerializer(serializers.ModelSerializer):
             'llm_completion_tokens',
             'total_tokens_used',
             'processing_time_seconds',
+            'ai_metadata',
             'top_skills',
             'version',
             'is_shared',
             'created_at',
         ]
         read_only_fields = ['id', 'created_at']
+
+    def get_ai_metadata(self, obj):
+        assessment = getattr(obj, 'assessment', None)
+        return {
+            'source': 'baseline',
+            'processing_time_ms': int(float(obj.processing_time_seconds or 0) * 1000),
+            'model': obj.llm_model_used or None,
+            'provider': 'ollama' if obj.llm_model_used else 'sha8alny',
+            'version': obj.version,
+            'trace_id': assessment.ai_trace_id if assessment else None,
+            'fallback_used': bool(assessment and obj.llm_model_used == 'baseline-assessment-v1'),
+            'error_code': assessment.ai_processing_error if assessment and assessment.ai_processing_status == 'failed' else None,
+        }
 
 
 class AssessmentListSerializer(serializers.ModelSerializer):
@@ -210,6 +195,7 @@ class AssessmentListSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'assessment_type',
+            'target_career',
             'status',
             'completion_percentage',
             'created_at',

@@ -177,6 +177,21 @@ class TestUserSkillCreate:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    def test_add_skill_does_not_emit_decimal_field_warnings(self, authenticated_client, skill, recwarn):
+        """Adding a skill should not emit serializer validation warnings."""
+        url = '/api/v1/users/user-skills/'
+        response = authenticated_client.post(url, {
+            'skill_id': str(skill.id),
+            'proficiency_level': 'intermediate',
+            'years_of_experience': '2.5',
+        }, format='json')
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert all(
+            "max_value should be an integer or Decimal instance." not in str(warning.message)
+            for warning in recwarn.list
+        )
+
 
 @pytest.mark.django_db
 class TestUserSkillUpdate:
@@ -202,6 +217,20 @@ class TestUserSkillUpdate:
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data['proficiency_level'] == 'advanced'
+
+    def test_update_skill_does_not_emit_decimal_field_warnings(self, authenticated_client, user_skill, recwarn):
+        """Updating a skill should not emit serializer validation warnings."""
+        url = f'/api/v1/users/user-skills/{user_skill.id}/'
+        response = authenticated_client.patch(url, {
+            'proficiency_level': 'advanced',
+            'years_of_experience': '5.0',
+        }, format='json')
+
+        assert response.status_code == status.HTTP_200_OK
+        assert all(
+            "max_value should be an integer or Decimal instance." not in str(warning.message)
+            for warning in recwarn.list
+        )
 
 
 @pytest.mark.django_db

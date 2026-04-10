@@ -1,0 +1,90 @@
+import { describe, expect, it, vi } from "vitest";
+import { screen } from "@testing-library/react";
+
+vi.mock("@/features/auth/context/AuthContext", () => ({
+  useAuth: () => ({
+    user: { full_name: "Mona Ali", username: "mona" },
+  }),
+}));
+
+vi.mock("@/lib/api", () => ({
+  roadmapApi: {
+    list: vi
+      .fn()
+      .mockResolvedValueOnce({ results: [{ id: "roadmap-1" }] })
+      .mockResolvedValueOnce({ results: [] }),
+    get: vi.fn().mockResolvedValue({
+      id: "roadmap-1",
+      title: "Frontend Engineer",
+      description: "Roadmap description",
+      completion_percentage: "42",
+      weekly_hours_commitment: 10,
+      estimated_duration_weeks: 18,
+      target_level: "mid",
+      journey_summary: {
+        next_action_title: "Ship milestone",
+        next_action_summary: "Continue the active milestone.",
+        focus_label: "Active phase",
+      },
+      phases: [
+        {
+          id: "phase-1",
+          title: "Core React foundations",
+          description: "Strengthen the current implementation layer.",
+          order: 1,
+          estimated_duration_weeks: 6,
+          status: "in_progress",
+          completion_percentage: "50",
+          objectives: [],
+          milestones: [
+            {
+              id: "milestone-1",
+              title: "Build dashboard composition",
+              description: "Finish the dashboard rewrite.",
+              milestone_type: "project",
+              order: 1,
+              estimated_duration_hours: "8",
+              status: "completed",
+              is_required: true,
+              skills: [],
+              resources: [],
+            },
+            {
+              id: "milestone-2",
+              title: "Refine roadmap interactions",
+              description: "Polish the roadmap details.",
+              milestone_type: "practice",
+              order: 2,
+              estimated_duration_hours: "6",
+              status: "in_progress",
+              is_required: true,
+              skills: [],
+              resources: [],
+            },
+          ],
+        },
+      ],
+    }),
+    getStats: vi.fn().mockResolvedValue({
+      completed_phases: 1,
+      total_phases: 4,
+      completed_milestones: 2,
+      total_milestones: 6,
+      estimated_total_hours: 40,
+    }),
+  },
+}));
+
+import DashboardPage from "@/features/dashboard/routes/DashboardPage";
+import { render } from "@/test/utils";
+
+describe("DashboardPage", () => {
+  it("renders the career atlas dashboard", async () => {
+    render(<DashboardPage />);
+
+    expect(await screen.findByText(/Mona, your momentum is already visible/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Completed milestones/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Ship milestone/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/Core React foundations/i)[0]).toBeInTheDocument();
+  });
+});

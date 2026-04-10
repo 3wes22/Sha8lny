@@ -50,7 +50,7 @@ Backend/
 - **Background Tasks**: Celery + Redis
 - **Authentication**: JWT (Simple JWT) + Auth0
 - **Real-time**: Django Channels (WebSockets)
-- **AI/ML**: OpenAI, Anthropic, LangChain, Pinecone
+- **AI/ML**: Local Gemma via Ollama, shared backend AI runtime, ChromaDB, sentence-transformers
 - **Web Scraping**: Scrapy, Selenium, BeautifulSoup
 
 ## Setup Instructions
@@ -72,8 +72,11 @@ cd Sha8alny/Backend
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install dependencies
+# Install backend dependencies plus the local ai-models package
 pip install -r requirements.txt
+
+# Pull the local Gemma model used by the backend AI runtime
+ollama pull gemma4:e4b
 
 # Copy environment variables
 cp .env.example .env
@@ -153,9 +156,19 @@ Key environment variables (see .env.example for full list):
 - `ALLOWED_HOSTS`: Comma-separated list of allowed hosts
 - `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`: Database credentials
 - `REDIS_URL`: Redis connection URL
-- `OPENAI_API_KEY`: OpenAI API key
-- `ANTHROPIC_API_KEY`: Anthropic (Claude) API key
-- `PINECONE_API_KEY`: Pinecone vector database API key
+- `OLLAMA_HOST`: Ollama base URL (defaults to `http://127.0.0.1:11434`)
+- `OLLAMA_MODEL`: Local model name (defaults to `gemma4:e4b`)
+- `CHROMA_PERSIST_DIR`: Optional Chroma persistence directory
+
+### Local AI Runtime
+
+The active AI architecture is local-first:
+
+- backend AI features call Ollama through `Backend/apps/core/gemma_client.py`
+- the backend imports `rag` and other helpers from the editable local `ai-models/` package
+- advisory, assessment, and roadmap flows no longer rely on OpenAI, Anthropic, LangChain, or Pinecone
+
+If you need the architecture rationale, start with `docs/product/ADR-001-LOCAL-GEMMA-ARCHITECTURE.md`.
 
 ### Settings Modules
 

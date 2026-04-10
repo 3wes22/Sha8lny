@@ -15,6 +15,8 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from apps.assessments.models import Assessment, AssessmentResult
+from apps.core.ai_settings import OLLAMA_MODEL
 from apps.users.models import User
 from apps.roadmaps.models import (
     RoadmapTemplate, Roadmap, RoadmapPhase,
@@ -187,6 +189,145 @@ class TestRoadmapCreationAPI:
         response = api_client.post(url, data, format='json')
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_create_ai_roadmap_from_assessment_defaults(self, api_client, test_user):
+        """Test creating an AI roadmap from an assessment result without extra manual fields."""
+        api_client.force_authenticate(user=test_user)
+
+        assessment = Assessment.objects.create(
+            user=test_user,
+            assessment_type='skills',
+            status='completed',
+            ai_processing_status='completed',
+            total_questions=6,
+            answered_questions=6,
+        )
+        assessment_result = AssessmentResult.objects.create(
+            assessment=assessment,
+            overall_score=Decimal('68.00'),
+            skill_scores={
+                'technical': {'Python': 82, 'SQL': 71},
+                'soft': {'Communication': 65},
+            },
+            strengths=['Problem solving', 'Consistency'],
+            areas_for_improvement=['System design', 'Testing discipline'],
+            recommended_careers=[
+                {
+                    'title': 'Backend Developer',
+                    'match_score': 88,
+                    'reasoning': 'Strong technical baseline with clear backend growth potential.',
+                }
+            ],
+            recommended_learning_paths=[
+                {'skill': 'Django', 'priority': 'high'},
+                {'skill': 'PostgreSQL', 'priority': 'medium'},
+            ],
+            ai_insights='You have solid coding foundations but need stronger backend architecture depth.',
+            llm_model_used='assessment-mock-v1',
+        )
+
+        response = api_client.post(
+            reverse('roadmaps:roadmap-list'),
+            {'assessment_id': str(assessment_result.id)},
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        assert response.data['target_career'] == 'Backend Developer'
+        assert response.data['current_level'] == 'intermediate'
+        assert response.data['target_level'] == 'job-ready'
+        assert response.data['ai_processing_status'] == 'pending'
+
+        roadmap = Roadmap.objects.get(id=response.data['id'])
+        roadmap.refresh_from_db()
+        assert roadmap.assessment == assessment_result
+        assert roadmap.ai_processed_at is not None
+        assert roadmap.llm_model_used == OLLAMA_MODEL
+        assert roadmap.metadata['generation']['source'] == 'assessment_result'
+        assert roadmap.metadata['generation']['version'] == 'roadmap-generator-v1'
+        assert roadmap.metadata['generation']['runtime_version']
+        assert roadmap.ai_insights['strengths'] == ['Problem solving', 'Consistency']
+        assert roadmap.ai_insights['priority_skills'] == ['Django', 'PostgreSQL']
+        assert roadmap.phases.count() == 3
+
+        milestone_titles = list(
+            RoadmapMilestone.objects.filter(phase__roadmap=roadmap)
+            .order_by('phase__order', 'order')
+            .values_list('title', flat=True)
+        )
+        assert any('Django' in title for title in milestone_titles)
+        assert any('System design' in title for title in milestone_titles)
+
+    def test_create_ai_roadmap_reuses_existing_assessment_draft(self, api_client, test_user):
+        """Test repeated assessment-based generation reuses the existing roadmap draft."""
+        api_client.force_authenticate(user=test_user)
+
+        assessment = Assessment.objects.create(
+            user=test_user,
+            assessment_type='skills',
+            status='completed',
+            ai_processing_status='completed',
+            total_questions=6,
+            answered_questions=6,
+        )
+        assessment_result = AssessmentResult.objects.create(
+            assessment=assessment,
+            overall_score=Decimal('82.00'),
+            skill_scores={'technical': {'React': 88, 'TypeScript': 78}},
+            strengths=['Frontend implementation'],
+            areas_for_improvement=['Testing'],
+            recommended_careers=[
+                {'title': 'Frontend Engineer', 'match_score': 91, 'reasoning': 'Strong UI implementation signal.'}
+            ],
+            recommended_learning_paths=[{'skill': 'React Testing Library', 'priority': 'high'}],
+            ai_insights='You are close to frontend job readiness but need stronger testing habits.',
+            llm_model_used='assessment-mock-v1',
+        )
+
+        url = reverse('roadmaps:roadmap-list')
+        first_response = api_client.post(url, {'assessment_id': str(assessment_result.id)}, format='json')
+        second_response = api_client.post(url, {'assessment_id': str(assessment_result.id)}, format='json')
+
+        assert first_response.status_code == status.HTTP_202_ACCEPTED
+        assert second_response.status_code == status.HTTP_202_ACCEPTED
+        assert second_response.data['id'] == first_response.data['id']
+        assert Roadmap.objects.filter(user=test_user, assessment=assessment_result, is_deleted=False).count() == 1
+
+    def test_create_ai_roadmap_prefers_explicit_assessment_target_career(self, api_client, test_user):
+        """Assessment-selected target career should outrank mock recommended careers."""
+        api_client.force_authenticate(user=test_user)
+
+        assessment = Assessment.objects.create(
+            user=test_user,
+            assessment_type='skills',
+            target_career='Frontend Developer',
+            status='completed',
+            ai_processing_status='completed',
+            total_questions=6,
+            answered_questions=6,
+        )
+        assessment_result = AssessmentResult.objects.create(
+            assessment=assessment,
+            overall_score=Decimal('74.00'),
+            skill_scores={'technical': {'React': 84}},
+            strengths=['UI implementation'],
+            areas_for_improvement=['Testing discipline'],
+            recommended_careers=[
+                {'title': 'Software Engineer', 'match_score': 91, 'reasoning': 'Generic mock output.'}
+            ],
+            recommended_learning_paths=[{'skill': 'React Testing Library', 'priority': 'high'}],
+            ai_insights='Frontend-oriented signal with a testing gap.',
+            llm_model_used='assessment-mock-v1',
+        )
+
+        response = api_client.post(
+            reverse('roadmaps:roadmap-list'),
+            {'assessment_id': str(assessment_result.id)},
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        assert response.data['target_career'] == 'Frontend Developer'
 
 
 @pytest.mark.django_db

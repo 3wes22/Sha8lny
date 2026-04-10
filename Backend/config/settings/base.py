@@ -241,6 +241,35 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
+CELERY_TASK_SOFT_TIME_LIMIT = 120
+
+# ---------------------------------------------------------------------------
+# AI Worker Queue — ADR-001: single-lane by design
+# ---------------------------------------------------------------------------
+# GPU can only handle one inference at a time on M1 16GB / RTX 3050.
+# Route all AI tasks to a dedicated queue consumed by a single-concurrency worker.
+#
+# Start the AI worker with:
+#   celery -A config worker -Q ai --concurrency=1 --max-tasks-per-child=50 -n ai@%h
+#
+# Start the default worker (non-AI tasks) separately:
+#   celery -A config worker -Q default --concurrency=4 -n default@%h
+# ---------------------------------------------------------------------------
+from apps.core.ai_settings import (  # noqa: E402
+    AI_CELERY_QUEUE,
+    AI_TASK_SOFT_TIME_LIMIT,
+    AI_TASK_HARD_TIME_LIMIT,
+)
+
+CELERY_TASK_ROUTES = {
+    'apps.assessments.tasks.*': {'queue': AI_CELERY_QUEUE},
+    'apps.roadmaps.tasks.*': {'queue': AI_CELERY_QUEUE},
+    'apps.advisory.tasks.*': {'queue': AI_CELERY_QUEUE},
+}
+
+CELERY_TASK_DEFAULT_QUEUE = 'default'
+CELERY_TASK_SOFT_TIME_LIMIT = AI_TASK_SOFT_TIME_LIMIT
+CELERY_TASK_TIME_LIMIT = AI_TASK_HARD_TIME_LIMIT
 
 
 # Logging Configuration
@@ -293,11 +322,19 @@ CSRF_COOKIE_HTTPONLY = True
 SESSION_COOKIE_HTTPONLY = True
 
 
-# AI/LLM Configuration
-OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
-ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='')
-PINECONE_API_KEY = config('PINECONE_API_KEY', default='')
-PINECONE_ENVIRONMENT = config('PINECONE_ENVIRONMENT', default='')
+# ---------------------------------------------------------------------------
+# AI/LLM Configuration — ADR-001: Local Gemma Architecture
+# ---------------------------------------------------------------------------
+# All AI runtime settings (Ollama host, model, timeouts, queue config) live in:
+#   apps/core/ai_settings.py
+# Import from there in any module that needs AI configuration.
+#
+# The following cloud-provider keys are RETIRED (see ADR-001).
+# They are kept commented out so no one re-adds them thinking they're missing.
+# OPENAI_API_KEY = config('OPENAI_API_KEY', default='')      # RETIRED
+# ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='') # RETIRED
+# PINECONE_API_KEY = config('PINECONE_API_KEY', default='')   # RETIRED
+# PINECONE_ENVIRONMENT = config('PINECONE_ENVIRONMENT', default='') # RETIRED
 
 
 # External API Configuration

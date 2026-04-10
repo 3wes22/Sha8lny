@@ -9,6 +9,10 @@ SRS References:
 - FR-8: AI Processing
 """
 
+from types import SimpleNamespace
+from uuid import uuid4
+
+from django.conf import settings
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -25,12 +29,29 @@ from apps.assessments.serializers import (
     AssessmentResultSerializer,
     AssessmentListSerializer,
 )
-from apps.assessments.services import AssessmentService
+from apps.assessments.tasks import (
+    evaluate_assessment_answers_task,
+    generate_assessment_questions_task,
+    run_evaluate_assessment_answers,
+    run_generate_assessment_questions,
+)
+from apps.assessments.services import (
+    AssessmentResultService,
+)
 
 
 # ============================================================================
 # ASSESSMENT VIEWS
 # ============================================================================
+
+
+def dispatch_assessment_task(task, eager_runner, assessment_id: str):
+    if getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):
+        task_id = uuid4().hex
+        eager_runner(assessment_id, task_id=task_id)
+        return SimpleNamespace(id=task_id)
+    return task.delay(assessment_id)
+
 
 class AssessmentViewSet(viewsets.ModelViewSet):
     """
@@ -89,8 +110,14 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # Create assessment using service
         assessment = serializer.save()
+        task = dispatch_assessment_task(
+            generate_assessment_questions_task,
+            run_generate_assessment_questions,
+            str(assessment.id),
+        )
+        assessment.ai_task_id = getattr(task, "id", "") or ""
+        assessment.save(update_fields=["ai_task_id", "updated_at"])
 
         return Response(
             AssessmentSerializer(assessment).data,
@@ -234,67 +261,34 @@ class AssessmentViewSet(viewsets.ModelViewSet):
 
         responses = serializer.validated_data['responses']
 
-        # Update assessment with responses
+        if not assessment.questions:
+            return Response(
+                {'error': 'Assessment questions are still being generated'},
+                status=status.HTTP_409_CONFLICT
+            )
+
         assessment.responses = responses
         assessment.status = 'completed'
         assessment.completed_at = timezone.now()
         assessment.answered_questions = len(responses)
+        assessment.ai_processing_status = 'pending'
         assessment.save()
-
-        # TODO: Trigger AI processing task
-        # from apps.assessments.tasks import process_assessment_results
-        # process_assessment_results.delay(str(assessment.id))
-
-        # For MVP: Create a basic result immediately (simulated AI processing)
-        # In production, this would be done by Celery task
-        from decimal import Decimal
-
-        # Simple scoring logic for MVP
-        score_sum = 0
-        scored_responses = 0
-
-        for response in responses:
-            # Try to extract numeric scores from responses
-            answer = response.get('answer', '')
-            if isinstance(answer, (int, float)):
-                score_sum += float(answer)
-                scored_responses += 1
-            elif isinstance(answer, str) and answer.isdigit():
-                score_sum += float(answer)
-                scored_responses += 1
-
-        overall_score = Decimal(str((score_sum / scored_responses * 20) if scored_responses > 0 else 50))
-
-        # Create result if doesn't exist
-        result, created = AssessmentResult.objects.get_or_create(
-            assessment=assessment,
-            defaults={
-                'overall_score': overall_score,
-                'skill_scores': {},
-                'strengths': ['Quick learner', 'Problem solver'],
-                'areas_for_improvement': ['Practice more projects', 'Deep dive into fundamentals'],
-                'recommended_careers': [
-                    {'title': 'Software Engineer', 'match_score': 85, 'reasoning': 'Good technical foundation'},
-                    {'title': 'Full Stack Developer', 'match_score': 78, 'reasoning': 'Versatile skills'}
-                ],
-                'ai_insights': 'Based on your responses, you show promise in technical skills. Continue building projects and learning.',
-                'llm_model_used': 'mock-v1',
-                'ai_confidence_score': Decimal('75.0'),
-            }
+        task = dispatch_assessment_task(
+            evaluate_assessment_answers_task,
+            run_evaluate_assessment_answers,
+            str(assessment.id),
         )
-
-        # Update assessment AI status
-        assessment.ai_processing_status = 'completed'
-        assessment.ai_processed_at = timezone.now()
-        assessment.save()
+        assessment.ai_task_id = getattr(task, "id", "") or ""
+        assessment.save(update_fields=["ai_task_id", "updated_at"])
 
         return Response(
             {
-                'message': 'Assessment submitted successfully',
+                'message': 'Assessment submitted successfully and queued for analysis',
                 'assessment': AssessmentSerializer(assessment).data,
-                'result_id': str(result.id)
+                'result_id': None,
+                'submission_state': 'processing',
             },
-            status=status.HTTP_200_OK
+            status=status.HTTP_202_ACCEPTED
         )
 
     @action(detail=True, methods=['get'])
@@ -325,7 +319,12 @@ class AssessmentViewSet(viewsets.ModelViewSet):
             return Response(
                 {
                     'message': 'Assessment is queued for AI processing',
-                    'status': 'pending'
+                    'status': 'pending',
+                    'submission_state': 'processing',
+                    'status_message': 'Your answers are saved and waiting for analysis.',
+                    'next_actions': [
+                        {'label': 'Return to dashboard', 'route': '/dashboard', 'kind': 'assessment'}
+                    ],
                 },
                 status=status.HTTP_202_ACCEPTED
             )
@@ -333,7 +332,12 @@ class AssessmentViewSet(viewsets.ModelViewSet):
             return Response(
                 {
                     'message': 'AI is currently processing your assessment',
-                    'status': 'processing'
+                    'status': 'processing',
+                    'submission_state': 'processing',
+                    'status_message': 'We are building your strengths, gaps, and recommended next steps.',
+                    'next_actions': [
+                        {'label': 'Return to dashboard', 'route': '/dashboard', 'kind': 'assessment'}
+                    ],
                 },
                 status=status.HTTP_202_ACCEPTED
             )
@@ -353,7 +357,14 @@ class AssessmentViewSet(viewsets.ModelViewSet):
                 is_deleted=False
             )
             serializer = AssessmentResultSerializer(result)
-            return Response(serializer.data)
+            data = serializer.data
+            data['submission_state'] = 'completed'
+            data['status_message'] = 'Your assessment is ready. Review the outcome and continue to roadmap or jobs.'
+            data['next_actions'] = [
+                {'label': 'View roadmap', 'route': '/roadmap', 'kind': 'roadmap'},
+                {'label': 'Explore jobs', 'route': '/jobs', 'kind': 'jobs'},
+            ]
+            return Response(data)
 
         except AssessmentResult.DoesNotExist:
             return Response(

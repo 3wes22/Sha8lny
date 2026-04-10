@@ -76,6 +76,9 @@ class NotificationListSerializer(serializers.ModelSerializer):
     Minimal notification serializer for list views.
     Optimized for performance.
     """
+    time_ago = serializers.SerializerMethodField()
+    display_type = serializers.SerializerMethodField()
+    is_actionable = serializers.SerializerMethodField()
 
     class Meta:
         model = Notification
@@ -88,7 +91,19 @@ class NotificationListSerializer(serializers.ModelSerializer):
             'is_read',
             'action_url',
             'created_at',
+            'time_ago',
+            'display_type',
+            'is_actionable',
         ]
+
+    def get_time_ago(self, obj):
+        return NotificationSerializer().get_time_ago(obj)
+
+    def get_display_type(self, obj):
+        return obj.notification_type.replace('_', ' ').title()
+
+    def get_is_actionable(self, obj):
+        return bool(obj.action_url)
 
 
 class NotificationCreateSerializer(serializers.Serializer):
@@ -238,4 +253,5 @@ class NotificationStatsSerializer(serializers.Serializer):
     unread_count = serializers.IntegerField()
     urgent_count = serializers.IntegerField()
     by_type = serializers.DictField()
-    recent_notifications = NotificationListSerializer(many=True)
+    recent_notifications = serializers.ListField(child=serializers.DictField())
+    nav_summary = serializers.DictField(required=False)

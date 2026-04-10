@@ -42,6 +42,13 @@ class Assessment(BaseModel):
         help_text=_('Type of assessment')
     )
 
+    target_career = models.CharField(
+        max_length=255,
+        blank=True,
+        db_index=True,
+        help_text=_('Selected target career path for this assessment')
+    )
+
     # Questions structure: JSONB for flexibility
     # Example: [{"id": 1, "question": "...", "type": "multiple_choice", "options": [...]}]
     questions = models.JSONField(
@@ -78,6 +85,18 @@ class Assessment(BaseModel):
         null=True,
         blank=True,
         help_text=_('When AI processing completed')
+    )
+
+    ai_task_id = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_('Celery task ID for question generation or evaluation')
+    )
+
+    ai_trace_id = models.CharField(
+        max_length=64,
+        blank=True,
+        help_text=_('Trace ID for the latest AI invocation')
     )
 
     ai_processing_error = models.TextField(

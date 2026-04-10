@@ -1,39 +1,24 @@
-"""Test the vector database"""
-import chromadb
-from sentence_transformers import SentenceTransformer
+"""Smoke tests for the local vector database setup."""
 
-# Connect to database
-client = chromadb.PersistentClient(path=r"c:\Users\mahmo\Grad\Sha8lny\ai-models\data\vector_db")
+from pathlib import Path
+from importlib import import_module
 
-print("=" * 50)
-print("VECTOR DATABASE TEST")
-print("=" * 50)
+import pytest
 
-# List collections
-cols = client.list_collections()
-print(f"\nCollections: {len(cols)}")
 
-if cols:
-    col = client.get_collection("career_knowledge")
-    print(f"Documents in 'career_knowledge': {col.count()}")
-    
-    # Test query
-    print("\n" + "-" * 50)
-    print("TESTING QUERY")
-    print("-" * 50)
-    
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    query = "What skills do I need to become a backend developer?"
-    print(f"Query: {query}")
-    
-    embedding = model.encode([query]).tolist()
-    results = col.query(query_embeddings=embedding, n_results=5)
-    
-    print(f"\nTop 5 results:")
-    for i, (doc, meta) in enumerate(zip(results['documents'][0], results['metadatas'][0])):
-        source = meta.get('source', 'unknown')
-        category = meta.get('category', 'unknown') 
-        print(f"\n{i+1}. [{source}] {category}")
-        print(f"   {doc[:150]}...")
-else:
-    print("No collections found!")
+VECTOR_DB_PATH = Path(__file__).parent / "data" / "vector_db"
+
+
+def test_vector_db_client_can_open_seeded_directory():
+    try:
+        chromadb = import_module("chromadb")
+    except ImportError:
+        pytest.skip("chromadb is not installed in this environment.")
+
+    if not VECTOR_DB_PATH.exists():
+        pytest.skip("Vector database directory is not seeded in this workspace.")
+
+    client = chromadb.PersistentClient(path=str(VECTOR_DB_PATH))
+    collections = client.list_collections()
+
+    assert isinstance(collections, list)

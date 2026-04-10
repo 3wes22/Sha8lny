@@ -4,6 +4,8 @@ Assessments Service Layer
 Handles skill assessment creation, submission, and AI-powered analysis.
 """
 
+from time import monotonic
+from decimal import Decimal
 from typing import Optional, List, Dict, Any
 from django.db import transaction
 from django.utils import timezone
@@ -11,6 +13,117 @@ from django.core.exceptions import ValidationError
 
 from .models import Assessment, AssessmentResult
 from apps.users.models import User
+from apps.core.ai_contracts import (
+    AIInvocationMetadata,
+    AssessmentAnalysisInput,
+    AssessmentAnalysisResult,
+)
+
+
+class BaselineAssessmentAnalyzer:
+    """Deterministic analyzer behind a model-safe contract."""
+
+    MODEL_NAME = "baseline-assessment-v1"
+    VERSION = "baseline-2026-04"
+
+    @staticmethod
+    def _score_responses(responses: List[Dict[str, Any]]) -> Decimal:
+        score_sum = 0.0
+        scored_responses = 0
+
+        for response in responses:
+            answer = response.get("answer", "")
+            if isinstance(answer, (int, float)):
+                score_sum += float(answer)
+                scored_responses += 1
+            elif isinstance(answer, str) and answer.strip().isdigit():
+                score_sum += float(answer.strip())
+                scored_responses += 1
+
+        overall = (score_sum / scored_responses * 20) if scored_responses > 0 else 50
+        return Decimal(str(round(overall, 2)))
+
+    @staticmethod
+    def _career_aliases(target_career: str) -> List[Dict[str, Any]]:
+        normalized = target_career or "Software Engineer"
+        lowered = normalized.lower()
+        if "frontend" in lowered:
+            return [
+                {"title": normalized, "match_score": 88, "reasoning": "Your selected path remains the primary recommendation."},
+                {"title": "Software Engineer", "match_score": 73, "reasoning": "Broader engineering roles stay adjacent to frontend growth."},
+            ]
+        if "backend" in lowered:
+            return [
+                {"title": normalized, "match_score": 88, "reasoning": "Your selected path remains the primary recommendation."},
+                {"title": "Full Stack Developer", "match_score": 74, "reasoning": "Backend depth can expand toward full-stack execution later."},
+            ]
+        if "data" in lowered:
+            return [
+                {"title": normalized, "match_score": 86, "reasoning": "Your selected path remains the primary recommendation."},
+                {"title": "Machine Learning Engineer", "match_score": 71, "reasoning": "The path can extend into model delivery and production work."},
+            ]
+        return [
+            {"title": normalized, "match_score": 85, "reasoning": "Your selected path remains the primary recommendation."},
+            {"title": "Full Stack Developer", "match_score": 72, "reasoning": "This stays nearby while you build broader execution skills."},
+        ]
+
+    @staticmethod
+    def _learning_paths(target_career: str) -> List[Dict[str, Any]]:
+        lowered = (target_career or "").lower()
+        if "frontend" in lowered:
+            return [
+                {"skill": "React", "priority": "high", "resources": []},
+                {"skill": "TypeScript", "priority": "high", "resources": []},
+                {"skill": "Testing discipline", "priority": "medium", "resources": []},
+            ]
+        if "backend" in lowered:
+            return [
+                {"skill": "API design", "priority": "high", "resources": []},
+                {"skill": "Databases", "priority": "high", "resources": []},
+                {"skill": "Testing discipline", "priority": "medium", "resources": []},
+            ]
+        if "data" in lowered:
+            return [
+                {"skill": "Python", "priority": "high", "resources": []},
+                {"skill": "Statistics", "priority": "high", "resources": []},
+                {"skill": "Portfolio storytelling", "priority": "medium", "resources": []},
+            ]
+        return [
+            {"skill": "Problem solving", "priority": "high", "resources": []},
+            {"skill": "Project execution", "priority": "high", "resources": []},
+            {"skill": "Testing discipline", "priority": "medium", "resources": []},
+        ]
+
+    @classmethod
+    def analyze(cls, payload: AssessmentAnalysisInput) -> AssessmentAnalysisResult:
+        started_at = monotonic()
+        target_career = (payload.target_career or "Software Engineer").strip() or "Software Engineer"
+        return AssessmentAnalysisResult(
+            overall_score=cls._score_responses(payload.responses),
+            skill_scores={},
+            strengths=[
+                "Commitment to a clear target path",
+                "Structured self-assessment follow-through",
+            ],
+            areas_for_improvement=[
+                "Project execution",
+                "Testing discipline",
+            ],
+            recommended_careers=cls._career_aliases(target_career),
+            recommended_learning_paths=cls._learning_paths(target_career),
+            ai_insights=(
+                f"This baseline analysis keeps {target_career} as the anchor role and turns your "
+                "responses into immediate next-step guidance."
+            ),
+            ai_confidence_score=Decimal("78.00"),
+            metadata=AIInvocationMetadata(
+                source="baseline",
+                processing_time_ms=int((monotonic() - started_at) * 1000),
+                model=cls.MODEL_NAME,
+                provider="sha8alny",
+                version=cls.VERSION,
+            ),
+        )
 
 
 class AssessmentService:
@@ -58,6 +171,7 @@ class AssessmentService:
     def create_assessment(
         user: User,
         assessment_type: str,
+        target_career: str = "",
         questions: Optional[List[Dict[str, Any]]] = None
     ) -> Assessment:
         """
@@ -83,6 +197,7 @@ class AssessmentService:
         assessment = Assessment.objects.create(
             user=user,
             assessment_type=assessment_type,
+            target_career=target_career,
             questions=questions,
             total_questions=len(questions),
             status='draft'
@@ -264,7 +379,8 @@ class AssessmentResultService:
         llm_model_used: str = "",
         llm_prompt_tokens: Optional[int] = None,
         llm_completion_tokens: Optional[int] = None,
-        processing_time_seconds: Optional[float] = None
+        processing_time_seconds: Optional[float] = None,
+        version: str = "1.0",
     ) -> AssessmentResult:
         """
         Create AI-analyzed assessment result.
@@ -307,6 +423,7 @@ class AssessmentResultService:
             existing.llm_prompt_tokens = llm_prompt_tokens
             existing.llm_completion_tokens = llm_completion_tokens
             existing.processing_time_seconds = processing_time_seconds
+            existing.version = version
             existing.save()
             return existing
 
@@ -324,7 +441,8 @@ class AssessmentResultService:
             llm_model_used=llm_model_used,
             llm_prompt_tokens=llm_prompt_tokens,
             llm_completion_tokens=llm_completion_tokens,
-            processing_time_seconds=processing_time_seconds
+            processing_time_seconds=processing_time_seconds,
+            version=version,
         )
 
         # Update assessment AI processing status
