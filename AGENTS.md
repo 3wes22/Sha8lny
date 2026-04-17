@@ -1,8 +1,10 @@
 # Grad-Project Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-04-10
+Auto-generated from all feature plans. Last updated: 2026-04-14
 
 ## Active Technologies
+- Python 3.13 backend; TypeScript 5.8 on React 18.3 frontend + Django 5, Django REST Framework, Celery, Redis cache/broker, Simple JWT, local Gemma via Ollama, React Router 6, TanStack Query 5, Vitest, Testing Library (002-ai-rag-experiment)
+- Existing Django relational persistence with JSON-backed assessment payloads; Redis-backed cache and queue in base/production; SQLite remains acceptable in developmen (002-ai-rag-experiment)
 
 - Frontend: TypeScript 5.8, React 18.3, Vite 5, React Router 6, TanStack Query 5, Tailwind CSS 3, Radix UI primitives, Vitest, Testing Library
 - Backend: Python 3.13, Django 5.0, Django REST Framework, Simple JWT, drf-spectacular, pytest, Celery, Redis, PostgreSQL for production, SQLite for development
@@ -82,16 +84,10 @@ archive/
 - Treat AI orchestration as deterministic backend workflow code, not agentic planning inside the product runtime.
 
 ## Recent Changes
+- 002-ai-rag-experiment: Added Python 3.13 backend; TypeScript 5.8 on React 18.3 frontend + Django 5, Django REST Framework, Celery, Redis cache/broker, Simple JWT, local Gemma via Ollama, React Router 6, TanStack Query 5, Vitest, Testing Library
 
 - 001-frontend-visual-rebuild: Rebuilt the frontend around the career-atlas visual system, feature-first structure, lazy-loaded routes, shared authenticated shell, and contract-tested frontend/backend interfaces.
 - 2026-04-07 architecture reset: Accepted `docs/product/ADR-001-LOCAL-GEMMA-ARCHITECTURE.md` as the active AI architecture, replacing old OpenAI/Anthropic/LangChain/Pinecone assumptions with local Gemma via Ollama.
-- 2026-04-07 adoption plan: Added `docs/product/GEMMA_ARCHITECTURE_ADOPTION_PLAN.md` to define the current backend/AI rollout path, ownership boundaries, and phased modernization work for assessment, roadmap, and advisory flows.
-- Backend AI runtime baseline: `Backend/apps/core/ai_settings.py` and `Backend/apps/core/ai_contracts.py` now define the shared runtime configuration and stable AI contracts for future backend and AI planning.
 
 <!-- MANUAL ADDITIONS START -->
-- Frontend performance reference: `docs/product/FRONTEND_PERFORMANCE_REFERENCE.md`
-- Backend and AI planning starting points: `docs/product/ADR-001-LOCAL-GEMMA-ARCHITECTURE.md`, `docs/product/GEMMA_ARCHITECTURE_ADOPTION_PLAN.md`, `docs/product/ARCHITECTURE.md`, `docs/product/TECH_STACK.md`
-- Backend and AI implementation anchors: `Backend/apps/core/ai_settings.py`, `Backend/apps/core/ai_contracts.py`, `Backend/apps/advisory/llm_service.py`, `ai-models/src/rag/`
-- Planning default for new backend/AI work: treat `Backend/` as the production runtime, `ai-models/` as support code for retrieval and experiments, use one shared Ollama-backed Gemma runtime, and prefer deterministic fallbacks for every LLM-backed flow.
-- Documentation caveat: some older files still mention OpenAI, Anthropic, LangChain, Pinecone, or Mistral; when planning new work, prefer ADR-001 and the Gemma adoption plan as the source of truth.
 <!-- MANUAL ADDITIONS END -->
