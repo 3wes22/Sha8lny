@@ -13,12 +13,12 @@ import { StatePanel } from "@/shared/components/StatePanel";
 import { useToast } from "@/hooks/use-toast";
 
 const careerPaths = [
-  ["Software Engineer", "Build and ship product software."],
-  ["Frontend Developer", "Focus on responsive, high-quality interfaces."],
   ["Backend Developer", "Design APIs, services, and platform logic."],
+  ["Frontend Developer", "Focus on responsive, high-quality interfaces."],
   ["Data Scientist", "Work with analysis, models, and experimentation."],
-  ["Product Manager", "Lead direction, discovery, and delivery."],
-  ["UI/UX Designer", "Shape flows, interfaces, and usability systems."],
+  ["Full Stack Developer", "Ship product features across client and server layers."],
+  ["Mobile Developer", "Build polished mobile experiences and app flows."],
+  ["DevOps Engineer", "Own delivery pipelines, reliability, and infrastructure."],
 ];
 
 export default function AssessmentPage() {
