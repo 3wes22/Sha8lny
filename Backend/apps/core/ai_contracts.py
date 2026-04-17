@@ -63,6 +63,60 @@ class AssessmentAnalysisResult:
 
 
 @dataclass(frozen=True)
+class StageQuestion:
+    """Single assessment question with role-graph context."""
+
+    id: str
+    stage: int
+    subskill_key: str
+    dimension_key: str
+    question_text: str
+    question_type: str
+    interaction_mode: str
+    options: List[Dict[str, Any]] = field(default_factory=list)
+    difficulty: int = 3
+    estimated_seconds: int = 45
+
+
+@dataclass(frozen=True)
+class SubSkillEvidence:
+    """Deterministic scoring evidence for a subskill."""
+
+    subskill_key: str
+    dimension_key: str
+    observed_level: float
+    target_level: int
+    gap: float
+    confidence: float
+    evidence_strength: str
+
+
+@dataclass(frozen=True)
+class GapProfile:
+    """Intermediate gap analysis after stage one."""
+
+    role_key: str
+    subskill_evidence: List[SubSkillEvidence]
+    high_priority_gaps: List[str]
+    uncertain_areas: List[str]
+    overall_calibration: float
+
+
+@dataclass(frozen=True)
+class RoadmapSignal:
+    """Structured assessment output for roadmap generation."""
+
+    role: str
+    target_level: str
+    subskill_gaps: List[SubSkillEvidence]
+    confidence_score: float
+    evidence_strength: str
+    priority_order: List[str]
+    prerequisite_links: Dict[str, List[str]]
+    generation_metadata: Dict[str, Any]
+
+
+@dataclass(frozen=True)
 class RoadmapGenerationInput:
     """Stable input for roadmap generators."""
 

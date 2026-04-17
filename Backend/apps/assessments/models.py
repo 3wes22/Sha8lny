@@ -49,6 +49,19 @@ class Assessment(BaseModel):
         help_text=_('Selected target career path for this assessment')
     )
 
+    STAGE_CHOICES = [
+        ('stage_1', _('Stage 1')),
+        ('stage_2', _('Stage 2')),
+        ('completed', _('Completed')),
+    ]
+
+    stage = models.CharField(
+        max_length=32,
+        choices=STAGE_CHOICES,
+        blank=True,
+        help_text=_('Current staged assessment phase for new skills assessments')
+    )
+
     # Questions structure: JSONB for flexibility
     # Example: [{"id": 1, "question": "...", "type": "multiple_choice", "options": [...]}]
     questions = models.JSONField(
@@ -63,6 +76,48 @@ class Assessment(BaseModel):
         default=list,
         blank=True,
         help_text=_('User responses to assessment questions')
+    )
+
+    stage_one_questions = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_('Generated stage-one questions for staged assessments')
+    )
+
+    stage_one_responses = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_('Submitted stage-one responses for staged assessments')
+    )
+
+    stage_two_questions = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_('Generated stage-two questions for staged assessments')
+    )
+
+    stage_two_responses = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_('Submitted stage-two responses for staged assessments')
+    )
+
+    gap_profile = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=_('Intermediate gap analysis for staged assessments')
+    )
+
+    roadmap_signal = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=_('Final roadmap-ready signal for staged assessments')
+    )
+
+    generation_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=_('Trace, cache, fallback, and validation metadata for staged assessments')
     )
 
     # AI Processing
@@ -193,6 +248,11 @@ class Assessment(BaseModel):
         """Check if assessment has a result."""
         return hasattr(self, 'result') and self.result is not None
 
+    @property
+    def is_staged(self):
+        """Return True when this record uses the staged skills flow."""
+        return bool(self.stage) and self.assessment_type == 'skills'
+
 
 class AssessmentResult(BaseModel):
     """
@@ -254,6 +314,12 @@ class AssessmentResult(BaseModel):
         default=list,
         blank=True,
         help_text=_('Recommended skills to learn')
+    )
+
+    roadmap_signal = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=_('Structured roadmap-ready staged assessment signal')
     )
 
     # AI Insights

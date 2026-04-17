@@ -14,6 +14,7 @@ from decouple import config
 # Ollama connection
 # ---------------------------------------------------------------------------
 OLLAMA_HOST = config("OLLAMA_HOST", default="http://127.0.0.1:11434")
+# Conservative local default. Use gemma4:e4b on stronger hardware via env override.
 OLLAMA_MODEL = config("OLLAMA_MODEL", default="gemma4:e2b")
 
 # ---------------------------------------------------------------------------

@@ -222,18 +222,30 @@ CORS_ALLOW_HEADERS = [
 ]
 
 
-# Cache Configuration (Redis)
+# Cache Configuration
+DJANGO_CACHE_BACKEND = config(
+    'DJANGO_CACHE_BACKEND',
+    default='django.core.cache.backends.locmem.LocMemCache',
+)
+DJANGO_CACHE_LOCATION = config('DJANGO_CACHE_LOCATION', default='sha8alny-cache')
+
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': config('REDIS_URL', default='redis://127.0.0.1:6379/1'),
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        },
+        'BACKEND': DJANGO_CACHE_BACKEND,
         'KEY_PREFIX': 'sha8alny',
-        'TIMEOUT': 300,  # 5 minutes default
+        'TIMEOUT': 300,
     }
 }
+
+if DJANGO_CACHE_BACKEND == 'django.core.cache.backends.redis.RedisCache':
+    CACHES['default']['LOCATION'] = config('REDIS_URL', default='redis://127.0.0.1:6379/1')
+    CACHES['default']['OPTIONS'] = {
+        'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+    }
+elif DJANGO_CACHE_BACKEND == 'django.core.cache.backends.locmem.LocMemCache':
+    CACHES['default']['LOCATION'] = DJANGO_CACHE_LOCATION
+elif DJANGO_CACHE_LOCATION:
+    CACHES['default']['LOCATION'] = DJANGO_CACHE_LOCATION
 
 
 # Celery Configuration

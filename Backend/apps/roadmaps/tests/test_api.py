@@ -246,7 +246,8 @@ class TestRoadmapCreationAPI:
         assert roadmap.metadata['generation']['source'] == 'assessment_result'
         assert roadmap.metadata['generation']['version'] == 'roadmap-generator-v1'
         assert roadmap.metadata['generation']['runtime_version']
-        assert roadmap.ai_insights['strengths'] == ['Problem solving', 'Consistency']
+        assert roadmap.ai_insights['strengths']
+        assert 'System design' in roadmap.ai_insights['gaps']
         assert roadmap.ai_insights['priority_skills'] == ['Django', 'PostgreSQL']
         assert roadmap.phases.count() == 3
 
@@ -257,6 +258,107 @@ class TestRoadmapCreationAPI:
         )
         assert any('Django' in title for title in milestone_titles)
         assert any('System design' in title for title in milestone_titles)
+
+    def test_create_ai_roadmap_prefers_structured_roadmap_signal(self, api_client, test_user):
+        """Test roadmap generation prefers structured roadmap_signal over legacy learning paths."""
+        api_client.force_authenticate(user=test_user)
+
+        assessment = Assessment.objects.create(
+            user=test_user,
+            assessment_type='skills',
+            status='completed',
+            ai_processing_status='completed',
+            total_questions=10,
+            answered_questions=10,
+            roadmap_signal={
+                'role': 'backend',
+                'target_level': 'job-ready',
+                'priority_order': ['api_design', 'database_modeling'],
+                'subskill_gaps': [
+                    {
+                        'subskill_key': 'database_modeling',
+                        'dimension_key': 'technical_depth',
+                        'observed_level': 2.3,
+                        'target_level': 4,
+                        'gap': 1.7,
+                        'confidence': 0.79,
+                        'evidence_strength': 'moderate',
+                    },
+                    {
+                        'subskill_key': 'api_design',
+                        'dimension_key': 'technical_depth',
+                        'observed_level': 2.9,
+                        'target_level': 4,
+                        'gap': 1.1,
+                        'confidence': 0.82,
+                        'evidence_strength': 'moderate',
+                    },
+                ],
+            },
+        )
+        assessment_result = AssessmentResult.objects.create(
+            assessment=assessment,
+            overall_score=Decimal('74.00'),
+            skill_scores={'technical': {'Python': 78}},
+            strengths=['General coding'],
+            areas_for_improvement=['Legacy fallback gap'],
+            recommended_careers=[
+                {
+                    'title': 'Backend Developer',
+                    'match_score': 86,
+                    'reasoning': 'Roadmap signal points to a backend path.',
+                }
+            ],
+            recommended_learning_paths=[
+                {'skill': 'Legacy Skill', 'priority': 'high'},
+            ],
+            ai_insights='Assessment completed.',
+            llm_model_used='assessment-mock-v1',
+            roadmap_signal={
+                'role': 'backend',
+                'target_level': 'job-ready',
+                'priority_order': ['api_design', 'database_modeling'],
+                'subskill_gaps': [
+                    {
+                        'subskill_key': 'database_modeling',
+                        'dimension_key': 'technical_depth',
+                        'observed_level': 2.3,
+                        'target_level': 4,
+                        'gap': 1.7,
+                        'confidence': 0.79,
+                        'evidence_strength': 'moderate',
+                    },
+                    {
+                        'subskill_key': 'api_design',
+                        'dimension_key': 'technical_depth',
+                        'observed_level': 2.9,
+                        'target_level': 4,
+                        'gap': 1.1,
+                        'confidence': 0.82,
+                        'evidence_strength': 'moderate',
+                    },
+                ],
+                'confidence_score': 0.8,
+                'evidence_strength': 'moderate',
+                'generation_metadata': {'fallback_used': False},
+                'prerequisite_links': {'database_modeling': ['api_design']},
+            },
+        )
+
+        response = api_client.post(
+            reverse('roadmaps:roadmap-list'),
+            {'assessment_id': str(assessment_result.id)},
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_202_ACCEPTED
+
+        roadmap = Roadmap.objects.get(id=response.data['id'])
+        roadmap.refresh_from_db()
+
+        assert roadmap.ai_insights['priority_skills'][:2] == ['Api Design', 'Database Modeling']
+        assert roadmap.ai_insights['gaps'][:2] == ['Database Modeling', 'Api Design']
+        assert 'Legacy Skill' not in roadmap.ai_insights['priority_skills']
 
     def test_create_ai_roadmap_reuses_existing_assessment_draft(self, api_client, test_user):
         """Test repeated assessment-based generation reuses the existing roadmap draft."""

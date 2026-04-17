@@ -54,10 +54,12 @@ class TestAssessmentAPI:
         assert response.data['assessment_type'] == 'skills'
         assert response.data['target_career'] == 'Software Engineer'
         assert response.data['status'] == 'draft'
+        assert response.data['stage'] == 'stage_1'
+        assert response.data['generation_status'] == 'pending'
         assert response.data['ai_processing_status'] == 'pending'
-        assert response.data['total_questions'] == 0
+        assert response.data['total_questions'] == 10
         assert response.data['questions'] == []
-        assert response.data['presentation']['submission_state'] == 'generating'
+        assert response.data['presentation']['submission_state'] == 'stage_1_generating'
 
         assessment = Assessment.objects.get(id=response.data['id'])
         assert assessment.target_career == 'Software Engineer'
@@ -369,7 +371,9 @@ class TestAssessmentQuestionGeneration:
         assert detail_response.status_code == status.HTTP_200_OK
         questions = detail_response.data['questions']
 
-        assert len(questions) > 0
+        assert detail_response.data['stage'] == 'stage_1'
+        assert detail_response.data['presentation']['submission_state'] == 'stage_1_ready'
+        assert len(questions) == 5
         assert all('id' in q for q in questions)
         assert all('question' in q for q in questions)
         assert all('type' in q for q in questions)
@@ -386,7 +390,4 @@ class TestAssessmentQuestionGeneration:
 
         question_types = {q['type'] for q in questions}
 
-        # Should have multiple question types
         assert 'multiple_choice' in question_types
-        assert 'scale' in question_types
-        assert 'text' in question_types

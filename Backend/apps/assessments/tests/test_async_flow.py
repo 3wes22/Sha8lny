@@ -44,13 +44,15 @@ def test_create_assessment_queues_question_generation(api_client, assessment_use
     )
 
     assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["stage"] == "stage_1"
+    assert response.data["generation_status"] == "pending"
     assert response.data["ai_processing_status"] == "pending"
     assert response.data["questions"] == []
-    assert response.data["presentation"]["submission_state"] == "generating"
+    assert response.data["presentation"]["submission_state"] == "stage_1_generating"
 
     assessment = Assessment.objects.get(id=response.data["id"])
     assert assessment.ai_task_id == "assessment-question-task"
-    assert assessment.total_questions == 0
+    assert assessment.total_questions == 10
 
 
 @pytest.mark.django_db

@@ -4,6 +4,7 @@ Assessments Service Layer
 Handles skill assessment creation, submission, and AI-powered analysis.
 """
 
+from dataclasses import asdict
 from time import monotonic
 from decimal import Decimal
 from typing import Optional, List, Dict, Any
@@ -12,6 +13,7 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 
 from .models import Assessment, AssessmentResult
+from .role_graph import load_role_graph, resolve_role_key
 from apps.users.models import User
 from apps.core.ai_contracts import (
     AIInvocationMetadata,
@@ -254,6 +256,41 @@ class AssessmentService:
     """Service for assessment management"""
 
     @staticmethod
+    def is_staged_assessment(assessment: Assessment) -> bool:
+        return assessment.is_staged
+
+    @staticmethod
+    def get_active_questions(assessment: Assessment) -> List[Dict[str, Any]]:
+        if not assessment.is_staged:
+            return assessment.questions or []
+        if assessment.stage == 'stage_2':
+            return assessment.stage_two_questions or []
+        if assessment.stage == 'completed':
+            return []
+        return assessment.stage_one_questions or []
+
+    @staticmethod
+    def get_active_responses(assessment: Assessment) -> List[Dict[str, Any]]:
+        if not assessment.is_staged:
+            return assessment.responses or []
+        if assessment.stage == 'stage_2':
+            return assessment.stage_two_responses or []
+        if assessment.stage == 'completed':
+            return []
+        return assessment.stage_one_responses or []
+
+    @staticmethod
+    def build_gap_profile_summary(assessment: Assessment) -> Optional[Dict[str, Any]]:
+        gap_profile = assessment.gap_profile or {}
+        if not isinstance(gap_profile, dict) or not gap_profile:
+            return None
+        return {
+            'high_priority_count': len(gap_profile.get('high_priority_gaps', [])),
+            'uncertain_count': len(gap_profile.get('uncertain_areas', [])),
+            'overall_calibration': gap_profile.get('overall_calibration', 0),
+        }
+
+    @staticmethod
     def get_user_assessments(user: User, assessment_type: Optional[str] = None) -> List[Assessment]:
         """Get all assessments for a user, optionally filtered by type"""
         queryset = Assessment.objects.filter(
@@ -317,6 +354,31 @@ class AssessmentService:
         # TODO: Generate questions using AI if not provided
         if questions is None:
             questions = []
+
+        if assessment_type == 'skills':
+            assessment = Assessment.objects.create(
+                user=user,
+                assessment_type=assessment_type,
+                target_career=target_career,
+                questions=[],
+                responses=[],
+                stage='stage_1',
+                stage_one_questions=[],
+                stage_one_responses=[],
+                stage_two_questions=[],
+                stage_two_responses=[],
+                gap_profile={},
+                roadmap_signal={},
+                generation_metadata={
+                    'role_key': resolve_role_key(target_career),
+                    'graph_version': load_role_graph(resolve_role_key(target_career)).version,
+                },
+                total_questions=10,
+                answered_questions=0,
+                status='draft',
+                ai_processing_status='pending',
+            )
+            return assessment
 
         assessment = Assessment.objects.create(
             user=user,
@@ -454,6 +516,80 @@ class AssessmentService:
 
         return assessment
 
+    @staticmethod
+    @transaction.atomic
+    def submit_stage_one(
+        assessment_id: str,
+        user: User,
+        responses: List[Dict[str, Any]],
+    ) -> Assessment:
+        assessment = Assessment.objects.select_for_update().get(
+            id=assessment_id,
+            user=user,
+            is_deleted=False,
+        )
+
+        if not assessment.is_staged or assessment.stage != 'stage_1':
+            raise ValidationError("Assessment is not ready for stage one submission")
+
+        assessment.stage_one_responses = responses
+        assessment.responses = responses
+        assessment.answered_questions = len(responses)
+        assessment.status = 'in_progress'
+        assessment.started_at = assessment.started_at or timezone.now()
+        assessment.ai_processing_status = 'processing'
+        assessment.ai_processing_error = ''
+        assessment.save(
+            update_fields=[
+                'stage_one_responses',
+                'responses',
+                'answered_questions',
+                'status',
+                'started_at',
+                'ai_processing_status',
+                'ai_processing_error',
+                'updated_at',
+            ]
+        )
+        return assessment
+
+    @staticmethod
+    @transaction.atomic
+    def submit_stage_two(
+        assessment_id: str,
+        user: User,
+        responses: List[Dict[str, Any]],
+    ) -> Assessment:
+        assessment = Assessment.objects.select_for_update().get(
+            id=assessment_id,
+            user=user,
+            is_deleted=False,
+        )
+
+        if not assessment.is_staged or assessment.stage != 'stage_2':
+            raise ValidationError("Assessment is not ready for stage two submission")
+
+        assessment.stage_two_responses = responses
+        assessment.responses = responses
+        assessment.answered_questions = len(assessment.stage_one_responses or []) + len(responses)
+        assessment.status = 'completed'
+        assessment.completed_at = timezone.now()
+        assessment.ai_processing_status = 'processing'
+        assessment.ai_processing_error = ''
+        assessment.save(
+            update_fields=[
+                'stage_two_responses',
+                'responses',
+                'answered_questions',
+                'status',
+                'completed_at',
+                'ai_processing_status',
+                'ai_processing_error',
+                'updated_at',
+            ]
+        )
+        return assessment
+
 
 class AssessmentResultService:
     """Service for assessment result analysis"""
@@ -505,6 +641,7 @@ class AssessmentResultService:
         llm_completion_tokens: Optional[int] = None,
         processing_time_seconds: Optional[float] = None,
         version: str = "1.0",
+        roadmap_signal: Optional[Dict[str, Any]] = None,
     ) -> AssessmentResult:
         """
         Create AI-analyzed assessment result.
@@ -548,6 +685,7 @@ class AssessmentResultService:
             existing.llm_completion_tokens = llm_completion_tokens
             existing.processing_time_seconds = processing_time_seconds
             existing.version = version
+            existing.roadmap_signal = roadmap_signal or {}
             existing.save()
             return existing
 
@@ -567,6 +705,7 @@ class AssessmentResultService:
             llm_completion_tokens=llm_completion_tokens,
             processing_time_seconds=processing_time_seconds,
             version=version,
+            roadmap_signal=roadmap_signal or {},
         )
 
         # Update assessment AI processing status

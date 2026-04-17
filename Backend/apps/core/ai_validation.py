@@ -159,3 +159,85 @@ def sanitize_evaluation_payload(
             payload.get("ai_confidence_score"), 50, 95, default=75.0,
         ),
     }
+
+
+def sanitize_stage_question_payload(
+    raw_questions: Any,
+    *,
+    stage: int,
+    allowed_targets: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Validate and normalize stage-question payloads from the model."""
+    if not isinstance(raw_questions, list):
+        raise AIServiceError(
+            "Stage question payload must be a list",
+            details={"reason": "invalid_stage_questions"},
+        )
+
+    normalized: list[dict[str, Any]] = []
+    seen_subskills: set[str] = set()
+
+    for index, raw_question in enumerate(raw_questions):
+        if not isinstance(raw_question, dict):
+            continue
+
+        subskill_key = str(raw_question.get("subskill_key") or "").strip()
+        target = allowed_targets.get(subskill_key)
+        if not target or subskill_key in seen_subskills:
+            continue
+
+        question_type = str(
+            raw_question.get("question_type") or raw_question.get("type") or "multiple_choice"
+        ).strip()
+        if question_type not in {"multiple_choice", "scale", "text"}:
+            question_type = "multiple_choice"
+
+        interaction_mode = str(raw_question.get("interaction_mode") or "").strip()
+        if not interaction_mode:
+            interaction_mode = {
+                "multiple_choice": "single_select",
+                "scale": "scale",
+                "text": "text",
+            }[question_type]
+
+        question_text = str(
+            raw_question.get("question_text") or raw_question.get("question") or ""
+        ).strip()
+        if not question_text:
+            continue
+
+        options = raw_question.get("options") if isinstance(raw_question.get("options"), list) else []
+        difficulty = int(_clamp(raw_question.get("difficulty"), 1, 5, default=3))
+        estimated_seconds = int(_clamp(raw_question.get("estimated_seconds"), 15, 180, default=45))
+
+        normalized.append(
+            {
+                "id": str(raw_question.get("id") or f"s{stage}_q{index + 1}"),
+                "stage": stage,
+                "subskill_key": subskill_key,
+                "dimension_key": target["dimension_key"],
+                "question_text": question_text,
+                "question": question_text,
+                "question_type": question_type,
+                "type": question_type,
+                "interaction_mode": interaction_mode,
+                "options": options,
+                "difficulty": difficulty,
+                "estimated_seconds": estimated_seconds,
+                "category": target["category"],
+                "helper": raw_question.get("helper") or "",
+            }
+        )
+        seen_subskills.add(subskill_key)
+
+    if len(normalized) != len(allowed_targets):
+        raise AIServiceError(
+            "Stage question payload did not cover all required targets",
+            details={
+                "reason": "incomplete_stage_questions",
+                "expected_targets": list(allowed_targets),
+                "returned_targets": [item["subskill_key"] for item in normalized],
+            },
+        )
+
+    return normalized

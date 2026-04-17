@@ -422,6 +422,11 @@ class RoadmapService:
         if selected_target:
             return selected_target
 
+        roadmap_signal = assessment.roadmap_signal if isinstance(assessment.roadmap_signal, dict) else {}
+        signal_role = (roadmap_signal.get('role') or '').strip()
+        if signal_role:
+            return signal_role.replace('_', ' ').title()
+
         recommended_careers = assessment.recommended_careers or []
         for item in recommended_careers:
             title = (item or {}).get('title') if isinstance(item, dict) else None
@@ -467,10 +472,44 @@ class RoadmapService:
         return deduped
 
     @staticmethod
+    def _humanize_signal_key(value: str) -> str:
+        return (value or '').replace('_', ' ').strip().title()
+
+    @staticmethod
+    def _signal_gap_entries(assessment: Optional[AssessmentResult]) -> List[Dict[str, Any]]:
+        if not assessment or not isinstance(assessment.roadmap_signal, dict):
+            return []
+        entries = assessment.roadmap_signal.get('subskill_gaps') or []
+        return [entry for entry in entries if isinstance(entry, dict)]
+
+    @staticmethod
+    def _extract_gap_labels(assessment: Optional[AssessmentResult]) -> List[str]:
+        signal_entries = RoadmapService._signal_gap_entries(assessment)
+        if signal_entries:
+            ordered = sorted(
+                signal_entries,
+                key=lambda entry: (entry.get('gap', 0), -entry.get('confidence', 0)),
+                reverse=True,
+            )
+            return RoadmapService._dedupe_preserve_order(
+                [RoadmapService._humanize_signal_key(entry.get('subskill_key', '')) for entry in ordered]
+            )[:4]
+        if not assessment:
+            return []
+        return RoadmapService._dedupe_preserve_order(assessment.areas_for_improvement or [])[:4]
+
+    @staticmethod
     def _extract_priority_skills(assessment: Optional[AssessmentResult]) -> List[str]:
         """Get prioritized skills from assessment recommendations."""
         if not assessment:
             return []
+
+        roadmap_signal = assessment.roadmap_signal if isinstance(assessment.roadmap_signal, dict) else {}
+        priority_order = roadmap_signal.get('priority_order') or []
+        if isinstance(priority_order, list) and priority_order:
+            return RoadmapService._dedupe_preserve_order(
+                [RoadmapService._humanize_signal_key(item) for item in priority_order if isinstance(item, str)]
+            )[:4]
 
         learning_paths = assessment.recommended_learning_paths or []
         extracted: List[str] = []
@@ -489,6 +528,16 @@ class RoadmapService:
         """Get strongest current skills from assessment results."""
         if not assessment:
             return []
+
+        signal_entries = RoadmapService._signal_gap_entries(assessment)
+        if signal_entries:
+            ordered = sorted(
+                signal_entries,
+                key=lambda entry: (entry.get('gap', 0), -entry.get('observed_level', 0)),
+            )
+            return RoadmapService._dedupe_preserve_order(
+                [RoadmapService._humanize_signal_key(entry.get('subskill_key', '')) for entry in ordered]
+            )[:3]
 
         return RoadmapService._dedupe_preserve_order(
             [item.get('skill', '') for item in assessment.top_skills if isinstance(item, dict)]
@@ -682,10 +731,10 @@ class RoadmapService:
 
         matched_template = RoadmapTemplateService.get_template_by_career(target_career)
         template = matched_template[0] if matched_template else None
-        strengths = assessment.strengths[:3] if assessment else []
-        gaps = assessment.areas_for_improvement[:3] if assessment else []
-        priority_skills = RoadmapService._extract_priority_skills(assessment)
         top_skills = RoadmapService._extract_top_skills(assessment)
+        priority_skills = RoadmapService._extract_priority_skills(assessment)
+        strengths = top_skills[:3] if top_skills else (assessment.strengths[:3] if assessment else [])
+        gaps = RoadmapService._extract_gap_labels(assessment)
 
         metadata = {
             'generation': {
@@ -741,10 +790,10 @@ class RoadmapService:
         assessment = roadmap.assessment
         matched_template = RoadmapTemplateService.get_template_by_career(roadmap.target_career)
         template = roadmap.template or (matched_template[0] if matched_template else None)
-        strengths = assessment.strengths[:3] if assessment else []
-        gaps = assessment.areas_for_improvement[:3] if assessment else []
-        priority_skills = RoadmapService._extract_priority_skills(assessment)
         top_skills = RoadmapService._extract_top_skills(assessment)
+        priority_skills = RoadmapService._extract_priority_skills(assessment)
+        strengths = top_skills[:3] if top_skills else (assessment.strengths[:3] if assessment else [])
+        gaps = RoadmapService._extract_gap_labels(assessment)
 
         generation = roadmap.metadata.get('generation', {}) if isinstance(roadmap.metadata, dict) else {}
         generation.update(

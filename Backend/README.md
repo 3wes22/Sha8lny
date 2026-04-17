@@ -46,7 +46,7 @@ Backend/
 - **Framework**: Django 5.0+
 - **API**: Django REST Framework
 - **Database**: PostgreSQL (SQLite for development)
-- **Cache**: Redis
+- **Cache**: Django cache framework (`LocMemCache` by default in development, Redis in production)
 - **Background Tasks**: Celery + Redis
 - **Authentication**: JWT (Simple JWT) + Auth0
 - **Real-time**: Django Channels (WebSockets)
@@ -59,7 +59,7 @@ Backend/
 
 - Python 3.11+
 - PostgreSQL 14+ (optional for development, can use SQLite)
-- Redis (for caching and Celery)
+- Redis (recommended for Celery and production-like caching)
 
 ### 2. Installation
 
@@ -76,7 +76,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Pull the local Gemma model used by the backend AI runtime
-ollama pull gemma4:e4b
+ollama pull gemma4:e2b
 
 # Copy environment variables
 cp .env.example .env
@@ -156,8 +156,9 @@ Key environment variables (see .env.example for full list):
 - `ALLOWED_HOSTS`: Comma-separated list of allowed hosts
 - `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`: Database credentials
 - `REDIS_URL`: Redis connection URL
+- `DJANGO_CACHE_BACKEND`: Django cache backend path. Defaults to `django.core.cache.backends.locmem.LocMemCache` when unset.
 - `OLLAMA_HOST`: Ollama base URL (defaults to `http://127.0.0.1:11434`)
-- `OLLAMA_MODEL`: Local model name (defaults to `gemma4:e4b`)
+- `OLLAMA_MODEL`: Local model name (defaults to `gemma4:e2b`; override to `gemma4:e4b` on stronger hardware)
 - `CHROMA_PERSIST_DIR`: Optional Chroma persistence directory
 
 ### Local AI Runtime
@@ -167,6 +168,7 @@ The active AI architecture is local-first:
 - backend AI features call Ollama through `Backend/apps/core/gemma_client.py`
 - the backend imports `rag` and other helpers from the editable local `ai-models/` package
 - advisory, assessment, and roadmap flows no longer rely on OpenAI, Anthropic, LangChain, or Pinecone
+- staged `skills` assessments use at most 3 LLM calls per completed run: stage 1 generation, stage 2 generation, and final evaluation
 
 If you need the architecture rationale, start with `docs/product/ADR-001-LOCAL-GEMMA-ARCHITECTURE.md`.
 

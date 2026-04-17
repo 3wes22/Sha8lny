@@ -1,715 +1,423 @@
 """
-Assessment-specific AI prompts, career question banks, and deterministic fallbacks.
-
-Each career path has a dedicated question bank covering 6 dimensions:
-  1. Core Technical — primary skill depth for the role
-  2. Tooling/Ecosystem — knowledge of daily tools and frameworks
-  3. Problem Solving — debugging and reasoning approach
-  4. Experience — career stage and project complexity
-  5. Goals — motivation and target outcome
-  6. Commitment — available time and learning pace
+Staged assessment AI helpers, deterministic fallbacks, and legacy compatibility.
 """
 
 from __future__ import annotations
 
-import copy
-import json
+from dataclasses import asdict, dataclass
 from decimal import Decimal
-from typing import Any, Dict, List, Tuple
+from statistics import mean
+from time import monotonic
+from typing import Any
 
+from django.core.cache import cache
+
+from apps.assessments.engine import (
+    AnswerScorer,
+    GapProfileBuilder,
+    Stage2Allocator,
+    StageAllocator,
+    evidence_to_dicts,
+    merge_evidence,
+)
 from apps.assessments.models import Assessment
+from apps.assessments.role_graph import load_role_graph, resolve_role_key
 from apps.assessments.services import BaselineAssessmentAnalyzer
-from apps.core.ai_contracts import AssessmentAnalysisInput, AssessmentAnalysisResult
+from apps.core.ai_contracts import (
+    AIInvocationMetadata,
+    AssessmentAnalysisInput,
+    AssessmentAnalysisResult,
+    RoadmapSignal,
+)
 from apps.core.ai_logging import build_ai_metadata
-from apps.core.ai_validation import sanitize_evaluation_payload
+from apps.core.ai_validation import sanitize_evaluation_payload, sanitize_stage_question_payload
 from apps.core.gemma_client import GemmaClient, GemmaResponse
 
 
-# ============================================================================
-# DIMENSION WEIGHTS — used by both baseline scorer and LLM rubric
-# ============================================================================
+QUESTION_SYSTEM_PROMPT = """You generate concise staged assessment questions.
+Return strict JSON with a top-level "questions" array only."""
 
-# Single source of truth — defined in BaselineAssessmentAnalyzer.DIMENSION_WEIGHTS
-DIMENSION_WEIGHTS = BaselineAssessmentAnalyzer.DIMENSION_WEIGHTS
-
-
-# ============================================================================
-# CAREER-SPECIFIC QUESTION BANKS
-# ============================================================================
-
-_BACKEND_QUESTIONS: List[Dict[str, Any]] = [
-    {
-        "id": 1,
-        "type": "multiple_choice",
-        "interaction_mode": "visual_choice",
-        "question": "How comfortable are you designing and building REST APIs?",
-        "category": "API Design",
-        "dimension": "technical_depth",
-        "estimated_seconds": 45,
-        "options": [
-            {"value": "none", "label": "I haven't built an API before", "score": 1},
-            {"value": "basic", "label": "I've followed tutorials to build one", "score": 2},
-            {"value": "mid", "label": "I can build CRUD APIs independently", "score": 4},
-            {"value": "adv", "label": "I design APIs with auth, pagination, and versioning", "score": 5},
-        ],
-    },
-    {
-        "id": 2,
-        "type": "multiple_choice",
-        "interaction_mode": "visual_choice",
-        "question": "Which databases and ORMs have you worked with?",
-        "category": "Databases & ORMs",
-        "dimension": "tooling",
-        "estimated_seconds": 45,
-        "options": [
-            {"value": "none", "label": "I haven't used a database yet", "score": 1},
-            {"value": "basic", "label": "Basic SQL queries (SELECT, INSERT)", "score": 2},
-            {"value": "mid", "label": "Comfortable with JOINs, indexes, and an ORM like Django ORM", "score": 4},
-            {"value": "adv", "label": "Query optimization, migrations, replication, or multiple DB engines", "score": 5},
-        ],
-    },
-    {
-        "id": 3,
-        "type": "scale",
-        "interaction_mode": "scale",
-        "question": "When you hit a server error you've never seen, how confident are you in diagnosing it?",
-        "category": "Debugging",
-        "dimension": "problem_solving",
-        "estimated_seconds": 35,
-        "min_value": 1,
-        "max_value": 5,
-        "labels": {"1": "I'd be stuck without help", "5": "I systematically read logs, trace the stack, and isolate the issue"},
-    },
-    {
-        "id": 4,
-        "type": "multiple_choice",
-        "interaction_mode": "single_select",
-        "question": "What's the most complex backend project you've worked on?",
-        "category": "Project Complexity",
-        "dimension": "experience",
-        "estimated_seconds": 40,
-        "options": [
-            {"value": "none", "label": "I haven't built a backend project yet", "score": 1},
-            {"value": "tutorial", "label": "Tutorial-level apps (todo list, blog)", "score": 2},
-            {"value": "personal", "label": "A multi-model app with auth that I designed myself", "score": 4},
-            {"value": "production", "label": "Production or team-based systems with deployment", "score": 5},
-        ],
-    },
-    {
-        "id": 5,
-        "type": "text",
-        "interaction_mode": "text",
-        "question": "What's your primary goal as a backend developer in the next 6 months?",
-        "category": "Career Goal",
-        "dimension": "goals",
-        "estimated_seconds": 60,
-        "helper": "For example: land my first backend job, switch from frontend, go freelance, get promoted to senior, etc.",
-    },
-    {
-        "id": 6,
-        "type": "scale",
-        "interaction_mode": "scale",
-        "question": "How many hours per week can you realistically dedicate to learning backend development?",
-        "category": "Weekly Commitment",
-        "dimension": "commitment",
-        "estimated_seconds": 30,
-        "min_value": 1,
-        "max_value": 5,
-        "labels": {"1": "< 3 hours", "3": "5–10 hours", "5": "15+ hours"},
-    },
-]
+EVALUATION_SYSTEM_PROMPT = """You summarize staged assessment evidence for a career platform.
+Return strict JSON only with overall_score, strengths, areas_for_improvement,
+recommended_careers, recommended_learning_paths, ai_insights, and ai_confidence_score."""
 
 
-_FRONTEND_QUESTIONS: List[Dict[str, Any]] = [
-    {
-        "id": 1,
-        "type": "multiple_choice",
-        "interaction_mode": "visual_choice",
-        "question": "How comfortable are you building responsive user interfaces from a design mockup?",
-        "category": "UI Implementation",
-        "dimension": "technical_depth",
-        "estimated_seconds": 45,
-        "options": [
-            {"value": "none", "label": "I haven't built a UI from a design before", "score": 1},
-            {"value": "basic", "label": "I can match simple layouts with HTML & CSS", "score": 2},
-            {"value": "mid", "label": "I can build responsive, pixel-accurate pages independently", "score": 4},
-            {"value": "adv", "label": "I implement complex layouts with animations, accessibility, and cross-browser support", "score": 5},
-        ],
-    },
-    {
-        "id": 2,
-        "type": "multiple_choice",
-        "interaction_mode": "visual_choice",
-        "question": "Which frontend frameworks or libraries have you used in a real project?",
-        "category": "Frameworks",
-        "dimension": "tooling",
-        "estimated_seconds": 45,
-        "options": [
-            {"value": "none", "label": "None yet — just vanilla HTML/CSS/JS", "score": 1},
-            {"value": "basic", "label": "Followed a React or Vue tutorial to completion", "score": 2},
-            {"value": "mid", "label": "Built a multi-page app with React (or Vue/Angular) and state management", "score": 4},
-            {"value": "adv", "label": "Used TypeScript, React Query, testing libraries, and component design systems", "score": 5},
-        ],
-    },
-    {
-        "id": 3,
-        "type": "scale",
-        "interaction_mode": "scale",
-        "question": "When a component renders incorrectly or an API call fails silently, how confident are you in finding the cause?",
-        "category": "Debugging",
-        "dimension": "problem_solving",
-        "estimated_seconds": 35,
-        "min_value": 1,
-        "max_value": 5,
-        "labels": {"1": "I'd be stuck without help", "5": "I use DevTools, React profiler, and network tab instinctively"},
-    },
-    {
-        "id": 4,
+@dataclass(frozen=True)
+class StagedAssessmentEvaluation:
+    analysis: AssessmentAnalysisResult
+    roadmap_signal: RoadmapSignal
+    prompt_tokens: int
+    completion_tokens: int
+
+
+def _choice_options(subskill_label: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "value": "low",
+            "label": f"Need help with {subskill_label}",
+            "score": 1,
+        },
+        {
+            "value": "mid",
+            "label": f"Can apply {subskill_label} independently in straightforward work",
+            "score": 3,
+        },
+        {
+            "value": "high",
+            "label": f"Can make tradeoffs and lead on {subskill_label}",
+            "score": 5,
+        },
+    ]
+
+
+def _target_map(role_graph, targets):
+    return {
+        target.key: {
+            "dimension_key": target.dimension,
+            "category": target.label,
+        }
+        for target in targets
+    }
+
+
+def _normalize_question(
+    *,
+    stage: int,
+    index: int,
+    subskill,
+    role_label: str,
+    targeted: bool = False,
+) -> dict[str, Any]:
+    prompt_prefix = "Probe more deeply" if targeted else "How comfortable are you"
+    question_text = (
+        f"{prompt_prefix} with {subskill.label.lower()} for {role_label.lower()} work?"
+    )
+    return {
+        "id": f"s{stage}_q{index}",
+        "stage": stage,
+        "subskill_key": subskill.key,
+        "dimension_key": subskill.dimension,
+        "question_text": question_text,
+        "question": question_text,
+        "question_type": "multiple_choice",
         "type": "multiple_choice",
         "interaction_mode": "single_select",
-        "question": "What's the most complex frontend project you've built?",
-        "category": "Project Complexity",
-        "dimension": "experience",
-        "estimated_seconds": 40,
-        "options": [
-            {"value": "none", "label": "I haven't built a frontend project yet", "score": 1},
-            {"value": "tutorial", "label": "Simple pages or tutorial clones", "score": 2},
-            {"value": "personal", "label": "A multi-page app with routing, API calls, and auth", "score": 4},
-            {"value": "production", "label": "Production apps with testing, CI/CD, and team collaboration", "score": 5},
-        ],
-    },
-    {
-        "id": 5,
-        "type": "text",
-        "interaction_mode": "text",
-        "question": "What's your primary goal as a frontend developer in the next 6 months?",
-        "category": "Career Goal",
-        "dimension": "goals",
-        "estimated_seconds": 60,
-        "helper": "For example: land a React developer job, improve my styling skills, learn TypeScript, freelance, etc.",
-    },
-    {
-        "id": 6,
-        "type": "scale",
-        "interaction_mode": "scale",
-        "question": "How many hours per week can you realistically dedicate to learning frontend development?",
-        "category": "Weekly Commitment",
-        "dimension": "commitment",
-        "estimated_seconds": 30,
-        "min_value": 1,
-        "max_value": 5,
-        "labels": {"1": "< 3 hours", "3": "5–10 hours", "5": "15+ hours"},
-    },
-]
-
-
-_DATA_SCIENCE_QUESTIONS: List[Dict[str, Any]] = [
-    {
-        "id": 1,
-        "type": "multiple_choice",
-        "interaction_mode": "visual_choice",
-        "question": "How comfortable are you with data analysis using Python (Pandas, NumPy)?",
-        "category": "Data Analysis",
-        "dimension": "technical_depth",
+        "options": _choice_options(subskill.label),
+        "difficulty": min(5, max(1, subskill.target_proficiency)),
         "estimated_seconds": 45,
-        "options": [
-            {"value": "none", "label": "I haven't done data analysis in Python", "score": 1},
-            {"value": "basic", "label": "I can load CSVs and do basic filtering / grouping", "score": 2},
-            {"value": "mid", "label": "I do EDA, handle missing data, and create visualizations independently", "score": 4},
-            {"value": "adv", "label": "I build pipelines with feature engineering, statistical tests, and ML models", "score": 5},
-        ],
-    },
-    {
-        "id": 2,
-        "type": "multiple_choice",
-        "interaction_mode": "visual_choice",
-        "question": "Which data tools and platforms have you used?",
-        "category": "Data Tools",
-        "dimension": "tooling",
-        "estimated_seconds": 45,
-        "options": [
-            {"value": "none", "label": "Just spreadsheets (Excel / Google Sheets)", "score": 1},
-            {"value": "basic", "label": "Jupyter notebooks and basic Matplotlib/Seaborn", "score": 2},
-            {"value": "mid", "label": "SQL databases, Scikit-learn, and a cloud platform (Kaggle, Colab)", "score": 4},
-            {"value": "adv", "label": "TensorFlow/PyTorch, MLflow, Airflow, or similar production tools", "score": 5},
-        ],
-    },
-    {
-        "id": 3,
-        "type": "scale",
-        "interaction_mode": "scale",
-        "question": "When your model's accuracy drops unexpectedly, how confident are you in diagnosing why?",
-        "category": "Analytical Reasoning",
-        "dimension": "problem_solving",
-        "estimated_seconds": 35,
-        "min_value": 1,
-        "max_value": 5,
-        "labels": {"1": "I wouldn't know where to start", "5": "I check data drift, feature importance, overfitting, and retrain systematically"},
-    },
-    {
-        "id": 4,
-        "type": "multiple_choice",
-        "interaction_mode": "single_select",
-        "question": "What's the most complex data project you've completed?",
-        "category": "Project Complexity",
-        "dimension": "experience",
-        "estimated_seconds": 40,
-        "options": [
-            {"value": "none", "label": "I haven't done a data project yet", "score": 1},
-            {"value": "tutorial", "label": "Followed a Kaggle tutorial or course project", "score": 2},
-            {"value": "personal", "label": "Built my own analysis / prediction project with real data", "score": 4},
-            {"value": "production", "label": "Deployed a model or delivered insights used by stakeholders", "score": 5},
-        ],
-    },
-    {
-        "id": 5,
-        "type": "text",
-        "interaction_mode": "text",
-        "question": "What's your primary goal in data science over the next 6 months?",
-        "category": "Career Goal",
-        "dimension": "goals",
-        "estimated_seconds": 60,
-        "helper": "For example: become a data analyst, learn machine learning, get a Kaggle medal, transition from software engineering, etc.",
-    },
-    {
-        "id": 6,
-        "type": "scale",
-        "interaction_mode": "scale",
-        "question": "How many hours per week can you realistically dedicate to learning data science?",
-        "category": "Weekly Commitment",
-        "dimension": "commitment",
-        "estimated_seconds": 30,
-        "min_value": 1,
-        "max_value": 5,
-        "labels": {"1": "< 3 hours", "3": "5–10 hours", "5": "15+ hours"},
-    },
-]
+        "category": subskill.label,
+        "helper": "",
+    }
 
 
-_FULLSTACK_QUESTIONS: List[Dict[str, Any]] = [
-    {
-        "id": 1,
-        "type": "multiple_choice",
-        "interaction_mode": "visual_choice",
-        "question": "How comfortable are you building an end-to-end feature — from database schema through API to UI?",
-        "category": "Full-Stack Execution",
-        "dimension": "technical_depth",
-        "estimated_seconds": 45,
-        "options": [
-            {"value": "none", "label": "I've only worked on one side (frontend or backend)", "score": 1},
-            {"value": "basic", "label": "I've connected a frontend to an API in a tutorial", "score": 2},
-            {"value": "mid", "label": "I can build and ship a complete feature across front and back", "score": 4},
-            {"value": "adv", "label": "I own full features including auth, deployment, and testing", "score": 5},
-        ],
-    },
-    {
-        "id": 2,
-        "type": "multiple_choice",
-        "interaction_mode": "visual_choice",
-        "question": "Which technology stacks have you used for a complete project?",
-        "category": "Stack Knowledge",
-        "dimension": "tooling",
-        "estimated_seconds": 45,
-        "options": [
-            {"value": "none", "label": "I haven't built a full-stack project yet", "score": 1},
-            {"value": "basic", "label": "Basic HTML/CSS + a simple backend (Flask, Express)", "score": 2},
-            {"value": "mid", "label": "React + Django/Node + PostgreSQL or similar", "score": 4},
-            {"value": "adv", "label": "Full stack with TypeScript, CI/CD, Docker, and production deployment", "score": 5},
-        ],
-    },
-    {
-        "id": 3,
-        "type": "scale",
-        "interaction_mode": "scale",
-        "question": "When a bug appears and you're not sure if it's a frontend, backend, or data issue, how confident are you in isolating it?",
-        "category": "Cross-Layer Debugging",
-        "dimension": "problem_solving",
-        "estimated_seconds": 35,
-        "min_value": 1,
-        "max_value": 5,
-        "labels": {"1": "I'd struggle to know where to look", "5": "I trace requests end-to-end across network, server, and client"},
-    },
-    {
-        "id": 4,
-        "type": "multiple_choice",
-        "interaction_mode": "single_select",
-        "question": "What's the most complex full-stack application you've worked on?",
-        "category": "Project Complexity",
-        "dimension": "experience",
-        "estimated_seconds": 40,
-        "options": [
-            {"value": "none", "label": "I haven't built a full-stack app", "score": 1},
-            {"value": "tutorial", "label": "To-do list or CRUD app from a tutorial", "score": 2},
-            {"value": "personal", "label": "Multi-feature app with auth and real data I designed myself", "score": 4},
-            {"value": "production", "label": "Team project or production app with users", "score": 5},
-        ],
-    },
-    {
-        "id": 5,
-        "type": "text",
-        "interaction_mode": "text",
-        "question": "What's your primary goal as a full-stack developer in the next 6 months?",
-        "category": "Career Goal",
-        "dimension": "goals",
-        "estimated_seconds": 60,
-        "helper": "For example: land a full-stack job, go freelance, build and launch my own product, etc.",
-    },
-    {
-        "id": 6,
-        "type": "scale",
-        "interaction_mode": "scale",
-        "question": "How many hours per week can you realistically dedicate to learning full-stack development?",
-        "category": "Weekly Commitment",
-        "dimension": "commitment",
-        "estimated_seconds": 30,
-        "min_value": 1,
-        "max_value": 5,
-        "labels": {"1": "< 3 hours", "3": "5–10 hours", "5": "15+ hours"},
-    },
-]
+def get_default_questions(target_career: str = "") -> list[dict[str, Any]]:
+    role_graph = load_role_graph(resolve_role_key(target_career))
+    targets = StageAllocator.allocate_stage_one(role_graph)
+    return [
+        _normalize_question(
+            stage=1,
+            index=index,
+            subskill=target,
+            role_label=role_graph.role_label,
+        )
+        for index, target in enumerate(targets, start=1)
+    ]
 
-
-_MOBILE_QUESTIONS: List[Dict[str, Any]] = [
-    {
-        "id": 1,
-        "type": "multiple_choice",
-        "interaction_mode": "visual_choice",
-        "question": "How comfortable are you building mobile app screens with proper navigation and state management?",
-        "category": "Mobile UI & State",
-        "dimension": "technical_depth",
-        "estimated_seconds": 45,
-        "options": [
-            {"value": "none", "label": "I haven't built a mobile app before", "score": 1},
-            {"value": "basic", "label": "I followed a tutorial to build a simple app", "score": 2},
-            {"value": "mid", "label": "I can build multi-screen apps with navigation, forms, and API integration", "score": 4},
-            {"value": "adv", "label": "I ship apps with complex state, animations, offline support, and platform APIs", "score": 5},
-        ],
-    },
-    {
-        "id": 2,
-        "type": "multiple_choice",
-        "interaction_mode": "visual_choice",
-        "question": "Which mobile frameworks or platforms have you used?",
-        "category": "Mobile Platforms",
-        "dimension": "tooling",
-        "estimated_seconds": 45,
-        "options": [
-            {"value": "none", "label": "None yet", "score": 1},
-            {"value": "basic", "label": "Experimented with Flutter, React Native, or SwiftUI", "score": 2},
-            {"value": "mid", "label": "Built a multi-screen app with one framework and published or deployed it", "score": 4},
-            {"value": "adv", "label": "Published apps to App Store or Play Store with native integrations", "score": 5},
-        ],
-    },
-    {
-        "id": 3,
-        "type": "scale",
-        "interaction_mode": "scale",
-        "question": "When a mobile app crashes or behaves differently on another device, how confident are you in finding the cause?",
-        "category": "Mobile Debugging",
-        "dimension": "problem_solving",
-        "estimated_seconds": 35,
-        "min_value": 1,
-        "max_value": 5,
-        "labels": {"1": "I'd be stuck", "5": "I use device logs, profilers, and platform-specific debugging tools"},
-    },
-    {
-        "id": 4,
-        "type": "multiple_choice",
-        "interaction_mode": "single_select",
-        "question": "What's the most complex mobile app you've worked on?",
-        "category": "Project Complexity",
-        "dimension": "experience",
-        "estimated_seconds": 40,
-        "options": [
-            {"value": "none", "label": "I haven't built a mobile app", "score": 1},
-            {"value": "tutorial", "label": "Counter or calculator from a tutorial", "score": 2},
-            {"value": "personal", "label": "An app with multiple screens, API calls, and local storage", "score": 4},
-            {"value": "production", "label": "Published app with real users or team collaboration", "score": 5},
-        ],
-    },
-    {
-        "id": 5,
-        "type": "text",
-        "interaction_mode": "text",
-        "question": "What's your primary goal as a mobile developer in the next 6 months?",
-        "category": "Career Goal",
-        "dimension": "goals",
-        "estimated_seconds": 60,
-        "helper": "For example: build and publish my first app, learn Flutter or Swift, get a mobile dev job, etc.",
-    },
-    {
-        "id": 6,
-        "type": "scale",
-        "interaction_mode": "scale",
-        "question": "How many hours per week can you realistically dedicate to learning mobile development?",
-        "category": "Weekly Commitment",
-        "dimension": "commitment",
-        "estimated_seconds": 30,
-        "min_value": 1,
-        "max_value": 5,
-        "labels": {"1": "< 3 hours", "3": "5–10 hours", "5": "15+ hours"},
-    },
-]
-
-
-_DEVOPS_QUESTIONS: List[Dict[str, Any]] = [
-    {
-        "id": 1,
-        "type": "multiple_choice",
-        "interaction_mode": "visual_choice",
-        "question": "How comfortable are you with deploying and managing applications in production?",
-        "category": "Deployment & Operations",
-        "dimension": "technical_depth",
-        "estimated_seconds": 45,
-        "options": [
-            {"value": "none", "label": "I've never deployed an application", "score": 1},
-            {"value": "basic", "label": "I've deployed to Heroku, Vercel, or a simple VPS", "score": 2},
-            {"value": "mid", "label": "I use Docker, set up CI/CD pipelines, and manage servers", "score": 4},
-            {"value": "adv", "label": "I manage Kubernetes clusters, infrastructure as code, and monitoring stacks", "score": 5},
-        ],
-    },
-    {
-        "id": 2,
-        "type": "multiple_choice",
-        "interaction_mode": "visual_choice",
-        "question": "Which DevOps tools and platforms have you used?",
-        "category": "DevOps Tooling",
-        "dimension": "tooling",
-        "estimated_seconds": 45,
-        "options": [
-            {"value": "none", "label": "Just basic Git", "score": 1},
-            {"value": "basic", "label": "Docker and a CI service (GitHub Actions, GitLab CI)", "score": 2},
-            {"value": "mid", "label": "Docker Compose, Terraform or Ansible, and a cloud provider (AWS/GCP/Azure)", "score": 4},
-            {"value": "adv", "label": "Kubernetes, monitoring (Prometheus/Grafana), secrets management, multi-env pipelines", "score": 5},
-        ],
-    },
-    {
-        "id": 3,
-        "type": "scale",
-        "interaction_mode": "scale",
-        "question": "When a production service goes down at 2 AM, how confident are you in diagnosing and recovering it?",
-        "category": "Incident Response",
-        "dimension": "problem_solving",
-        "estimated_seconds": 35,
-        "min_value": 1,
-        "max_value": 5,
-        "labels": {"1": "I wouldn't know where to start", "5": "I check metrics, logs, rollback, and write a post-mortem"},
-    },
-    {
-        "id": 4,
-        "type": "multiple_choice",
-        "interaction_mode": "single_select",
-        "question": "What's the most complex infrastructure you've managed?",
-        "category": "Infrastructure Complexity",
-        "dimension": "experience",
-        "estimated_seconds": 40,
-        "options": [
-            {"value": "none", "label": "I haven't managed infrastructure", "score": 1},
-            {"value": "basic", "label": "A single server or PaaS deployment", "score": 2},
-            {"value": "mid", "label": "Multi-service setup with Docker, a database, and a reverse proxy", "score": 4},
-            {"value": "production", "label": "Production cluster with auto-scaling, monitoring, and automated rollbacks", "score": 5},
-        ],
-    },
-    {
-        "id": 5,
-        "type": "text",
-        "interaction_mode": "text",
-        "question": "What's your primary goal as a DevOps engineer in the next 6 months?",
-        "category": "Career Goal",
-        "dimension": "goals",
-        "estimated_seconds": 60,
-        "helper": "For example: get AWS certified, learn Kubernetes, transition from backend to DevOps, automate my team's deployments, etc.",
-    },
-    {
-        "id": 6,
-        "type": "scale",
-        "interaction_mode": "scale",
-        "question": "How many hours per week can you realistically dedicate to learning DevOps?",
-        "category": "Weekly Commitment",
-        "dimension": "commitment",
-        "estimated_seconds": 30,
-        "min_value": 1,
-        "max_value": 5,
-        "labels": {"1": "< 3 hours", "3": "5–10 hours", "5": "15+ hours"},
-    },
-]
-
-
-# ============================================================================
-# CAREER QUESTION BANK REGISTRY
-# ============================================================================
-
-CAREER_QUESTION_BANKS: Dict[str, List[Dict[str, Any]]] = {
-    "backend": _BACKEND_QUESTIONS,
-    "frontend": _FRONTEND_QUESTIONS,
-    "data_science": _DATA_SCIENCE_QUESTIONS,
-    "fullstack": _FULLSTACK_QUESTIONS,
-    "mobile": _MOBILE_QUESTIONS,
-    "devops": _DEVOPS_QUESTIONS,
-}
-
-
-def _resolve_career_key(target_career: str) -> str:
-    """Map a free-form career string to a question bank key."""
-    lowered = (target_career or "").lower()
-    if "backend" in lowered:
-        return "backend"
-    if "frontend" in lowered or "front-end" in lowered or "front end" in lowered:
-        return "frontend"
-    if "data" in lowered or "scientist" in lowered or "analyst" in lowered or "machine learning" in lowered:
-        return "data_science"
-    if "fullstack" in lowered or "full stack" in lowered or "full-stack" in lowered:
-        return "fullstack"
-    if "mobile" in lowered or "flutter" in lowered or "ios" in lowered or "android" in lowered:
-        return "mobile"
-    if "devops" in lowered or "dev ops" in lowered or "sre" in lowered or "infrastructure" in lowered or "cloud" in lowered:
-        return "devops"
-    return "backend"  # safe default
-
-
-def get_default_questions(target_career: str = "") -> List[Dict[str, Any]]:
-    """Return the deterministic career-specific fallback question set."""
-    key = _resolve_career_key(target_career)
-    return copy.deepcopy(CAREER_QUESTION_BANKS.get(key, _BACKEND_QUESTIONS))
-
-
-# ============================================================================
-# PROMPTS
-# ============================================================================
-
-QUESTION_SYSTEM_PROMPT = """You personalize career assessment questions for a career-development platform.
-
-INPUT: You receive a bank of 6 questions for a specific career path.
-TASK:
-  - Personalize the wording of each question and its option labels to better match the target career and any extra user context.
-  - You may adjust option labels to be more career-specific.
-  - Do NOT change question IDs, types, interaction_modes, dimensions, categories, scoring, or estimated_seconds.
-  - Do NOT add or remove questions. Return exactly 6.
-
-OUTPUT: Return strict JSON with a top-level "questions" array containing 6 question objects.
-Each question must preserve: id, type, interaction_mode, category, dimension, estimated_seconds.
-For multiple_choice questions, preserve the options array structure with value, label, and score.
-"""
-
-
-EVALUATION_SYSTEM_PROMPT = """You evaluate career assessment responses for a career-development platform.
-
-The user answered 6 questions covering these dimensions:
-1. Core Technical depth (weight: 25%)
-2. Tooling/Ecosystem knowledge (weight: 15%)
-3. Problem-Solving approach (weight: 20%)
-4. Experience level (weight: 20%)
-5. Goal clarity (weight: 10%)
-6. Learning commitment (weight: 10%)
-
-SCORING RUBRIC:
-- overall_score: 0–100, computed as a weighted sum of dimension scores.
-- skill_scores: An object mapping each dimension name to a 0–100 score.
-  Keys must be: "technical_depth", "tooling", "problem_solving", "experience", "goals", "commitment".
-- strengths: Array of 2–3 specific strengths evidenced by the answers. Be concrete, not generic.
-- areas_for_improvement: Array of 2–3 specific gaps evidenced by the answers. Reference actual skill areas.
-- recommended_careers: Array of top 2 career paths. Each item: {"title": str, "match_score": int 0-100, "reasoning": str}.
-  The first must be the target career. The second should be an adjacent role.
-- recommended_learning_paths: Array of top 3 skills to prioritize.
-  Each item: {"skill": str, "priority": "high"|"medium", "resources": []}.
-- ai_insights: 2–3 sentence personalized analysis. Reference the user's specific answers.
-- ai_confidence_score: Your confidence in this evaluation, 50–95.
-
-Return strict JSON. No markdown fences, no explanation text outside the JSON.
-"""
-
-
-# ============================================================================
-# NORMALIZERS
-# ============================================================================
-
-def _normalize_questions(raw_questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    normalized: List[Dict[str, Any]] = []
-    for index, raw_question in enumerate(raw_questions[:6], start=1):
-        question = dict(raw_question)
-        question["id"] = int(question.get("id") or index)
-        question["type"] = question.get("type") or "text"
-        question["interaction_mode"] = question.get("interaction_mode") or question["type"]
-        question["question"] = str(question.get("question") or "").strip()
-        question["category"] = str(question.get("category") or "General").strip()
-        question["dimension"] = str(question.get("dimension") or "technical_depth").strip()
-        question["estimated_seconds"] = int(question.get("estimated_seconds") or 45)
-        if question["question"]:
-            normalized.append(question)
-
-    return normalized
-
-
-# ============================================================================
-# AI SERVICE
-# ============================================================================
 
 class AssessmentAIService:
-    """AI-backed assessment generation and evaluation with deterministic fallback."""
+    client_class = GemmaClient
+    stage_one_cache_ttl_seconds = 7 * 24 * 60 * 60
 
-    QUESTION_FALLBACK_VERSION = "assessment-questions-bank-v2"
-    EVALUATION_VERSION = "assessment-eval-gemma-v2"
+    @classmethod
+    def _get_client(cls) -> GemmaClient:
+        return cls.client_class()
 
-    @staticmethod
-    def generate_questions(assessment: Assessment) -> Tuple[List[Dict[str, Any]], GemmaResponse | None]:
-        """Generate career-specific questions, personalizing via Gemma when available."""
-        target_career = assessment.target_career or "Software Engineer"
-        bank_questions = get_default_questions(target_career)
-
-        client = GemmaClient()
-        prompt = (
-            f"Assessment type: {assessment.assessment_type}\n"
-            f"Target career: {target_career}\n"
-            f"Base questions to personalize:\n{json.dumps(bank_questions, indent=2)}\n\n"
-            "Personalize the wording for this career while keeping the exact structure."
+    @classmethod
+    def _build_stage_one_prompt(cls, role_graph, targets) -> str:
+        target_lines = "\n".join(
+            f"- {target.key}: {target.label} ({target.dimension})"
+            for target in targets
+        )
+        return (
+            f"Generate 5 calibration questions for {role_graph.role_label}.\n"
+            f"Return one question for each target below.\n{target_lines}\n"
+            "Every question must be concise and evaluative."
         )
 
+    @classmethod
+    def _build_stage_two_prompt(cls, role_graph, targets, gap_profile) -> str:
+        target_lines = "\n".join(
+            f"- {target.key}: {target.label} ({target.dimension})"
+            for target in targets
+        )
+        return (
+            f"Generate 5 targeted follow-up questions for {role_graph.role_label}.\n"
+            f"High priority gaps: {', '.join(gap_profile.high_priority_gaps)}.\n"
+            f"Uncertain areas: {', '.join(gap_profile.uncertain_areas)}.\n"
+            f"Targets:\n{target_lines}"
+        )
+
+    @classmethod
+    def _build_evaluation_prompt(cls, role_graph, merged_evidence) -> str:
+        serialized = [
+            {
+                "subskill_key": evidence.subskill_key,
+                "dimension_key": evidence.dimension_key,
+                "observed_level": evidence.observed_level,
+                "target_level": evidence.target_level,
+                "gap": evidence.gap,
+                "confidence": evidence.confidence,
+            }
+            for evidence in merged_evidence
+        ]
+        return (
+            f"Summarize this staged assessment evidence for {role_graph.role_label}.\n"
+            f"Evidence: {serialized}\n"
+            "Return compact JSON only."
+        )
+
+    @classmethod
+    def _deterministic_questions(cls, role_graph, targets, *, stage: int) -> list[dict[str, Any]]:
+        return [
+            _normalize_question(
+                stage=stage,
+                index=index,
+                subskill=target,
+                role_label=role_graph.role_label,
+                targeted=(stage == 2),
+            )
+            for index, target in enumerate(targets, start=1)
+        ]
+
+    @classmethod
+    def _stage_one_cache_key(cls, role_key: str, graph_version: str) -> str:
+        return f"assessment:stage1:{role_key}:{graph_version}"
+
+    @classmethod
+    def generate_stage_one(
+        cls,
+        role_key: str,
+        role_graph,
+    ) -> tuple[list[dict[str, Any]], AIInvocationMetadata]:
+        cache_key = cls._stage_one_cache_key(role_key, role_graph.version)
+        cached = cache.get(cache_key)
+        if cached:
+            return cached, build_ai_metadata(
+                source="cache",
+                processing_time_ms=0,
+                model=None,
+                provider="django-cache",
+                version=role_graph.version,
+            )
+
+        targets = StageAllocator.allocate_stage_one(role_graph)
+        allowed_targets = _target_map(role_graph, targets)
+        started_at = monotonic()
+
         try:
-            result = client.generate_structured(
-                prompt=prompt,
+            response = cls._get_client().generate_structured(
+                prompt=cls._build_stage_one_prompt(role_graph, targets),
                 system=QUESTION_SYSTEM_PROMPT,
                 required_keys=("questions",),
             )
-            questions = _normalize_questions(result.payload.get("questions", []) if result.payload else [])
-            if len(questions) >= 4:
-                return questions, result
-        except Exception:
-            pass
-
-        # Fallback: career-specific bank questions (already good, not generic)
-        return bank_questions, None
-
-    @staticmethod
-    def evaluate_assessment(assessment: Assessment) -> AssessmentAnalysisResult:
-        """Evaluate user responses: try Gemma first, then fall back to baseline."""
-        target_career = assessment.target_career or "Software Engineer"
-
-        baseline = BaselineAssessmentAnalyzer.analyze(
-            AssessmentAnalysisInput(
-                assessment_id=str(assessment.id),
-                assessment_type=assessment.assessment_type,
-                target_career=target_career,
-                responses=assessment.responses or [],
-                questions=assessment.questions or [],
+            questions = sanitize_stage_question_payload(
+                response.payload.get("questions"),
+                stage=1,
+                allowed_targets=allowed_targets,
             )
-        )
+            metadata = response.metadata
+        except Exception as error:
+            questions = cls._deterministic_questions(role_graph, targets, stage=1)
+            metadata = build_ai_metadata(
+                source="fallback",
+                processing_time_ms=int((monotonic() - started_at) * 1000),
+                model=None,
+                provider="sha8alny",
+                version=role_graph.version,
+                fallback_used=True,
+                error_code=type(error).__name__,
+            )
 
-        prompt = (
-            f"Target career: {target_career}\n"
-            f"Assessment type: {assessment.assessment_type}\n\n"
-            f"Questions:\n{json.dumps(assessment.questions, indent=2)}\n\n"
-            f"User responses:\n{json.dumps(assessment.responses, indent=2)}\n\n"
-            f"Dimension weights: {json.dumps(DIMENSION_WEIGHTS)}\n\n"
-            "Evaluate these responses using the rubric and return structured JSON."
+        cache.set(cache_key, questions, timeout=cls.stage_one_cache_ttl_seconds)
+        return questions, metadata
+
+    @classmethod
+    def build_gap_profile(cls, assessment: Assessment, role_graph):
+        evidence = AnswerScorer.score_stage(
+            role_graph,
+            assessment.stage_one_questions or [],
+            assessment.stage_one_responses or [],
         )
+        return GapProfileBuilder.build(role_graph, evidence)
+
+    @classmethod
+    def generate_stage_two(
+        cls,
+        gap_profile,
+        role_graph,
+    ) -> tuple[list[dict[str, Any]], AIInvocationMetadata]:
+        targets = Stage2Allocator.allocate_stage_two(role_graph, gap_profile)
+        allowed_targets = _target_map(role_graph, targets)
+        started_at = monotonic()
 
         try:
-            result = GemmaClient().generate_structured(
-                prompt=prompt,
+            response = cls._get_client().generate_structured(
+                prompt=cls._build_stage_two_prompt(role_graph, targets, gap_profile),
+                system=QUESTION_SYSTEM_PROMPT,
+                required_keys=("questions",),
+            )
+            questions = sanitize_stage_question_payload(
+                response.payload.get("questions"),
+                stage=2,
+                allowed_targets=allowed_targets,
+            )
+            metadata = response.metadata
+        except Exception as error:
+            questions = cls._deterministic_questions(role_graph, targets, stage=2)
+            metadata = build_ai_metadata(
+                source="fallback",
+                processing_time_ms=int((monotonic() - started_at) * 1000),
+                model=None,
+                provider="sha8alny",
+                version=role_graph.version,
+                fallback_used=True,
+                error_code=type(error).__name__,
+            )
+
+        return questions, metadata
+
+    @classmethod
+    def _summarize_dimension_scores(cls, merged_evidence):
+        grouped: dict[str, list[float]] = {}
+        for evidence in merged_evidence:
+            normalized = (evidence.observed_level / max(evidence.target_level, 1)) * 100
+            grouped.setdefault(evidence.dimension_key, []).append(min(100.0, round(normalized, 2)))
+        return {
+            dimension_key: round(mean(scores), 2)
+            for dimension_key, scores in grouped.items()
+        }
+
+    @classmethod
+    def _derive_strengths_and_gaps(cls, role_graph, merged_evidence):
+        subskill_lookup = {
+            subskill.key: subskill.label
+            for dimension in role_graph.dimensions
+            for subskill in dimension.subskills
+        }
+        ordered = sorted(merged_evidence, key=lambda item: (item.gap, -item.confidence))
+        strengths = [
+            subskill_lookup[item.subskill_key]
+            for item in sorted(merged_evidence, key=lambda item: (item.gap, -item.confidence))[:3]
+            if item.gap <= 1.0
+        ]
+        gaps = [
+            subskill_lookup[item.subskill_key]
+            for item in sorted(merged_evidence, key=lambda item: (item.gap, item.confidence), reverse=True)[:3]
+            if item.gap > 0
+        ]
+        return strengths or [role_graph.dimensions[0].label], gaps or [ordered[-1].dimension_key]
+
+    @classmethod
+    def _recommended_learning_paths(cls, role_graph, merged_evidence):
+        subskill_lookup = {
+            subskill.key: subskill.label
+            for dimension in role_graph.dimensions
+            for subskill in dimension.subskills
+        }
+        ordered = sorted(merged_evidence, key=lambda item: (item.gap, item.confidence), reverse=True)
+        return [
+            {
+                "skill": subskill_lookup[item.subskill_key],
+                "priority": "high" if index == 0 else "medium",
+                "resources": [],
+            }
+            for index, item in enumerate(ordered[:3])
+        ]
+
+    @classmethod
+    def _build_roadmap_signal(cls, role_graph, merged_evidence, metadata) -> RoadmapSignal:
+        prerequisite_links = {
+            subskill.key: subskill.prerequisites
+            for dimension in role_graph.dimensions
+            for subskill in dimension.subskills
+            if subskill.key in {item.subskill_key for item in merged_evidence}
+        }
+        confidence_score = round(mean([item.confidence for item in merged_evidence]), 2) if merged_evidence else 0.0
+        evidence_strength = "strong"
+        if confidence_score < 0.8:
+            evidence_strength = "moderate"
+        if confidence_score < 0.65:
+            evidence_strength = "weak"
+        priority_order = [item.subskill_key for item in merged_evidence if item.gap > 0]
+        if not priority_order:
+            priority_order = [item.subskill_key for item in merged_evidence[:3]]
+
+        return RoadmapSignal(
+            role=role_graph.role_key,
+            target_level="job-ready",
+            subskill_gaps=merged_evidence,
+            confidence_score=confidence_score,
+            evidence_strength=evidence_strength,
+            priority_order=priority_order,
+            prerequisite_links=prerequisite_links,
+            generation_metadata={
+                "assessment_version": "staged-v1",
+                "fallback_used": metadata.fallback_used,
+                "trace_id": metadata.trace_id,
+                "model": metadata.model,
+                "version": metadata.version,
+            },
+        )
+
+    @classmethod
+    def _deterministic_staged_analysis(
+        cls,
+        role_graph,
+        merged_evidence,
+        metadata: AIInvocationMetadata,
+    ) -> AssessmentAnalysisResult:
+        dimension_scores = cls._summarize_dimension_scores(merged_evidence)
+        overall_score = round(mean(dimension_scores.values()), 2) if dimension_scores else 0.0
+        strengths, gaps = cls._derive_strengths_and_gaps(role_graph, merged_evidence)
+        return AssessmentAnalysisResult(
+            overall_score=Decimal(str(overall_score)),
+            skill_scores=dimension_scores,
+            strengths=strengths,
+            areas_for_improvement=gaps,
+            recommended_careers=BaselineAssessmentAnalyzer._career_aliases(role_graph.role_label),
+            recommended_learning_paths=cls._recommended_learning_paths(role_graph, merged_evidence),
+            ai_insights=(
+                f"Your staged assessment for {role_graph.role_label} shows the strongest momentum in "
+                f"{strengths[0].lower()} and the biggest next step around {gaps[0].lower()}."
+            ),
+            ai_confidence_score=Decimal(str(round((metadata.fallback_used and 72 or 82), 2))),
+            metadata=metadata,
+        )
+
+    @classmethod
+    def evaluate_staged_assessment(cls, assessment: Assessment) -> StagedAssessmentEvaluation:
+        role_graph = load_role_graph(resolve_role_key(assessment.target_career))
+        stage_one_evidence = AnswerScorer.score_stage(
+            role_graph,
+            assessment.stage_one_questions or [],
+            assessment.stage_one_responses or [],
+        )
+        stage_two_evidence = AnswerScorer.score_stage(
+            role_graph,
+            assessment.stage_two_questions or [],
+            assessment.stage_two_responses or [],
+        )
+        merged_evidence = merge_evidence(role_graph, stage_one_evidence, stage_two_evidence)
+        started_at = monotonic()
+        prompt_tokens = 0
+        completion_tokens = 0
+
+        try:
+            response = cls._get_client().generate_structured(
+                prompt=cls._build_evaluation_prompt(role_graph, merged_evidence),
                 system=EVALUATION_SYSTEM_PROMPT,
                 required_keys=(
                     "overall_score",
-                    "skill_scores",
                     "strengths",
                     "areas_for_improvement",
                     "recommended_careers",
@@ -718,47 +426,65 @@ class AssessmentAIService:
                     "ai_confidence_score",
                 ),
             )
-            raw_payload = result.payload or {}
-            payload = sanitize_evaluation_payload(
-                raw_payload,
-                fallback_strengths=baseline.strengths,
-                fallback_gaps=baseline.areas_for_improvement,
+            repaired = sanitize_evaluation_payload(
+                response.payload,
+                fallback_strengths=[],
+                fallback_gaps=[],
             )
-            return AssessmentAnalysisResult(
-                overall_score=Decimal(str(payload["overall_score"])),
-                skill_scores=payload["skill_scores"],
-                strengths=payload["strengths"],
-                areas_for_improvement=payload["areas_for_improvement"],
-                recommended_careers=payload["recommended_careers"] or baseline.recommended_careers,
-                recommended_learning_paths=payload["recommended_learning_paths"] or baseline.recommended_learning_paths,
-                ai_insights=payload["ai_insights"] or baseline.ai_insights,
-                ai_confidence_score=Decimal(str(payload["ai_confidence_score"])),
-                metadata=build_ai_metadata(
-                    source="llm",
-                    processing_time_ms=result.metadata.processing_time_ms,
-                    model=result.metadata.model,
-                    provider=result.metadata.provider,
-                    version=AssessmentAIService.EVALUATION_VERSION,
-                    trace_id=result.metadata.trace_id,
-                ),
+            metadata = response.metadata
+            prompt_tokens = response.prompt_tokens
+            completion_tokens = response.completion_tokens
+            deterministic = cls._deterministic_staged_analysis(role_graph, merged_evidence, metadata)
+            analysis = AssessmentAnalysisResult(
+                overall_score=Decimal(str(round(repaired["overall_score"], 2))),
+                skill_scores=deterministic.skill_scores,
+                strengths=repaired["strengths"],
+                areas_for_improvement=repaired["areas_for_improvement"],
+                recommended_careers=repaired["recommended_careers"] or deterministic.recommended_careers,
+                recommended_learning_paths=repaired["recommended_learning_paths"] or deterministic.recommended_learning_paths,
+                ai_insights=repaired["ai_insights"],
+                ai_confidence_score=Decimal(str(round(repaired["ai_confidence_score"], 2))),
+                metadata=metadata,
             )
         except Exception as error:
-            return AssessmentAnalysisResult(
-                overall_score=baseline.overall_score,
-                skill_scores=baseline.skill_scores,
-                strengths=baseline.strengths,
-                areas_for_improvement=baseline.areas_for_improvement,
-                recommended_careers=baseline.recommended_careers,
-                recommended_learning_paths=baseline.recommended_learning_paths,
-                ai_insights=baseline.ai_insights,
-                ai_confidence_score=baseline.ai_confidence_score,
-                metadata=build_ai_metadata(
-                    source="fallback",
-                    processing_time_ms=baseline.metadata.processing_time_ms,
-                    model=BaselineAssessmentAnalyzer.MODEL_NAME,
-                    provider="sha8alny",
-                    version=BaselineAssessmentAnalyzer.VERSION,
-                    fallback_used=True,
-                    error_code=type(error).__name__,
-                ),
+            metadata = build_ai_metadata(
+                source="fallback",
+                processing_time_ms=int((monotonic() - started_at) * 1000),
+                model=None,
+                provider="sha8alny",
+                version=role_graph.version,
+                fallback_used=True,
+                error_code=type(error).__name__,
             )
+            analysis = cls._deterministic_staged_analysis(role_graph, merged_evidence, metadata)
+
+        roadmap_signal = cls._build_roadmap_signal(role_graph, merged_evidence, analysis.metadata)
+        return StagedAssessmentEvaluation(
+            analysis=analysis,
+            roadmap_signal=roadmap_signal,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
+
+    @classmethod
+    def generate_questions(cls, assessment: Assessment) -> tuple[list[dict[str, Any]], GemmaResponse | None]:
+        role_graph = load_role_graph(resolve_role_key(assessment.target_career))
+        questions, metadata = cls.generate_stage_one(role_graph.role_key, role_graph)
+        return questions, GemmaResponse(
+            text="",
+            payload={"questions": questions},
+            metadata=metadata,
+            prompt_tokens=0,
+            completion_tokens=0,
+        )
+
+    @classmethod
+    def evaluate_assessment(cls, assessment: Assessment) -> AssessmentAnalysisResult:
+        payload = AssessmentAnalysisInput(
+            assessment_id=str(assessment.id),
+            assessment_type=assessment.assessment_type,
+            target_career=assessment.target_career,
+            responses=assessment.responses or [],
+            questions=assessment.questions or [],
+        )
+        return BaselineAssessmentAnalyzer.analyze(payload)
