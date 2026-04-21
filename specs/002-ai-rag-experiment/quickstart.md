@@ -1,8 +1,44 @@
-# Quickstart: Two-Stage Adaptive Assessment Question Generation
+# Quickstart: Running the Two-Stage Adaptive Assessment
 
-## 1. Start the stack
+This runbook exercises the staged skills-assessment flow end to end. It covers automated verification, a full manual walkthrough with Gemma enabled, and a deterministic-fallback walkthrough with Gemma disabled.
 
-### Backend
+## 1. Automated verification
+
+Run these from the repository root. All of them must pass before the staged flow is considered healthy.
+
+```bash
+cd /Users/mohamed3wes/Downloads/Grad-Project/Backend
+source venv/bin/activate
+
+# Staged-assessment acceptance suite
+pytest apps/assessments/tests/test_role_graph.py \
+       apps/assessments/tests/test_engine.py \
+       apps/assessments/tests/test_stage_cache.py \
+       apps/assessments/tests/test_staged_flow.py \
+       apps/assessments/tests/test_frontend_contracts.py
+
+# Roadmap consumer contract
+pytest apps/roadmaps/tests/test_api.py
+
+# Django system check
+python manage.py check
+```
+
+Expected: all tests pass, Django check reports zero issues.
+
+## 2. Start the stack
+
+Open three terminals.
+
+**Terminal 1 — Ollama (optional for Gemma-backed runs):**
+
+```bash
+ollama serve
+# In another shell once, to cache the model:
+ollama pull gemma2:2b  # or whichever model your .env points at
+```
+
+**Terminal 2 — Backend:**
 
 ```bash
 cd /Users/mohamed3wes/Downloads/Grad-Project/Backend
@@ -10,109 +46,74 @@ source venv/bin/activate
 python manage.py runserver
 ```
 
-### Frontend
+**Terminal 3 — Frontend:**
 
 ```bash
 cd /Users/mohamed3wes/Downloads/Grad-Project/Frontend
-npm install
 npm run dev
 ```
 
-### Local AI runtime
+Access the app at http://localhost:5173.
 
-```bash
-ollama serve
-ollama pull gemma4:e2b
-```
+## 3. Manual walkthrough — Gemma enabled
 
-### Optional production-like cache / queue services
+Perform the following for one supported role first, then repeat for the remaining five (backend, frontend, data science, fullstack, mobile, devops).
 
-```bash
-redis-server
-```
+1. Log in and open the assessment flow.
+2. Create a new `skills` assessment for the chosen role.
+3. Confirm `POST /assessment/` returns stage 1 with `presentation.submission_state = stage_1_generating`.
+4. Poll the detail endpoint until stage one becomes ready and confirm exactly 5 `active_questions`.
+5. Submit stage one. Confirm the API transitions to `submission_state = stage_1_analyzing`.
+6. Poll the detail endpoint until stage two becomes ready. Confirm exactly 5 new `active_questions` and a populated `gap_profile_summary`.
+7. Submit stage two. Confirm the result endpoint eventually returns `submission_state = completed` plus a typed `roadmap_signal`.
+8. In the completed response, verify `roadmap_signal.generation_metadata.fallback_used = false` (Gemma path was used).
 
-## 2. Core verification commands
+**Expected LLM budget**: at most 3 Gemma calls per completed assessment (stage-1 generation, stage-2 generation, final evaluation). Confirm by tailing the backend logs or inspecting `generation_metadata` on the response.
 
-### Backend unit and integration checks
+## 4. Manual walkthrough — Gemma disabled (deterministic fallback)
 
-```bash
-cd /Users/mohamed3wes/Downloads/Grad-Project/Backend
-source venv/bin/activate
-pytest apps/assessments/tests/test_role_graph.py
-pytest apps/assessments/tests/test_engine.py
-pytest apps/assessments/tests/test_stage_cache.py
-pytest apps/assessments/tests/test_staged_flow.py
-pytest apps/assessments/tests/test_api.py
-pytest apps/assessments/tests/test_frontend_contracts.py
-pytest apps/roadmaps/tests/test_api.py
-python manage.py check
-```
+This proves the assessment is demo-safe without a model runtime.
 
-### Frontend checks
+1. Stop the Ollama process (`Ctrl+C` in terminal 1, or `ollama kill`).
+2. Reload the frontend and start a new `skills` assessment (try Backend Developer first).
+3. Confirm stage one still loads 5 questions (deterministic fallback).
+4. Submit stage one and confirm the flow still transitions into stage two with 5 targeted questions.
+5. Submit stage two and confirm the result completes with a populated `roadmap_signal`.
+6. Verify `roadmap_signal.generation_metadata.fallback_used = true` on at least one generation step.
 
-```bash
-cd /Users/mohamed3wes/Downloads/Grad-Project/Frontend
-npm run test:run
-npm run build
-```
+## 5. Cache and version-bump spot check
 
-## 3. Manual acceptance walkthrough
+1. Start a fresh skills assessment for one role while Ollama is running.
+2. Confirm stage-one questions are served and cached.
+3. Start a second skills assessment for the same role. Confirm stage-one questions are reused from cache (no additional Gemma call).
+4. (When the curated partner ships new content): bump `CURATED_VERSION` in `Backend/apps/assessments/role_graph_data.py`.
+5. Start another skills assessment for the same role. Confirm stage-one questions are regenerated (cache invalidated by version bump).
 
-### Stage 1 readiness
+The automated test `test_stage_one_generation_invalidates_cache_when_graph_version_changes` in `apps/assessments/tests/test_stage_cache.py` covers this invariant.
 
-1. Open `/assessment`.
-2. Create a new `skills` assessment for a supported role.
-3. Confirm the UI reports stage-one preparation and then shows stage-one questions.
-4. Repeat creation for the same role and confirm stage one is served through the cache path when available.
+## 6. Frontend contract spot check
 
-### Stage transition
+On the Session and Results pages:
 
-1. Complete all stage-one questions.
-2. Submit the first stage.
-3. Confirm the UI switches to an "Analyzing your responses..." transition state.
-4. Confirm stage-two questions appear without starting a new assessment.
+- `AssessmentSubmissionState` union values exposed by `Frontend/src/lib/api.ts` match the backend `submission_state` strings at every transition.
+- The analyzing transition (`AnalyzingTransition.tsx`) appears during both `stage_1_analyzing` and `stage_2_analyzing`.
+- The results page surfaces the structured `roadmap_signal` and the roadmap CTA once `submission_state = completed`.
 
-### Final result
+## 7. Roadmap consumer spot check
 
-1. Complete all stage-two questions.
-2. Submit the second stage.
-3. Confirm the result screen shows standard result summaries plus `roadmap_signal`-backed capability output.
-4. Confirm roadmap creation can prefer the structured roadmap signal when present.
+1. Open a completed staged assessment.
+2. Create a roadmap from that assessment.
+3. Confirm the roadmap service prefers `roadmap_signal` over legacy score-based input. `apps/roadmaps/tests/test_api.py::TestRoadmapCreationAPI::test_create_ai_roadmap_prefers_structured_roadmap_signal` is the regression gate for this behavior.
 
-## 4. Failure and fallback checks
+## 8. Verification notes
 
-1. Stop Ollama and create a new supported-role assessment.
-2. Confirm stage one still becomes available through the deterministic fallback path.
-3. Stop Ollama before stage-two generation and confirm the assessment still reaches a usable final result.
-4. Confirm failure states do not leave the frontend in a permanent spinner.
+Record the following after each manual walkthrough:
 
-## 5. Cache and observability checks
+- Date and commit SHA used.
+- Roles covered.
+- Gemma status (running / stopped).
+- Whether `fallback_used` was observed.
+- Total Gemma calls per completed assessment (must be ≤ 3).
+- Any deviation from the expected transitions above.
 
-1. Confirm stage-one cache keys are versioned by role key and role-graph version.
-2. Confirm cache hits and misses are visible in logs or generation metadata.
-3. Confirm each completed staged assessment records no more than three model invocations total:
-   - stage 1 generation
-   - stage 2 generation
-   - final evaluation
-4. Confirm fallback usage, validation failures, and trace IDs are stored or exposed for debugging.
-
-## 6. Environment notes
-
-- Development should use `DJANGO_CACHE_BACKEND=django.core.cache.backends.locmem.LocMemCache` unless a local Redis cache is available.
-- Production keeps Redis-backed cache and single-lane AI queue behavior.
-- Model selection stays environment-driven; E2B is the conservative local default and E4B remains the stronger option on 16 GB hardware.
-
-## 7. Verification status
-
-Verified on `2026-04-15` in the local workspace:
-
-- `cd Backend && pytest apps/assessments/tests apps/roadmaps/tests/test_api.py` → `56 passed`
-- `cd Backend && python3 manage.py check` → no issues
-- `cd Frontend && npm run test:run` → `33 passed`
-- `cd Frontend && npm run build` → success
-
-Notes:
-
-- Staged assessment route tests are green.
-- One React `act(...)` warning still appears in `Frontend/src/features/assessment/routes/AssessmentSessionPage.test.tsx`.
-- Advisory route tests also emit separate `act(...)` warnings outside this staged-assessment feature scope.
+The feature is considered in good health when both Gemma-enabled and Gemma-disabled walkthroughs reach `submission_state = completed` with a populated `roadmap_signal` for every supported role.

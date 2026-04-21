@@ -1,153 +1,107 @@
-# Data Model: Two-Stage Adaptive Assessment Question Generation
+# Data Model: Staged Assessment Baseline Review Gate
 
-## 1. RoleGraph
+## 1. BaselineCandidate
 
-Represents the role-specific capability map used by staged assessment generation and scoring.
-
-| Field | Type | Description | Validation |
-|-------|------|-------------|------------|
-| `role_key` | string | Canonical machine key for the role | Required, unique within supported roles |
-| `role_label` | string | Human-readable role name | Required |
-| `dimensions` | list of `CoreDimension` | Ordered list of assessment dimensions for the role | Required, 3-5 items |
-| `version` | string | Version tag for cache invalidation and handoff tracking | Required |
-
-**Relationships**:
-
-- One `RoleGraph` contains many `CoreDimension` records.
-
-## 2. CoreDimension
-
-Represents a weighted assessment area within a role graph.
+Represents the current staged-assessment working tree snapshot under review.
 
 | Field | Type | Description | Validation |
 |-------|------|-------------|------------|
-| `key` | string | Stable dimension identifier | Required |
-| `label` | string | Human-readable dimension name | Required |
-| `weight` | number | Relative contribution to calibration and prioritization | Required, 0-1 |
-| `subskills` | list of `SubSkill` | Ordered list of subskills in this dimension | Required, 3-6 items |
+| `branch` | string | Feature branch being reviewed | Required, expected `002-ai-rag-experiment` |
+| `candidate_scope` | list of strings | Files or modules included in the gate | Required, non-empty |
+| `role_graph_version` | string | Declared graph version used by the candidate | Required |
+| `contract_surfaces` | list of `ContractSurface` keys | Interfaces affected by the candidate | Required |
+| `decision_status` | enum | Current review state | Required, one of `pending_review`, `evidence_collected`, `human_reviewed`, `accepted`, `revised`, `rejected` |
 
-**Validation rules**:
+## 2. ContractSurface
 
-- Sum of dimension weights for one role graph must equal `1.0`.
-
-## 3. SubSkill
-
-Represents a measurable capability target inside a role graph.
+Represents one externally meaningful behavior that the gate must evaluate.
 
 | Field | Type | Description | Validation |
 |-------|------|-------------|------------|
-| `key` | string | Stable subskill identifier | Required, unique within role |
-| `label` | string | Human-readable subskill name | Required |
-| `dimension` | string | Parent dimension key | Required, must map to an existing dimension |
-| `target_proficiency` | integer | Expected role proficiency on a 1-5 scale | Required, 1-5 |
-| `prerequisites` | list of strings | Earlier subskill keys that should come first | Optional, must resolve within the same role graph |
+| `key` | string | Stable identifier such as `assessment_api` or `roadmap_signal` | Required, unique within the gate |
+| `owner_area` | string | Owning module or layer | Required |
+| `source_files` | list of strings | Files that define or consume this contract | Required |
+| `invariants` | list of strings | Rules that must remain true for baseline acceptance | Required |
+| `blocking` | boolean | Whether failure on this surface blocks baseline adoption | Required |
 
-## 4. StageQuestion
+## 3. ReviewCriterion
 
-Represents a generated assessment question bound to a stage and graph target.
-
-| Field | Type | Description | Validation |
-|-------|------|-------------|------------|
-| `id` | string | Stable stage-scoped question identifier | Required, unique within assessment |
-| `stage` | integer | Assessment stage number | Required, `1` or `2` |
-| `subskill_key` | string | Targeted subskill | Required |
-| `dimension_key` | string | Targeted dimension | Required |
-| `question_text` | string | User-facing prompt | Required |
-| `question_type` | enum | `multiple_choice`, `scale`, `text` | Required |
-| `interaction_mode` | enum | Frontend render mode | Required |
-| `options` | list | Structured answer options for choice questions | Optional for non-choice types |
-| `difficulty` | integer | Intended difficulty band | Required, 1-5 |
-| `estimated_seconds` | integer | Expected answer time | Required, positive |
-
-## 5. StageResponse
-
-Represents a user answer recorded against a staged question.
+Represents one gate criterion applied to the candidate baseline.
 
 | Field | Type | Description | Validation |
 |-------|------|-------------|------------|
-| `question_id` | string | Linked `StageQuestion` identifier | Required |
-| `answer` | string or number | Submitted answer payload | Required |
-| `timestamp` | string | Submission time | Optional |
+| `key` | string | Stable criterion identifier | Required |
+| `surface_key` | string | Linked `ContractSurface` key | Required |
+| `question` | string | Human-readable review question | Required |
+| `required_evidence` | list of strings | Commands, docs, or walkthroughs needed to answer the question | Required |
+| `status` | enum | Review result for this criterion | Required, one of `not_started`, `pass`, `fail`, `needs_followup` |
+| `blocking_reason` | string | Explanation when the criterion fails | Optional |
 
-## 6. SubSkillEvidence
+## 4. EvidenceArtifact
 
-Represents deterministic scoring evidence for one subskill.
-
-| Field | Type | Description | Validation |
-|-------|------|-------------|------------|
-| `subskill_key` | string | Targeted subskill | Required |
-| `dimension_key` | string | Parent dimension | Required |
-| `observed_level` | number | Measured current level | Required, 0-5 |
-| `target_level` | integer | Expected level from role graph | Required, 1-5 |
-| `gap` | number | Difference between target and observed level | Required |
-| `confidence` | number | Confidence score for the observed level | Required, 0-1 |
-| `evidence_strength` | enum | `strong`, `moderate`, `weak` | Required |
-
-## 7. GapProfile
-
-Represents the intermediate calibration result after stage one.
+Represents one collected piece of evidence used by the gate.
 
 | Field | Type | Description | Validation |
 |-------|------|-------------|------------|
-| `role_key` | string | Resolved role key | Required |
-| `subskill_evidence` | list of `SubSkillEvidence` | Evidence records produced from stage one | Required |
-| `high_priority_gaps` | list of strings | Ordered subskill keys needing immediate follow-up | Required |
-| `uncertain_areas` | list of strings | Subskill keys with low confidence requiring clarification | Required |
-| `overall_calibration` | number | Composite calibration score | Required, 0-100 |
+| `type` | enum | `diff_review`, `test_run`, `contract_review`, `manual_walkthrough`, `decision_note` | Required |
+| `source` | string | Command, file path, or narrative source | Required |
+| `scope` | string | What the evidence covers | Required |
+| `outcome` | string | Short result summary | Required |
+| `recorded_at` | string | When the evidence was collected | Required for stored review records |
 
-## 8. RoadmapSignal
+## 5. RoleGraphContractSnapshot
 
-Represents the final structured assessment output consumed by roadmap generation.
-
-| Field | Type | Description | Validation |
-|-------|------|-------------|------------|
-| `role` | string | Role label or role key used for roadmap generation | Required |
-| `target_level` | string | Derived user target level for the role | Required |
-| `subskill_gaps` | list of `SubSkillEvidence` | Ordered evidence records from the full staged assessment | Required |
-| `confidence_score` | number | Overall confidence in the assessment result | Required, 0-1 |
-| `evidence_strength` | string | Summary label for overall evidence quality | Required |
-| `priority_order` | list of strings | Ordered subskill keys for roadmap prioritization | Required |
-| `prerequisite_links` | object | Mapping of subskill key to prerequisite keys | Required |
-| `generation_metadata` | object | Trace, fallback, and validation metadata | Required |
-
-## 9. Assessment (staged extension)
-
-Represents the persisted assessment session across both stages.
+Represents the curated role-graph baseline expectations used in the review.
 
 | Field | Type | Description | Validation |
 |-------|------|-------------|------------|
-| `stage` | enum | `stage_1`, `stage_2`, `completed` | Required for new staged assessments |
-| `stage_one_questions` | list of `StageQuestion` | Persisted calibration questions | Optional for legacy records |
-| `stage_one_responses` | list of `StageResponse` | Persisted calibration responses | Optional |
-| `stage_two_questions` | list of `StageQuestion` | Persisted targeted questions | Optional until stage two generation completes |
-| `stage_two_responses` | list of `StageResponse` | Persisted targeted responses | Optional |
-| `gap_profile` | `GapProfile` | Intermediate stage-one output | Optional until stage one submission completes |
-| `roadmap_signal` | `RoadmapSignal` | Final structured assessment output | Optional until completion |
-| `generation_metadata` | object | Cache, fallback, validation, and trace metadata | Optional |
+| `supported_roles` | list of strings | Roles that must exist in the mapping | Required, 6 entries for current scope |
+| `dimension_count` | integer | Required dimensions per role | Required, exactly `4` for curated baseline |
+| `subskill_range` | object | Allowed total subskill range per role | Required, `15-20` |
+| `mapping_key_must_match_role_key` | boolean | Loader must reject mismatched mapping keys | Required, `true` |
+| `version_bound_cache` | boolean | Stage-one cache must vary by graph version | Required, `true` |
 
-**State transitions**:
+## 6. AssessmentContractSnapshot
 
-- `stage_1` + generation pending -> `stage_1` ready
-- `stage_1` ready -> `stage_2` generating
-- `stage_2` generating -> `stage_2` ready
-- `stage_2` ready -> `completed`
-- Any staged state -> `failed` generation status
-
-## 10. AssessmentResult (staged extension)
-
-Represents the user-facing finalized result object.
+Represents the staged assessment API and frontend-state semantics that the gate must preserve.
 
 | Field | Type | Description | Validation |
 |-------|------|-------------|------------|
-| `overall_score` | number | High-level score retained for compatibility | Required |
-| `skill_scores` | object | Summary score map retained for compatibility | Required |
-| `recommended_learning_paths` | list | Existing summary guidance retained for compatibility | Required |
-| `roadmap_signal` | `RoadmapSignal` | New structured roadmap-ready output | Required for staged completions |
+| `stage_values` | list of strings | Supported staged assessment phases | Required, includes `stage_1`, `stage_2`, `completed` |
+| `submission_states` | list of strings | Typed frontend/backend submission states | Required |
+| `stage_question_count` | object | Expected question count per stage | Required, `5` for both stages in current scope |
+| `result_requires_roadmap_signal` | boolean | Completed staged result must expose roadmap-ready signal | Required, `true` |
+| `legacy_compatibility_required` | boolean | Legacy records remain readable during rollout | Required, `true` |
+
+## 7. RoadmapSignalSnapshot
+
+Represents the downstream contract expected from staged assessment completion.
+
+| Field | Type | Description | Validation |
+|-------|------|-------------|------------|
+| `role` | string | Role key emitted by staged assessment | Required |
+| `subskill_gaps` | list | Structured gap evidence | Required |
+| `priority_order` | list of strings | Ordered subskill keys for roadmap sequencing | Required |
+| `prerequisite_links` | object | Dependency mapping across returned subskills | Required |
+| `generation_metadata` | object | Must include fallback and trace semantics | Required |
+
+## 8. BaselineDecisionRecord
+
+Represents the human outcome of the review gate.
+
+| Field | Type | Description | Validation |
+|-------|------|-------------|------------|
+| `outcome` | enum | Final review decision | Required, one of `accept`, `revise`, `reject` |
+| `rationale` | string | Summary of why the decision was made | Required |
+| `blocking_findings` | list of strings | Findings that prevent acceptance | Optional, required when outcome is `revise` or `reject` |
+| `follow_up_actions` | list of strings | Next steps after the decision | Required for `accept` and `revise` |
+| `approver` | string | Human reviewer or team owner | Required |
+| `recorded_at` | string | Decision timestamp | Required |
 
 ## Relationships Summary
 
-- One `RoleGraph` contains many `CoreDimension` records.
-- One `CoreDimension` contains many `SubSkill` records.
-- One staged `Assessment` contains stage-one and stage-two `StageQuestion` and `StageResponse` collections.
-- One staged `Assessment` produces one `GapProfile` and one final `RoadmapSignal`.
-- One `AssessmentResult` belongs to one `Assessment` and stores the final `RoadmapSignal` alongside compatibility summaries.
+- One `BaselineCandidate` references many `ContractSurface` records.
+- One `ContractSurface` can have many `ReviewCriterion` records.
+- One gate execution collects many `EvidenceArtifact` records against one `BaselineCandidate`.
+- One `BaselineDecisionRecord` is produced only after blocking `ReviewCriterion` records have been evaluated.
+- `RoleGraphContractSnapshot`, `AssessmentContractSnapshot`, and `RoadmapSignalSnapshot` define the behavioral baseline that the candidate must satisfy.

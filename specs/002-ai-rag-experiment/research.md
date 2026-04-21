@@ -5,123 +5,138 @@
 - `/Users/mohamed3wes/Downloads/Grad-Project/specs/002-ai-rag-experiment/spec.md`
 - `/Users/mohamed3wes/Downloads/Grad-Project/.specify/memory/constitution.md`
 - `/Users/mohamed3wes/Downloads/Grad-Project/docs/product/ADR-001-LOCAL-GEMMA-ARCHITECTURE.md`
-- `/Users/mohamed3wes/Downloads/Grad-Project/docs/product/GEMMA_ARCHITECTURE_ADOPTION_PLAN.md`
-- `/Users/mohamed3wes/Downloads/Grad-Project/Backend/apps/assessments/models.py`
-- `/Users/mohamed3wes/Downloads/Grad-Project/Backend/apps/assessments/views.py`
-- `/Users/mohamed3wes/Downloads/Grad-Project/Backend/apps/assessments/tasks.py`
 - `/Users/mohamed3wes/Downloads/Grad-Project/Backend/apps/assessments/ai_pipeline.py`
-- `/Users/mohamed3wes/Downloads/Grad-Project/Backend/apps/core/ai_contracts.py`
-- `/Users/mohamed3wes/Downloads/Grad-Project/Backend/apps/core/ai_settings.py`
-- `/Users/mohamed3wes/Downloads/Grad-Project/Backend/config/settings/base.py`
-- `/Users/mohamed3wes/Downloads/Grad-Project/Backend/config/settings/development.py`
+- `/Users/mohamed3wes/Downloads/Grad-Project/Backend/apps/assessments/engine.py`
+- `/Users/mohamed3wes/Downloads/Grad-Project/Backend/apps/assessments/role_graph.py`
+- `/Users/mohamed3wes/Downloads/Grad-Project/Backend/apps/assessments/role_graph_data.py`
+- `/Users/mohamed3wes/Downloads/Grad-Project/Backend/apps/assessments/services.py`
+- `/Users/mohamed3wes/Downloads/Grad-Project/Backend/apps/assessments/tasks.py`
+- `/Users/mohamed3wes/Downloads/Grad-Project/Backend/apps/roadmaps/services.py`
 - `/Users/mohamed3wes/Downloads/Grad-Project/Frontend/src/lib/api.ts`
 
-## Decision 1: Build against a role-graph loader contract with stub data
+## Decision 1: Replace the flat question flow with a two-stage adaptive flow
 
-**Decision**: Introduce a dedicated role-graph contract module plus a single loader entry point and keep all initial content in a stub data file that can later be replaced by curated entries.
+**Decision**: The skills assessment runs in two stages. Stage one is a broad calibration of exactly 5 questions across the role's core dimensions. Stage two is a targeted set of exactly 5 follow-up questions focused on the user's weakest or most uncertain subskills.
 
-**Rationale**: The feature depends on role-specific skill structure, but curated content is being prepared separately. A loader contract unblocks engine, task, serializer, and frontend work immediately while keeping future handoff isolated to one file.
-
-**Alternatives considered**:
-
-- Hard-code role structures inside the assessment engine: rejected because it couples workflow code to unfinished content.
-- Delay planning until curated role data is complete: rejected because it blocks unrelated infrastructure work.
-
-## Decision 2: Keep production orchestration in `Backend/` and treat `ai-models/` as support only
-
-**Decision**: All production assessment orchestration, validation, persistence, tasks, and API contracts remain in `Backend/apps/assessments/` and `Backend/apps/core/`.
-
-**Rationale**: The accepted architecture documents already define `Backend/` as the production runtime and `ai-models/` as support code for experiments and offline work. This keeps module ownership explicit and avoids reviving a second runtime path.
+**Rationale**: The existing flat six-question bank cannot differentiate users inside a role. A short calibration followed by a targeted follow-up produces a stronger signal without making users answer a long generic questionnaire.
 
 **Alternatives considered**:
 
-- Put staged generation logic into `ai-models/` and call it from Django: rejected because it creates an unnecessary runtime split.
-- Split assessment generation into a new service: rejected because it violates the simplicity and modular-monolith rules for current scope.
+- Keep the flat six-question flow: rejected because it cannot produce the structured roadmap-ready signal the downstream roadmap module needs.
+- Use a fully adaptive per-question branching flow: rejected because it would blow past the 3-call LLM budget, add state complexity, and remain hard to test deterministically.
 
-## Decision 3: Ship the first version for `skills` assessments only
+## Decision 2: Keep the staged runtime inside the existing Django modular monolith
 
-**Decision**: Limit the staged rollout to the `skills` assessment type and keep other assessment types on their current behavior.
+**Decision**: All staged-assessment orchestration lives inside `Backend/apps/assessments/` and reuses the existing Celery + Redis cache + Ollama integration. No new runtime service is introduced.
 
-**Rationale**: The current roadmap dependency and quality goals are tied to skills assessment. Expanding to interests, personality, and learning-style flows now would multiply state, prompt, and scoring complexity before the core path is reliable.
-
-**Alternatives considered**:
-
-- Build a generic engine for all assessment types immediately: rejected because it increases scope and weakens focus on roadmap quality.
-- Keep the current flat skills flow until all assessment types are redesigned together: rejected because it delays the most valuable improvement.
-
-## Decision 4: Use a two-stage adaptive flow with exactly two bounded model-backed generation calls
-
-**Decision**: New staged assessments use five calibration questions in stage one and five targeted follow-up questions in stage two, with one bounded generation call per stage.
-
-**Rationale**: This matches the user’s desired assessment shape, preserves low compute cost, and creates room for deterministic analysis between stages without introducing a slow per-question loop.
+**Rationale**: The product is still an MVP modular monolith. Introducing a separate AI service for one adaptive flow would add deployment surface without solving a constraint we actually have. Deterministic Django service code is the simpler, more testable option.
 
 **Alternatives considered**:
 
-- Keep the current flat six-question set: rejected because it does not produce enough signal for roadmap quality.
-- Generate questions one-by-one adaptively: rejected because repeated model latency and orchestration complexity exceed current hardware and budget constraints.
+- Extract a dedicated AI microservice: rejected as premature. The existing orchestration already handles caching, Celery, and Ollama cleanly.
+- Move orchestration into the `ai-models/` package: rejected because the package is support-only per ADR-001 and must not own runtime behavior.
 
-## Decision 5: Let deterministic scoring own the mid-stage decision point
+## Decision 3: Cap the staged flow at 3 LLM calls per completed assessment
 
-**Decision**: The transition from stage one to stage two is driven by deterministic scoring, confidence calculation, and priority ranking, not by another free-form model decision.
+**Decision**: Each completed staged assessment calls Gemma at most three times: stage-one generation, stage-two generation, and final evaluation.
 
-**Rationale**: The architecture goal is to avoid a thin LLM wrapper. Deterministic allocation between stages makes the system explainable, testable, and stable under limited compute.
-
-**Alternatives considered**:
-
-- Let the model decide which subskills to probe next: rejected because the reasoning becomes harder to test and cheaper fallbacks become weaker.
-- Predefine the same stage-two questions for everyone: rejected because it loses the value of adaptive targeting.
-
-## Decision 6: Preserve legacy assessments during rollout
-
-**Decision**: Keep the old single-stage assessment path readable and completable for pre-migration records, while routing all newly created skills assessments to the staged flow.
-
-**Rationale**: The existing API and frontend already expose active assessment records. A hard cut risks stranding in-progress users or breaking old result retrieval paths.
+**Rationale**: Local Gemma via Ollama is the runtime, and the product relies on zero API cost. A hard call ceiling keeps per-assessment cost predictable, keeps response times bounded, and forces the deterministic fallback path to stay first-class.
 
 **Alternatives considered**:
 
-- Hard-cut all assessments to the new staged path immediately: rejected because it risks backward-compatibility failures with persisted records.
-- Maintain two fully equal long-term flows: rejected because it adds ongoing maintenance overhead.
+- Allow up to one Gemma call per question: rejected because it breaks the call budget and creates unbounded generation latency.
+- Drop the final evaluation call and keep only the two generation calls: rejected because the final call is where the evaluation narrative is enriched for the user; the structured output is still produced deterministically as a safety net.
 
-## Decision 7: Use Django cache framework with Redis in base/production and LocMem in development
+## Decision 4: Back every Gemma call with a deterministic fallback
 
-**Decision**: Keep Django cache as the abstraction layer, use Redis where already configured in base and production, and change development from `DummyCache` to `LocMemCache` so stage-one cache behavior can be exercised locally without extra infrastructure.
+**Decision**: Stage-one generation, stage-two generation, and final evaluation must each produce valid typed output even when Ollama is unavailable or returns invalid content.
 
-**Rationale**: The repository already configures Redis cache in base and production, but development currently disables caching entirely with `DummyCache`. Stage-one caching is a first-class feature requirement, so local development needs a real cache backend even if it remains process-local.
-
-**Alternatives considered**:
-
-- Keep `DummyCache` in development: rejected because stage-one cache behavior cannot be tested meaningfully.
-- Add a file-based cache fallback: rejected because the project already has a cleaner framework-level path through Redis and LocMem.
-
-## Decision 8: Make `RoadmapSignal` a first-class assessment output
-
-**Decision**: The final staged assessment result will include a structured roadmap signal alongside legacy summary fields.
-
-**Rationale**: Roadmap generation currently derives priority skills from broad assessment summaries. Introducing a first-class roadmap signal allows the roadmap module to consume precise evidence and priorities while preserving compatibility with current result consumers during transition.
+**Rationale**: The product must remain demo-safe and completable without a model runtime. A deterministic fallback is also what makes every stage independently testable in CI without mocking Gemma at every layer.
 
 **Alternatives considered**:
 
-- Keep roadmap generation reading only broad scores and prose: rejected because it preserves the main quality bottleneck.
-- Move roadmap signal generation fully into the roadmap module: rejected because it duplicates interpretation logic and couples roadmap quality to raw-answer parsing.
+- Fail the assessment when Gemma is unavailable: rejected because it makes the feature fragile for local development and for the demo path.
+- Use a remote LLM as a fallback: rejected because it violates ADR-001 and reintroduces API cost.
 
-## Decision 9: Keep model selection environment-driven and align it to ADR-001
+## Decision 5: Model role content as a typed role graph, not as flat question banks
 
-**Decision**: Keep `OLLAMA_MODEL` environment-driven, align planning and documentation to ADR-001, and avoid coupling the feature to a single Gemma size. The feature must work with E2B as the conservative default and E4B as the preferred option on 16 GB machines.
+**Decision**: Each supported role is described by a `RoleGraph` with 4 core dimensions × 4 subskills. Each subskill carries `key`, `label`, `dimension`, `target_proficiency`, and optional `prerequisites`. Stage allocation and gap profiling operate over this graph.
 
-**Rationale**: Repository documents are inconsistent today: some docs and README files say E4B is standard, while `ai_settings.py` defaults to E2B and ADR-001 explicitly allows both. The staged assessment feature should depend on bounded generation and strong validation, not on one model size being mandatory.
-
-**Alternatives considered**:
-
-- Force E4B as the only supported target: rejected because it unnecessarily narrows deployability on weaker local machines.
-- Leave the mismatch undocumented: rejected because it creates repeated confusion in implementation and testing.
-
-## Decision 10: Validate both question-generation stages strictly and fall back deterministically
-
-**Decision**: Both stage-one and stage-two generation paths must validate structure, target alignment, difficulty spread, and required fields before persisting questions.
-
-**Rationale**: The current assessment AI pipeline already uses structured generation plus fallback. Extending that pattern to staged generation preserves reliability and avoids storing malformed or low-signal questions.
+**Rationale**: The graph shape lets stage allocation pick distinct targets across dimensions, lets the gap-profile builder rank priority by gap size, and lets the roadmap signal expose prerequisite links. Flat question banks cannot support any of this deterministically.
 
 **Alternatives considered**:
 
-- Trust model output if it parses as JSON: rejected because structural validity alone does not guarantee useful assessment questions.
-- Fail the assessment when generated questions are invalid: rejected because the accepted AI architecture requires deterministic fallbacks for demo-safe operation.
+- Store questions directly on roles and skip the graph: rejected because it removes the ability to target stage two and produce roadmap-ready gap data.
+- Load role content from an external registry at runtime: rejected as unnecessary runtime surface for the MVP. A single Python module is the simplest safe handoff.
+
+## Decision 6: Make `role_graph_data.py` the single curated-content handoff file
+
+**Decision**: All curated role content lives in `Backend/apps/assessments/role_graph_data.py`, behind a single `ROLE_GRAPHS` mapping and a `CURATED_VERSION` string. Replacing curated content is a one-file change.
+
+**Rationale**: Curated content is owned by a different partner from the runtime code. A single stable handoff file lets infrastructure and content evolve in parallel without either team blocking the other, and makes the handoff easy to review.
+
+**Alternatives considered**:
+
+- Keep curated content in JSON or YAML files under `data/`: rejected because it forces a runtime loader + schema validator for no practical benefit while role count is small.
+- Split curated content across one file per role: rejected because it multiplies merge-conflict surface and makes the handoff contract harder to enforce.
+
+## Decision 7: Validate role graphs at load time with explicit failures
+
+**Decision**: The role-graph loader rejects graphs that are missing dimensions, have subskill counts or weights out of range, or reference unknown prerequisites. Invalid content is a loud failure, not a silent downgrade.
+
+**Rationale**: Silent fallback on invalid curated data would hide bad content behind runtime behavior, and stage targeting plus roadmap signals would quietly drift. Loud failure surfaces the problem at the earliest possible point.
+
+**Alternatives considered**:
+
+- Tolerate malformed graphs and fall back to defaults: rejected because it degrades the assessment invisibly.
+- Validate only in tests, not at load time: rejected because it can't catch curated-content breakage in staging or production.
+
+## Decision 8: Bind stage-one cache keys to `{role_key, CURATED_VERSION}`
+
+**Decision**: Stage-one generated questions are cached per `(role_key, CURATED_VERSION)` pair. Bumping `CURATED_VERSION` invalidates cached stage-one output automatically.
+
+**Rationale**: Curated content changes the semantic meaning of stage-one questions even when the role key is stable. Without a version-bound key, users would keep receiving stage-one questions generated against old graph content after an update.
+
+**Alternatives considered**:
+
+- Use `role_key` alone as the cache key: rejected because semantic updates would go unnoticed.
+- Disable caching and regenerate every time: rejected because it burns the stage-one call budget without improving output quality.
+
+## Decision 9: Emit a structured `roadmap_signal` for downstream consumers
+
+**Decision**: Completed staged assessments expose a typed `RoadmapSignal` with sub-skill evidence, ordered priorities, prerequisite links, and confidence metadata. The roadmap module prefers this signal when generating a roadmap, and falls back to legacy score-based inputs only for pre-migration assessments.
+
+**Rationale**: The entire purpose of staging the assessment is to produce stronger roadmap-ready input. Leaving the roadmap module to re-derive gaps from prose or raw scores would undo the benefit.
+
+**Alternatives considered**:
+
+- Keep the existing broad-score output and let roadmaps recompute gaps: rejected because it duplicates work and keeps roadmap quality unchanged.
+- Make `roadmap_signal` an optional bolt-on rather than the preferred input: rejected because the roadmap module would keep relying on the weaker signal in practice.
+
+## Decision 10: Ship a typed frontend `AssessmentSubmissionState` union before API changes
+
+**Decision**: The frontend `AssessmentSubmissionState` union in `Frontend/src/lib/api.ts` is defined alongside the staged API contract and must stay in sync with backend payloads. Contract tests exercise the payload shape end to end.
+
+**Rationale**: The frontend assessment flow depends on unambiguous stage transitions. Letting the frontend types catch up later would knowingly normalize contract drift and produce ambiguous UI states during rollout.
+
+**Alternatives considered**:
+
+- Reuse untyped `status` strings on the frontend: rejected because the stage transitions are the feature, not a side effect.
+- Defer the frontend contract until after backend stabilization: rejected because it produces shipping gaps where the frontend cannot render the staged flow correctly.
+
+## Decision 11: Preserve legacy non-staged assessments
+
+**Decision**: The staged behavior is gated by an `is_staged` check on the assessment record. Pre-migration assessments continue to complete and render through their original flow, and the roadmap module keeps its legacy fallback for those records.
+
+**Rationale**: Rolling out the staged flow must not block users whose assessments were created before the migration. The compatibility path is small and avoids a data migration.
+
+**Alternatives considered**:
+
+- Force-migrate legacy assessments: rejected because it rewrites historical user data and creates extra failure surface with no product benefit.
+- Drop legacy assessments entirely: rejected for the same reason.
+
+## Decision 12: No unresolved planning clarifications remain
+
+**Decision**: The plan can proceed without marking any remaining `NEEDS CLARIFICATION` items.
+
+**Rationale**: The feature spec, ADR-001, role-graph shape, cache and budget decisions, staged API contract, and roadmap-signal contract together fully specify the work. Any remaining questions are implementation details covered by the task breakdown.

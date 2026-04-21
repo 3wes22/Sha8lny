@@ -1,10 +1,10 @@
 # Grad-Project Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-04-14
+Auto-generated from all feature plans. Last updated: 2026-04-21
 
 ## Active Technologies
 - Python 3.13 backend; TypeScript 5.8 on React 18.3 frontend + Django 5, Django REST Framework, Celery, Redis cache/broker, Simple JWT, local Gemma via Ollama, React Router 6, TanStack Query 5, Vitest, Testing Library (002-ai-rag-experiment)
-- Existing Django relational persistence with JSON-backed assessment payloads; Redis-backed cache and queue in base/production; SQLite remains acceptable in developmen (002-ai-rag-experiment)
+- Existing Django relational persistence with JSON-backed assessment payloads; Redis-backed cache in base/production; SQLite acceptable in development (002-ai-rag-experiment)
 
 - Frontend: TypeScript 5.8, React 18.3, Vite 5, React Router 6, TanStack Query 5, Tailwind CSS 3, Radix UI primitives, Vitest, Testing Library
 - Backend: Python 3.13, Django 5.0, Django REST Framework, Simple JWT, drf-spectacular, pytest, Celery, Redis, PostgreSQL for production, SQLite for development
@@ -84,6 +84,7 @@ archive/
 - Treat AI orchestration as deterministic backend workflow code, not agentic planning inside the product runtime.
 
 ## Recent Changes
+- 003-assessment-baseline-gate: Added Python 3.13 backend; TypeScript 5.8 on React 18.3 frontend + Django 5, Django REST Framework, Celery, Redis cache/broker, Simple JWT, local Gemma via Ollama, React Router 6, TanStack Query 5, Vitest, Testing Library
 - 002-ai-rag-experiment: Added Python 3.13 backend; TypeScript 5.8 on React 18.3 frontend + Django 5, Django REST Framework, Celery, Redis cache/broker, Simple JWT, local Gemma via Ollama, React Router 6, TanStack Query 5, Vitest, Testing Library
 
 - 001-frontend-visual-rebuild: Rebuilt the frontend around the career-atlas visual system, feature-first structure, lazy-loaded routes, shared authenticated shell, and contract-tested frontend/backend interfaces.
