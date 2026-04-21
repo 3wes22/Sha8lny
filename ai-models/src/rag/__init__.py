@@ -12,6 +12,7 @@ Components:
 
 from .generator import generate_response, check_ollama_available
 from .retriever import get_relevant_context
+from . import runtime_settings
 from .scope_rules import classify_message, SYSTEM_PROMPT
 from .seeder import seed_database
 
@@ -19,6 +20,7 @@ __all__ = [
     "generate_response",
     "check_ollama_available", 
     "get_relevant_context",
+    "runtime_settings",
     "classify_message",
     "SYSTEM_PROMPT",
     "seed_database",

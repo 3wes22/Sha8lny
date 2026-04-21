@@ -13,6 +13,7 @@ from datetime import date, timedelta
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
+from apps.core.ai_contracts import AIInvocationMetadata
 from apps.users.models import User
 from apps.assessments.models import Assessment, AssessmentResult
 
@@ -136,6 +137,133 @@ class TestAssessmentAPI:
         assert response.status_code == status.HTTP_200_OK
         assert response.data['id'] == str(assessment.id)
         assert len(response.data['questions']) == 1
+
+    def test_runtime_health_endpoint(self, monkeypatch):
+        monkeypatch.setattr(
+            "apps.assessments.views.get_ai_runtime_health",
+            lambda: {
+                "runtime": "ollama",
+                "ollama_available": True,
+                "model_available": True,
+                "settings": {"model": "gemma4:e2b"},
+            },
+        )
+
+        response = self.client.get(reverse("assessment-runtime-health"))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["runtime"] == "ollama"
+        assert response.data["ollama_available"] is True
+        assert response.data["model_available"] is True
+        assert response.data["settings"]["model"] == "gemma4:e2b"
+
+    def test_preview_questions_returns_generation_metadata(self, monkeypatch):
+        def fake_generate_stage_one(role_key, role_graph):
+            return (
+                [
+                    {
+                        "id": "s1_q1",
+                        "stage": 1,
+                        "subskill_key": "apis",
+                        "dimension_key": "backend_core",
+                        "question_text": "How comfortable are you with API design?",
+                        "question_type": "multiple_choice",
+                        "interaction_mode": "single_select",
+                        "options": [],
+                    }
+                ],
+                AIInvocationMetadata(
+                    source="llm",
+                    processing_time_ms=1200,
+                    model="gemma4:e2b",
+                    provider="ollama",
+                    version=role_graph.version,
+                    trace_id="trace-preview-1",
+                    fallback_used=False,
+                ),
+            )
+
+        monkeypatch.setattr(
+            "apps.assessments.views.AssessmentAIService.generate_stage_one",
+            fake_generate_stage_one,
+        )
+        monkeypatch.setattr(
+            "apps.assessments.views.get_ai_runtime_health",
+            lambda: {
+                "runtime": "ollama",
+                "ollama_available": True,
+                "model_available": True,
+                "settings": {"model": "gemma4:e2b"},
+            },
+        )
+
+        response = self.client.post(
+            reverse("assessment-preview-questions"),
+            {"target_career": "Backend Developer"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["target_career"] == "Backend Developer"
+        assert response.data["role_key"] == "backend"
+        assert response.data["question_count"] == 1
+        assert response.data["metadata"]["model"] == "gemma4:e2b"
+        assert response.data["metadata"]["provider"] == "ollama"
+        assert response.data["metadata"]["fallback_used"] is False
+        assert response.data["runtime_health"]["ollama_available"] is True
+        assert response.data["questions"][0]["id"] == "s1_q1"
+
+    def test_preview_questions_can_require_live_llm(self, monkeypatch):
+        def fake_generate_stage_one(role_key, role_graph):
+            return (
+                [
+                    {
+                        "id": "s1_q1",
+                        "stage": 1,
+                        "subskill_key": "apis",
+                        "dimension_key": "backend_core",
+                        "question_text": "Fallback question",
+                        "question_type": "multiple_choice",
+                        "interaction_mode": "single_select",
+                        "options": [],
+                    }
+                ],
+                AIInvocationMetadata(
+                    source="fallback",
+                    processing_time_ms=12,
+                    model=None,
+                    provider="sha8alny",
+                    version=role_graph.version,
+                    trace_id="trace-preview-fallback",
+                    fallback_used=True,
+                    error_code="AIServiceError",
+                ),
+            )
+
+        monkeypatch.setattr(
+            "apps.assessments.views.AssessmentAIService.generate_stage_one",
+            fake_generate_stage_one,
+        )
+        monkeypatch.setattr(
+            "apps.assessments.views.get_ai_runtime_health",
+            lambda: {
+                "runtime": "ollama",
+                "ollama_available": False,
+                "model_available": False,
+                "settings": {"model": "gemma4:e2b"},
+            },
+        )
+
+        response = self.client.post(
+            reverse("assessment-preview-questions"),
+            {"target_career": "Backend Developer", "require_live_llm": True},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert response.data["error"] == "Live Gemma generation is unavailable"
+        assert response.data["metadata"]["fallback_used"] is True
+        assert response.data["runtime_health"]["ollama_available"] is False
 
     def test_submit_assessment_responses(self):
         """Test submitting assessment responses queues async evaluation."""

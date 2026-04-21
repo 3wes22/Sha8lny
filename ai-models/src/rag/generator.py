@@ -17,6 +17,12 @@ from .scope_rules import (
     get_clarifying_question,
 )
 from .retriever import get_relevant_context
+from .runtime_settings import (
+    get_ollama_base_url,
+    get_ollama_model,
+    get_ollama_temperature,
+    get_ollama_timeout_seconds,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,16 +31,12 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION
 # ============================================================================
 
-OLLAMA_BASE_URL = "http://localhost:11434"
-DEFAULT_MODEL = "gemma4:e2b"
-
 # Response timing (variable delay based on length)
 MIN_DELAY_SECONDS = 0.5
 MAX_DELAY_SECONDS = 3.0
 CHARS_PER_SECOND = 100  # Simulated typing speed
 
 # Model parameters
-DEFAULT_TEMPERATURE = 0.3
 DEFAULT_MAX_TOKENS = 1024
 
 
@@ -44,17 +46,20 @@ DEFAULT_MAX_TOKENS = 1024
 
 def check_ollama_available() -> bool:
     """Check if Ollama server is running."""
+    base_url = get_ollama_base_url()
     try:
-        response = requests.get(f"{OLLAMA_BASE_URL}/api/version", timeout=2)
+        response = requests.get(f"{base_url}/api/version", timeout=2)
         return response.status_code == 200
     except requests.exceptions.RequestException:
         return False
 
 
-def check_model_available(model: str = DEFAULT_MODEL) -> bool:
+def check_model_available(model: Optional[str] = None) -> bool:
     """Check if the specified model is downloaded."""
+    base_url = get_ollama_base_url()
+    model = model or get_ollama_model()
     try:
-        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
+        response = requests.get(f"{base_url}/api/tags", timeout=5)
         if response.status_code == 200:
             models = response.json().get("models", [])
             return any(m.get("name", "").startswith(model) for m in models)
@@ -66,8 +71,8 @@ def check_model_available(model: str = DEFAULT_MODEL) -> bool:
 def generate_with_ollama(
     prompt: str,
     system: str = SYSTEM_PROMPT,
-    model: str = DEFAULT_MODEL,
-    temperature: float = DEFAULT_TEMPERATURE,
+    model: Optional[str] = None,
+    temperature: Optional[float] = None,
     max_tokens: int = DEFAULT_MAX_TOKENS,
 ) -> str:
     """
@@ -76,7 +81,7 @@ def generate_with_ollama(
     Args:
         prompt: User message with context
         system: System prompt
-        model: Model name (default: mistral)
+        model: Model name override
         temperature: Creativity level (0.0-1.0)
         max_tokens: Maximum response length
         
@@ -91,10 +96,15 @@ def generate_with_ollama(
         raise ConnectionError(
             "Ollama server is not running. Start it with: ollama serve"
         )
-    
+
+    base_url = get_ollama_base_url()
+    model = model or get_ollama_model()
+    temperature = get_ollama_temperature() if temperature is None else temperature
+    timeout_seconds = get_ollama_timeout_seconds()
+
     try:
         response = requests.post(
-            f"{OLLAMA_BASE_URL}/api/generate",
+            f"{base_url}/api/generate",
             json={
                 "model": model,
                 "prompt": prompt,
@@ -105,7 +115,7 @@ def generate_with_ollama(
                     "num_predict": max_tokens,
                 }
             },
-            timeout=120  # 2 minute timeout for generation
+            timeout=timeout_seconds,
         )
         
         if response.status_code != 200:

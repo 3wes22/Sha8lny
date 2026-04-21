@@ -12,7 +12,9 @@ from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.assessments.ai_pipeline import AssessmentAIService
 from apps.assessments.models import Assessment, AssessmentResult
+from apps.assessments.role_graph import load_role_graph, resolve_role_key
 from apps.assessments.serializers import (
     AssessmentCreateSerializer,
     AssessmentListSerializer,
@@ -34,6 +36,7 @@ from apps.assessments.tasks import (
     run_process_stage_one_submission,
 )
 from apps.core.ai_throttles import AIBurstThrottle, AISustainedThrottle
+from apps.core.health_checks import get_ai_runtime_health
 
 
 def dispatch_assessment_task(task, eager_runner, assessment_id: str):
@@ -106,6 +109,50 @@ class AssessmentViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], url_path='runtime/health')
+    def runtime_health(self, request):
+        return Response(get_ai_runtime_health())
+
+    @action(detail=False, methods=['post'], url_path='preview-questions')
+    def preview_questions(self, request):
+        target_career = str(request.data.get('target_career') or '').strip()
+        if not target_career:
+            return Response(
+                {'error': 'target_career is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        require_live_llm = request.data.get('require_live_llm', False)
+        if isinstance(require_live_llm, str):
+            require_live_llm = require_live_llm.strip().lower() in {'1', 'true', 'yes', 'on'}
+        else:
+            require_live_llm = bool(require_live_llm)
+
+        role_graph = load_role_graph(resolve_role_key(target_career))
+        questions, metadata = AssessmentAIService.generate_stage_one(role_graph.role_key, role_graph)
+        runtime_health = get_ai_runtime_health()
+
+        response_payload = {
+            'target_career': target_career,
+            'role_key': role_graph.role_key,
+            'role_label': role_graph.role_label,
+            'question_count': len(questions),
+            'questions': questions,
+            'metadata': metadata.to_dict(),
+            'runtime_health': runtime_health,
+        }
+
+        if require_live_llm and metadata.fallback_used:
+            return Response(
+                {
+                    'error': 'Live Gemma generation is unavailable',
+                    **response_payload,
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        return Response(response_payload, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'])
     def latest(self, request):

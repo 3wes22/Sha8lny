@@ -9,6 +9,8 @@ from typing import List, Dict, Optional, Any
 from pathlib import Path
 import uuid
 
+from .runtime_settings import get_chroma_persist_dir
+
 # Lazy loading
 _client = None
 _collection = None
@@ -32,7 +34,7 @@ def get_client(persist_directory: Optional[Path] = None):
                 "Run: pip install chromadb"
             )
         
-        persist_dir = persist_directory or DEFAULT_PERSIST_DIR
+        persist_dir = persist_directory or get_chroma_persist_dir()
         persist_dir.mkdir(parents=True, exist_ok=True)
         
         _client = chromadb.PersistentClient(

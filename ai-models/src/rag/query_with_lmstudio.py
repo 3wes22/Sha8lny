@@ -9,8 +9,10 @@ import chromadb
 from sentence_transformers import SentenceTransformer
 import requests
 
+from .runtime_settings import get_chroma_persist_dir, get_embedding_model
+
 # Configuration
-VECTOR_DB_PATH = r"c:\Users\mahmo\Grad\Sha8lny\ai-models\data\vector_db"
+VECTOR_DB_PATH = str(get_chroma_persist_dir())
 LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
 TOP_K = 3  # Fewer but more relevant docs
 
@@ -26,7 +28,7 @@ def init_rag():
     
     if _embedder is None:
         print("📚 Loading embedding model (one time)...")
-        _embedder = SentenceTransformer('all-MiniLM-L6-v2')
+        _embedder = SentenceTransformer(get_embedding_model())
         
     if _collection is None:
         print("📁 Connecting to ChromaDB...")

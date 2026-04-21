@@ -9,10 +9,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 MODELS_DIR = BASE_DIR / "models"
 DATA_DIR = BASE_DIR / "data"
 
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "").strip()
+
 # Model paths
 LLAMA_MODEL_PATH = MODELS_DIR / "base" / "llama-3.1-8b"
 MISTRAL_MODEL_PATH = MODELS_DIR / "base" / "mistral-7b"
-SENTENCE_TRANSFORMER_PATH = MODELS_DIR / "base" / "sentence-transformers" / "all-MiniLM-L6-v2"
+SENTENCE_TRANSFORMER_PATH = MODELS_DIR / "base" / "sentence-transformers" / EMBEDDING_MODEL
 
 # LoRA adapter paths
 QUESTION_GEN_ADAPTER_PATH = MODELS_DIR / "adapters" / "question-generator"
@@ -55,12 +58,13 @@ TRAINING_CONFIG = {
 
 # RAG config
 RAG_CONFIG = {
-    "embedding_model": "all-MiniLM-L6-v2",
+    "embedding_model": EMBEDDING_MODEL,
     "embedding_dim": 384,
     "chunk_size": 512,
     "chunk_overlap": 50,
     "top_k": 5,
     "collection_name": "career_knowledge_base",
+    "chroma_persist_dir": CHROMA_PERSIST_DIR or str(DATA_DIR / "vector_db"),
 }
 
 # Inference config
