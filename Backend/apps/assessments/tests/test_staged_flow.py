@@ -7,8 +7,11 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from apps.assessments.ai_pipeline import AssessmentAIService
 from apps.assessments.models import Assessment, AssessmentResult
+from apps.assessments.role_graph import load_role_graph
 from apps.core.ai_logging import build_ai_metadata
+from apps.core.ai_contracts import SubSkillEvidence
 from apps.core.gemma_client import GemmaResponse
 from apps.users.models import User
 
@@ -227,3 +230,43 @@ def test_staged_assessment_caps_llm_invocations_at_three(api_client, assessment_
     assert result_response.data["submission_state"] == "completed"
     assert calls["count"] == 3
     assert calls["count"] <= 3
+
+
+def test_deterministic_staged_analysis_uses_graph_driven_role_recommendations():
+    role_graph = load_role_graph("backend")
+    metadata = build_ai_metadata(
+        source="fallback",
+        processing_time_ms=8,
+        model=None,
+        provider="sha8alny",
+        version=role_graph.version,
+        fallback_used=True,
+    )
+    merged_evidence = [
+        SubSkillEvidence(
+            subskill_key=role_graph.dimensions[0].subskills[0].key,
+            dimension_key=role_graph.dimensions[0].key,
+            observed_level=2.0,
+            target_level=role_graph.dimensions[0].subskills[0].target_proficiency,
+            gap=2.0,
+            confidence=0.82,
+            evidence_strength="strong",
+        ),
+        SubSkillEvidence(
+            subskill_key=role_graph.dimensions[1].subskills[0].key,
+            dimension_key=role_graph.dimensions[1].key,
+            observed_level=3.0,
+            target_level=role_graph.dimensions[1].subskills[0].target_proficiency,
+            gap=1.0,
+            confidence=0.76,
+            evidence_strength="strong",
+        ),
+    ]
+
+    analysis = AssessmentAIService._deterministic_staged_analysis(
+        role_graph,
+        merged_evidence,
+        metadata,
+    )
+
+    assert [item["title"] for item in analysis.recommended_careers] == [role_graph.role_label]

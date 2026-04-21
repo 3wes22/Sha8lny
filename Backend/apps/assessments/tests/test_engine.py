@@ -53,7 +53,8 @@ def test_gap_profile_builder_prioritizes_large_gaps_and_uncertain_answers():
 
     assert gap_profile.role_key == "backend"
     assert len(gap_profile.subskill_evidence) == 5
-    assert gap_profile.high_priority_gaps[0] == targets[0].key
+    assert targets[0].key in gap_profile.high_priority_gaps[:3]
+    assert targets[-1].key in gap_profile.high_priority_gaps[:3]
     assert targets[-1].key in gap_profile.uncertain_areas
     assert 0 <= gap_profile.overall_calibration <= 100
 

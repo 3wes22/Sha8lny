@@ -384,7 +384,7 @@ class AssessmentAIService:
             skill_scores=dimension_scores,
             strengths=strengths,
             areas_for_improvement=gaps,
-            recommended_careers=BaselineAssessmentAnalyzer._career_aliases(role_graph.role_label),
+            recommended_careers=BaselineAssessmentAnalyzer.staged_role_recommendations(role_graph),
             recommended_learning_paths=cls._recommended_learning_paths(role_graph, merged_evidence),
             ai_insights=(
                 f"Your staged assessment for {role_graph.role_label} shows the strongest momentum in "

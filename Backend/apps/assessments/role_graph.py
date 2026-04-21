@@ -143,9 +143,23 @@ def _validate_graph(graph: RoleGraph) -> RoleGraph:
     return graph
 
 
+def _validate_supported_role_mapping(role_graphs: dict[str, RoleGraph]) -> None:
+    missing_roles = [role_key for role_key in SUPPORTED_ROLES if role_key not in role_graphs]
+    if missing_roles:
+        raise RoleGraphValidationError(
+            f"Missing supported role graph(s): {', '.join(missing_roles)}"
+        )
+
+
 def load_role_graph(role_key: str) -> RoleGraph:
     from apps.assessments.role_graph_data import ROLE_GRAPHS
 
+    _validate_supported_role_mapping(ROLE_GRAPHS)
     if role_key not in ROLE_GRAPHS:
         raise RoleGraphValidationError(f"Missing role graph for {role_key}")
-    return _validate_graph(ROLE_GRAPHS[role_key])
+    graph = ROLE_GRAPHS[role_key]
+    if graph.role_key != role_key:
+        raise RoleGraphValidationError(
+            f"Role graph mapping key {role_key} does not match graph role_key {graph.role_key}"
+        )
+    return _validate_graph(graph)

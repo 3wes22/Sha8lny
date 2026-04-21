@@ -92,3 +92,55 @@ def test_stage_one_generation_invalidates_cache_when_graph_version_changes(monke
     AssessmentAIService.generate_stage_one("backend", replace(graph, version="stub-v2"))
 
     assert calls["count"] == 2
+
+
+def test_stage_one_generation_does_not_reuse_cached_questions_after_curated_replacement(monkeypatch):
+    graph = load_role_graph("backend")
+    cache.clear()
+    calls = {"count": 0}
+
+    replacement_subskill = replace(
+        graph.dimensions[0].subskills[0],
+        key="service_contracts",
+        label="Service Contracts",
+    )
+    replacement_dimension = replace(
+        graph.dimensions[0],
+        subskills=[replacement_subskill, *graph.dimensions[0].subskills[1:]],
+    )
+    replacement_graph = replace(
+        graph,
+        version="curated-v2",
+        dimensions=[replacement_dimension, *graph.dimensions[1:]],
+    )
+    payloads = iter([
+        _stage_one_payload(graph),
+        _stage_one_payload(replacement_graph),
+    ])
+
+    def fake_generate_structured(self, *, prompt, system="", required_keys=()):  # noqa: ARG001
+        calls["count"] += 1
+        return GemmaResponse(
+            text="{}",
+            payload=next(payloads),
+            metadata=build_ai_metadata(
+                source="llm",
+                processing_time_ms=12,
+                model="mock-gemma",
+            ),
+            prompt_tokens=10,
+            completion_tokens=20,
+        )
+
+    monkeypatch.setattr(
+        "apps.core.gemma_client.GemmaClient.generate_structured",
+        fake_generate_structured,
+    )
+
+    first_questions, _ = AssessmentAIService.generate_stage_one("backend", graph)
+    second_questions, _ = AssessmentAIService.generate_stage_one("backend", replacement_graph)
+
+    assert calls["count"] == 2
+    assert first_questions[0]["subskill_key"] == graph.dimensions[0].subskills[0].key
+    assert second_questions[0]["subskill_key"] == "service_contracts"
+    assert first_questions != second_questions

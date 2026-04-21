@@ -216,6 +216,20 @@ class BaselineAssessmentAnalyzer:
             {"skill": "Testing discipline", "priority": "medium", "resources": []},
         ]
 
+    @staticmethod
+    def staged_role_recommendations(role_graph) -> List[Dict[str, Any]]:
+        focus_areas = ", ".join(dimension.label.lower() for dimension in role_graph.dimensions[:2])
+        return [
+            {
+                "title": role_graph.role_label,
+                "match_score": 92,
+                "reasoning": (
+                    f"This staged result is calibrated against the curated {role_graph.role_label.lower()} "
+                    f"graph, with strong emphasis on {focus_areas}."
+                ),
+            }
+        ]
+
     @classmethod
     def analyze(cls, payload: AssessmentAnalysisInput) -> AssessmentAnalysisResult:
         started_at = monotonic()

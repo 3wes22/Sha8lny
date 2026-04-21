@@ -18,19 +18,20 @@ def test_supported_role_graphs_are_structurally_valid():
         assert graph.role_key == role_key
         assert graph.role_label
         assert graph.version
-        assert 3 <= len(graph.dimensions) <= 5
+        assert len(graph.dimensions) == 4
         assert round(sum(dimension.weight for dimension in graph.dimensions), 4) == 1.0
 
         subskill_keys = []
         for dimension in graph.dimensions:
             assert dimension.key
             assert dimension.label
-            assert 3 <= len(dimension.subskills) <= 6
+            assert 4 <= len(dimension.subskills) <= 5
             for subskill in dimension.subskills:
                 assert subskill.dimension == dimension.key
                 assert 1 <= subskill.target_proficiency <= 5
                 subskill_keys.append(subskill.key)
 
+        assert 15 <= len(subskill_keys) <= 20
         assert len(subskill_keys) == len(set(subskill_keys))
 
 
@@ -59,4 +60,22 @@ def test_load_role_graph_rejects_invalid_graph(monkeypatch):
     monkeypatch.setitem(ROLE_GRAPHS, "backend", invalid_graph)
 
     with pytest.raises(RoleGraphValidationError):
+        load_role_graph("backend")
+
+
+def test_load_role_graph_accepts_curated_replacement_in_role_graph_mapping(monkeypatch):
+    backend_graph = ROLE_GRAPHS["backend"]
+    replacement_graph = replace(backend_graph, version="curated-v2")
+    monkeypatch.setitem(ROLE_GRAPHS, "backend", replacement_graph)
+
+    loaded_graph = load_role_graph("backend")
+
+    assert loaded_graph.version == "curated-v2"
+    assert loaded_graph.role_key == "backend"
+
+
+def test_load_role_graph_rejects_missing_supported_role_keys(monkeypatch):
+    monkeypatch.delitem(ROLE_GRAPHS, "mobile")
+
+    with pytest.raises(RoleGraphValidationError, match="Missing supported role graph"):
         load_role_graph("backend")
