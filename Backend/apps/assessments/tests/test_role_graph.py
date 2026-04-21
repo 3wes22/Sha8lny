@@ -9,6 +9,7 @@ from apps.assessments.role_graph import (
     resolve_role_key,
 )
 from apps.assessments.role_graph_data import ROLE_GRAPHS
+from apps.assessments.services import BaselineAssessmentAnalyzer
 
 
 def test_supported_role_graphs_are_structurally_valid():
@@ -25,13 +26,13 @@ def test_supported_role_graphs_are_structurally_valid():
         for dimension in graph.dimensions:
             assert dimension.key
             assert dimension.label
-            assert 4 <= len(dimension.subskills) <= 5
+            assert len(dimension.subskills) == 4
             for subskill in dimension.subskills:
                 assert subskill.dimension == dimension.key
                 assert 1 <= subskill.target_proficiency <= 5
                 subskill_keys.append(subskill.key)
 
-        assert 15 <= len(subskill_keys) <= 20
+        assert len(subskill_keys) == 16
         assert len(subskill_keys) == len(set(subskill_keys))
 
 
@@ -42,13 +43,36 @@ def test_supported_role_graphs_are_structurally_valid():
         ("Frontend Engineer", "frontend"),
         ("Data Scientist", "data_science"),
         ("Full Stack Developer", "fullstack"),
-        ("Mobile Developer", "mobile"),
         ("DevOps Engineer", "devops"),
+        ("Android Developer", "android"),
+        ("Mobile Developer", "android"),
+        ("iOS Developer", "android"),
+        ("Machine Learning Engineer", "machine_learning_engineer"),
+        ("Machine Learning", "data_science"),
+        ("ML", "data_science"),
+        ("UI/UX Designer", "ui_ux_designer"),
+        ("UI Engineer", "frontend"),
         ("Software Engineer", "fullstack"),
     ],
 )
 def test_resolve_role_key_maps_supported_aliases(target_career, expected_role_key):
     assert resolve_role_key(target_career) == expected_role_key
+
+
+def test_deterministic_role_aliases_branch_on_resolved_role_keys():
+    ml_engineer_aliases = BaselineAssessmentAnalyzer._career_aliases("Machine Learning Engineer")
+    generic_ml_aliases = BaselineAssessmentAnalyzer._career_aliases("Machine Learning")
+
+    assert ml_engineer_aliases[1]["title"] == "Data Scientist"
+    assert generic_ml_aliases[1]["title"] == "Machine Learning Engineer"
+
+
+def test_deterministic_learning_paths_support_new_first_class_roles():
+    uiux_paths = BaselineAssessmentAnalyzer._learning_paths("UI/UX Designer")
+    android_paths = BaselineAssessmentAnalyzer._learning_paths("Mobile Developer")
+
+    assert uiux_paths[0]["skill"] == "User research and problem framing"
+    assert android_paths[0]["skill"] == "Kotlin and Android app architecture"
 
 
 def test_load_role_graph_rejects_invalid_graph(monkeypatch):
@@ -75,7 +99,7 @@ def test_load_role_graph_accepts_curated_replacement_in_role_graph_mapping(monke
 
 
 def test_load_role_graph_rejects_missing_supported_role_keys(monkeypatch):
-    monkeypatch.delitem(ROLE_GRAPHS, "mobile")
+    monkeypatch.delitem(ROLE_GRAPHS, "android")
 
     with pytest.raises(RoleGraphValidationError, match="Missing supported role graph"):
         load_role_graph("backend")

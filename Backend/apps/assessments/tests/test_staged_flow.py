@@ -79,63 +79,81 @@ def _question_payload_from_prompt(prompt: str, *, stage: int) -> dict:
     }
 
 
-@pytest.mark.django_db
-def test_staged_assessment_progresses_from_stage_one_to_stage_two_to_result(api_client, assessment_user):
-    api_client.force_authenticate(user=assessment_user)
-
+def _complete_staged_assessment(api_client, target_career: str):
     create_response = api_client.post(
         reverse("assessment-list"),
-        {"assessment_type": "skills", "target_career": "Backend Developer"},
+        {"assessment_type": "skills", "target_career": target_career},
         format="json",
     )
 
     assert create_response.status_code == status.HTTP_201_CREATED
-    assert create_response.data["stage"] == "stage_1"
-    assert create_response.data["generation_status"] == "pending"
-    assert create_response.data["presentation"]["submission_state"] == "stage_1_generating"
-
     assessment_id = create_response.data["id"]
-    detail_response = api_client.get(reverse("assessment-detail", kwargs={"pk": assessment_id}))
 
-    assert detail_response.status_code == status.HTTP_200_OK
-    assert detail_response.data["stage"] == "stage_1"
-    assert detail_response.data["generation_status"] == "completed"
-    assert detail_response.data["presentation"]["submission_state"] == "stage_1_ready"
-    assert len(detail_response.data["active_questions"]) == 5
-    assert len(detail_response.data["questions"]) == 5
+    stage_one_detail = api_client.get(reverse("assessment-detail", kwargs={"pk": assessment_id}))
+    assert stage_one_detail.status_code == status.HTTP_200_OK
 
     stage_one_submit = api_client.post(
         reverse("assessment-submit", kwargs={"pk": assessment_id}),
-        {"responses": _build_stage_responses(detail_response.data["active_questions"])},
+        {"responses": _build_stage_responses(stage_one_detail.data["active_questions"])},
         format="json",
     )
-
     assert stage_one_submit.status_code == status.HTTP_202_ACCEPTED
-    assert stage_one_submit.data["submission_state"] == "stage_1_analyzing"
-    assert stage_one_submit.data["assessment"]["stage"] == "stage_1"
 
     stage_two_detail = api_client.get(reverse("assessment-detail", kwargs={"pk": assessment_id}))
-
     assert stage_two_detail.status_code == status.HTTP_200_OK
-    assert stage_two_detail.data["stage"] == "stage_2"
-    assert stage_two_detail.data["generation_status"] == "completed"
-    assert stage_two_detail.data["presentation"]["submission_state"] == "stage_2_ready"
-    assert stage_two_detail.data["gap_profile_summary"]["high_priority_count"] >= 1
-    assert len(stage_two_detail.data["active_questions"]) == 5
 
     stage_two_submit = api_client.post(
         reverse("assessment-submit", kwargs={"pk": assessment_id}),
         {"responses": _build_stage_responses(stage_two_detail.data["active_questions"])},
         format="json",
     )
-
     assert stage_two_submit.status_code == status.HTTP_202_ACCEPTED
-    assert stage_two_submit.data["submission_state"] == "stage_2_analyzing"
-    assert stage_two_submit.data["assessment"]["stage"] == "stage_2"
 
     result_response = api_client.get(reverse("assessment-result", kwargs={"pk": assessment_id}))
-
     assert result_response.status_code == status.HTTP_200_OK
+
+    return (
+        assessment_id,
+        create_response,
+        stage_one_detail,
+        stage_one_submit,
+        stage_two_detail,
+        stage_two_submit,
+        result_response,
+    )
+
+
+@pytest.mark.django_db
+def test_staged_assessment_progresses_from_stage_one_to_stage_two_to_result(api_client, assessment_user):
+    api_client.force_authenticate(user=assessment_user)
+
+    (
+        assessment_id,
+        create_response,
+        detail_response,
+        stage_one_submit,
+        stage_two_detail,
+        stage_two_submit,
+        result_response,
+    ) = _complete_staged_assessment(api_client, "Backend Developer")
+
+    assert create_response.data["stage"] == "stage_1"
+    assert create_response.data["generation_status"] == "pending"
+    assert create_response.data["presentation"]["submission_state"] == "stage_1_generating"
+    assert detail_response.data["stage"] == "stage_1"
+    assert detail_response.data["generation_status"] == "completed"
+    assert detail_response.data["presentation"]["submission_state"] == "stage_1_ready"
+    assert len(detail_response.data["active_questions"]) == 5
+    assert len(detail_response.data["questions"]) == 5
+    assert stage_one_submit.data["submission_state"] == "stage_1_analyzing"
+    assert stage_one_submit.data["assessment"]["stage"] == "stage_1"
+    assert stage_two_detail.data["stage"] == "stage_2"
+    assert stage_two_detail.data["generation_status"] == "completed"
+    assert stage_two_detail.data["presentation"]["submission_state"] == "stage_2_ready"
+    assert stage_two_detail.data["gap_profile_summary"]["high_priority_count"] >= 1
+    assert len(stage_two_detail.data["active_questions"]) == 5
+    assert stage_two_submit.data["submission_state"] == "stage_2_analyzing"
+    assert stage_two_submit.data["assessment"]["stage"] == "stage_2"
     assert result_response.data["submission_state"] == "completed"
     assert result_response.data["roadmap_signal"]["role"] == "backend"
     assert len(result_response.data["roadmap_signal"]["priority_order"]) >= 1
@@ -145,6 +163,36 @@ def test_staged_assessment_progresses_from_stage_one_to_stage_two_to_result(api_
     assert assessment.stage == "completed"
     assert assessment.roadmap_signal["role"] == "backend"
     assert AssessmentResult.objects.filter(assessment=assessment, is_deleted=False).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("target_career", "expected_role_key"),
+    [
+        ("Android Developer", "android"),
+        ("Machine Learning Engineer", "machine_learning_engineer"),
+        ("UI/UX Designer", "ui_ux_designer"),
+    ],
+)
+def test_new_first_class_roles_complete_the_staged_flow(
+    api_client,
+    assessment_user,
+    target_career,
+    expected_role_key,
+):
+    api_client.force_authenticate(user=assessment_user)
+
+    assessment_id, _, _, _, _, _, result_response = _complete_staged_assessment(
+        api_client,
+        target_career,
+    )
+
+    assert result_response.data["submission_state"] == "completed"
+    assert result_response.data["roadmap_signal"]["role"] == expected_role_key
+
+    assessment = Assessment.objects.get(id=assessment_id)
+    assert assessment.stage == "completed"
+    assert assessment.roadmap_signal["role"] == expected_role_key
 
 
 @pytest.mark.django_db

@@ -15,10 +15,12 @@ import { useToast } from "@/hooks/use-toast";
 const careerPaths = [
   ["Backend Developer", "Design APIs, services, and platform logic."],
   ["Frontend Developer", "Focus on responsive, high-quality interfaces."],
-  ["Data Scientist", "Work with analysis, models, and experimentation."],
   ["Full Stack Developer", "Ship product features across client and server layers."],
-  ["Mobile Developer", "Build polished mobile experiences and app flows."],
+  ["Data Scientist", "Work with analysis, models, and experimentation."],
   ["DevOps Engineer", "Own delivery pipelines, reliability, and infrastructure."],
+  ["Android Developer", "Build native Android experiences, releases, and app workflows."],
+  ["Machine Learning Engineer", "Train, ship, and monitor production ML systems."],
+  ["UI/UX Designer", "Shape product flows, prototypes, and accessible design systems."],
 ];
 
 export default function AssessmentPage() {

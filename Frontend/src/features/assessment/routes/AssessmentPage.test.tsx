@@ -59,4 +59,46 @@ describe("AssessmentPage", () => {
       expect(screen.getByRole("button", { name: /Backend Developer/i })).not.toBeDisabled();
     });
   });
+
+  it("renders the approved eight-role picker catalog", () => {
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <AssessmentPage />
+      </MemoryRouter>,
+    );
+
+    [
+      "Backend Developer",
+      "Frontend Developer",
+      "Full Stack Developer",
+      "Data Scientist",
+      "DevOps Engineer",
+      "Android Developer",
+      "Machine Learning Engineer",
+      "UI/UX Designer",
+    ].forEach((label) => {
+      expect(screen.getByRole("button", { name: new RegExp(label, "i") })).toBeInTheDocument();
+    });
+  });
+
+  it("starts a staged skills assessment for a newly added supported path", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <AssessmentPage />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /Machine Learning Engineer/i }));
+    });
+
+    await waitFor(() => {
+      expect(mocks.create).toHaveBeenCalledWith({
+        assessment_type: "skills",
+        target_career: "Machine Learning Engineer",
+      });
+    });
+  });
 });

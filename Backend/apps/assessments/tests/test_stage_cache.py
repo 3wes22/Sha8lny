@@ -110,7 +110,7 @@ def test_stage_one_generation_does_not_reuse_cached_questions_after_curated_repl
     )
     replacement_graph = replace(
         graph,
-        version="curated-v2",
+        version="curated-v3",
         dimensions=[replacement_dimension, *graph.dimensions[1:]],
     )
     payloads = iter([

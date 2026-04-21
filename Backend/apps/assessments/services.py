@@ -139,29 +139,25 @@ class BaselineAssessmentAnalyzer:
     @staticmethod
     def _career_aliases(target_career: str) -> List[Dict[str, Any]]:
         normalized = target_career or "Software Engineer"
-        lowered = normalized.lower()
+        role_key = resolve_role_key(normalized)
 
         career_map = {
-            "frontend": ("UI/UX Developer", 72, "Frontend skills transfer directly to UI/UX roles with design thinking."),
+            "frontend": ("UI/UX Designer", 72, "Frontend skills transfer directly to UI/UX design collaboration."),
             "backend": ("Full Stack Developer", 74, "Backend depth expands naturally toward full-stack execution."),
-            "data": ("Machine Learning Engineer", 71, "Data science foundations extend into model delivery and MLOps."),
+            "data_science": ("Machine Learning Engineer", 71, "Data science foundations extend into model delivery and MLOps."),
             "fullstack": ("Backend Developer", 73, "Strong backend focus can deepen your full-stack expertise."),
-            "full stack": ("Backend Developer", 73, "Strong backend focus can deepen your full-stack expertise."),
-            "mobile": ("Frontend Developer", 70, "Mobile experience translates well to responsive web development."),
+            "android": ("Frontend Developer", 70, "Android product thinking translates well to responsive interface work."),
             "devops": ("Cloud Architect", 72, "DevOps experience is the natural path to cloud architecture roles."),
-            "cloud": ("DevOps Engineer", 73, "Cloud skills directly complement DevOps and SRE workflows."),
+            "machine_learning_engineer": ("Data Scientist", 73, "Production ML work stays adjacent to strong data science fundamentals."),
+            "ui_ux_designer": ("Frontend Developer", 74, "UI/UX design work pairs naturally with frontend implementation skills."),
         }
 
         adjacent_title = "Full Stack Developer"
         adjacent_score = 72
         adjacent_reason = "This role stays adjacent while you build broader execution skills."
 
-        for keyword, (title, score, reason) in career_map.items():
-            if keyword in lowered:
-                adjacent_title = title
-                adjacent_score = score
-                adjacent_reason = reason
-                break
+        if role_key in career_map:
+            adjacent_title, adjacent_score, adjacent_reason = career_map[role_key]
 
         return [
             {"title": normalized, "match_score": 87, "reasoning": "Your selected career path remains your primary recommendation."},
@@ -170,7 +166,7 @@ class BaselineAssessmentAnalyzer:
 
     @staticmethod
     def _learning_paths(target_career: str) -> List[Dict[str, Any]]:
-        lowered = (target_career or "").lower()
+        role_key = resolve_role_key(target_career)
 
         paths_map: Dict[str, List[Dict[str, Any]]] = {
             "frontend": [
@@ -183,7 +179,7 @@ class BaselineAssessmentAnalyzer:
                 {"skill": "Database design & SQL optimization", "priority": "high", "resources": []},
                 {"skill": "Testing (pytest & integration tests)", "priority": "medium", "resources": []},
             ],
-            "data": [
+            "data_science": [
                 {"skill": "Python data stack (Pandas, NumPy, Scikit-learn)", "priority": "high", "resources": []},
                 {"skill": "Statistics & probability", "priority": "high", "resources": []},
                 {"skill": "Data visualization & storytelling", "priority": "medium", "resources": []},
@@ -193,21 +189,30 @@ class BaselineAssessmentAnalyzer:
                 {"skill": "Authentication & authorization flows", "priority": "high", "resources": []},
                 {"skill": "Deployment & DevOps basics (Docker)", "priority": "medium", "resources": []},
             ],
-            "mobile": [
-                {"skill": "Flutter or React Native", "priority": "high", "resources": []},
-                {"skill": "State management & navigation", "priority": "high", "resources": []},
-                {"skill": "Publishing to App Store / Play Store", "priority": "medium", "resources": []},
+            "android": [
+                {"skill": "Kotlin and Android app architecture", "priority": "high", "resources": []},
+                {"skill": "Jetpack Compose or XML UI implementation", "priority": "high", "resources": []},
+                {"skill": "Play Store release and app performance tuning", "priority": "medium", "resources": []},
             ],
             "devops": [
                 {"skill": "Docker & containerization", "priority": "high", "resources": []},
                 {"skill": "CI/CD pipelines (GitHub Actions)", "priority": "high", "resources": []},
                 {"skill": "Cloud platform (AWS or GCP fundamentals)", "priority": "medium", "resources": []},
             ],
+            "machine_learning_engineer": [
+                {"skill": "Production ML pipelines", "priority": "high", "resources": []},
+                {"skill": "Model deployment and serving", "priority": "high", "resources": []},
+                {"skill": "Experiment tracking and MLOps", "priority": "medium", "resources": []},
+            ],
+            "ui_ux_designer": [
+                {"skill": "User research and problem framing", "priority": "high", "resources": []},
+                {"skill": "Wireframing and prototyping in Figma", "priority": "high", "resources": []},
+                {"skill": "Usability testing and design critique", "priority": "medium", "resources": []},
+            ],
         }
 
-        for keyword, paths in paths_map.items():
-            if keyword in lowered:
-                return paths
+        if role_key in paths_map:
+            return paths_map[role_key]
 
         # Generic fallback
         return [

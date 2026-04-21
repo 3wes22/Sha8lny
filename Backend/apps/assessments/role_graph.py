@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import isclose
+import re
 
 
 class RoleGraphValidationError(ValueError):
@@ -13,9 +14,46 @@ SUPPORTED_ROLES = [
     "frontend",
     "data_science",
     "fullstack",
-    "mobile",
     "devops",
+    "android",
+    "machine_learning_engineer",
+    "ui_ux_designer",
 ]
+
+
+ROLE_ALIAS_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\bui\s*/\s*ux designer\b"), "ui_ux_designer"),
+    (re.compile(r"\bui[\s-]?ux designer\b"), "ui_ux_designer"),
+    (re.compile(r"\bux designer\b"), "ui_ux_designer"),
+    (re.compile(r"\bmachine learning engineer\b"), "machine_learning_engineer"),
+    (re.compile(r"\bml engineer\b"), "machine_learning_engineer"),
+    (re.compile(r"\bandroid developer\b"), "android"),
+    (re.compile(r"\bandroid engineer\b"), "android"),
+    (re.compile(r"\bandroid\b"), "android"),
+    (re.compile(r"\bmobile developer\b"), "android"),
+    (re.compile(r"\bmobile engineer\b"), "android"),
+    (re.compile(r"\bmobile app developer\b"), "android"),
+    (re.compile(r"\bmobile\b"), "android"),
+    (re.compile(r"\bios developer\b"), "android"),
+    (re.compile(r"\bios engineer\b"), "android"),
+    (re.compile(r"\bios\b"), "android"),
+    (re.compile(r"\bback[- ]?end\b"), "backend"),
+    (re.compile(r"\bapi\b"), "backend"),
+    (re.compile(r"\bserver\b"), "backend"),
+    (re.compile(r"\bfront[- ]?end\b"), "frontend"),
+    (re.compile(r"\breact\b"), "frontend"),
+    (re.compile(r"\bdata science\b"), "data_science"),
+    (re.compile(r"\bdata scientist\b"), "data_science"),
+    (re.compile(r"\bmachine learning\b"), "data_science"),
+    (re.compile(r"\bml\b"), "data_science"),
+    (re.compile(r"\bfull[- ]?stack\b"), "fullstack"),
+    (re.compile(r"\bsoftware engineer\b"), "fullstack"),
+    (re.compile(r"\bdevops\b"), "devops"),
+    (re.compile(r"\bsre\b"), "devops"),
+    (re.compile(r"\bcloud\b"), "devops"),
+    (re.compile(r"\bplatform\b"), "devops"),
+    (re.compile(r"\bui\b"), "frontend"),
+)
 
 
 @dataclass(frozen=True)
@@ -46,33 +84,8 @@ class RoleGraph:
 def resolve_role_key(target_career: str) -> str:
     """Map user-facing career labels to the supported role keys."""
     normalized = (target_career or "").strip().lower()
-    alias_map = {
-        "backend": "backend",
-        "api": "backend",
-        "server": "backend",
-        "frontend": "frontend",
-        "front-end": "frontend",
-        "ui": "frontend",
-        "react": "frontend",
-        "data science": "data_science",
-        "data scientist": "data_science",
-        "machine learning": "data_science",
-        "ml": "data_science",
-        "fullstack": "fullstack",
-        "full stack": "fullstack",
-        "full-stack": "fullstack",
-        "software engineer": "fullstack",
-        "mobile": "mobile",
-        "flutter": "mobile",
-        "android": "mobile",
-        "ios": "mobile",
-        "devops": "devops",
-        "sre": "devops",
-        "cloud": "devops",
-        "platform": "devops",
-    }
-    for needle, role_key in alias_map.items():
-        if needle in normalized:
+    for pattern, role_key in ROLE_ALIAS_PATTERNS:
+        if pattern.search(normalized):
             return role_key
     return "fullstack"
 
