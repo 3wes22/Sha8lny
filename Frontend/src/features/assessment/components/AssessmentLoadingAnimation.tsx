@@ -37,10 +37,10 @@ const phaseConfig: Record<
   }
 > = {
   generating: {
-    eyebrow: "Crafting your assessment",
-    headline: "Building targeted questions\njust for you",
+    eyebrow: "Assessment setup",
+    headline: "Preparing assessment",
     description:
-      "Our AI is analyzing your chosen career path and constructing questions that probe real-world readiness — not textbook trivia.",
+      "We are generating the first stage of questions. Stay on this screen and it will become ready automatically.",
     facts: [
       "Each question is mapped to a specific sub-skill in your career graph",
       "We calibrate difficulty based on industry expectations",
@@ -52,10 +52,10 @@ const phaseConfig: Record<
     accentHue: 20,
   },
   analyzing_stage_1: {
-    eyebrow: "Processing stage 1",
-    headline: "Analyzing your\nfirst-stage answers",
+    eyebrow: "Assessment analysis",
+    headline: "Analyzing your responses",
     description:
-      "We're reading your responses to identify knowledge gaps and confidence patterns, so stage 2 can ask the right follow-up questions.",
+      "We’re reviewing your first-stage answers to generate targeted follow-up questions.",
     facts: [
       "We measure both accuracy and confidence signals",
       "Gap detection identifies areas needing deeper probing",
@@ -67,10 +67,10 @@ const phaseConfig: Record<
     accentHue: 188,
   },
   analyzing_stage_2: {
-    eyebrow: "Finalizing results",
-    headline: "Combining both stages\ninto your assessment",
+    eyebrow: "Finalizing assessment",
+    headline: "Finalizing your assessment",
     description:
-      "Both stages are being merged into a comprehensive skill profile that maps directly to your career roadmap.",
+      "We’re combining both stages into your roadmap-ready assessment result.",
     facts: [
       "Cross-referencing stage 1 and stage 2 response patterns",
       "Building your complete sub-skill evidence map",

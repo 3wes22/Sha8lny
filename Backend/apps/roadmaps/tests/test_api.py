@@ -526,6 +526,29 @@ class TestRoadmapProgressAPI:
         roadmap_with_phases.refresh_from_db()
         assert roadmap_with_phases.status == 'in_progress'
 
+    def test_rejects_direct_phase_completion(
+        self, api_client, test_user, roadmap_with_phases
+    ):
+        """Completing a phase must happen through milestone completion."""
+        api_client.force_authenticate(user=test_user)
+        first_phase = roadmap_with_phases.phases.first()
+
+        response = api_client.put(
+            reverse('roadmaps:roadmap-progress', args=[roadmap_with_phases.id]),
+            {
+                'phase_id': str(first_phase.id),
+                'status': 'completed',
+            },
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'milestones' in response.data['error'].lower()
+
+        first_phase.refresh_from_db()
+        assert first_phase.status == 'not_started'
+        assert first_phase.completed_at is None
+
 
 @pytest.mark.django_db
 class TestRoadmapStatsAPI:

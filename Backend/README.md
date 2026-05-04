@@ -69,7 +69,7 @@ git clone <repository-url>
 cd Sha8alny/Backend
 
 # Create virtual environment (recommended)
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install backend dependencies plus the local ai-models package
@@ -87,10 +87,10 @@ cp .env.example .env
 **For Development (SQLite - Default)**:
 ```bash
 # Run migrations
-python manage.py migrate
+python3 manage.py migrate
 
 # Create superuser
-python manage.py createsuperuser
+python3 manage.py createsuperuser
 ```
 
 **For PostgreSQL**:
@@ -102,17 +102,17 @@ createdb sha8alny_db
 # Uncomment PostgreSQL configuration in config/settings/development.py
 
 # Run migrations
-python manage.py migrate
+python3 manage.py migrate
 
 # Create superuser
-python manage.py createsuperuser
+python3 manage.py createsuperuser
 ```
 
 ### 4. Run Development Server
 
 ```bash
 # Start Django development server
-python manage.py runserver
+python3 manage.py runserver
 
 # Server will be available at http://localhost:8000
 ```
@@ -141,6 +141,21 @@ pytest --cov=apps --cov-report=html
 # Run specific app tests
 pytest apps/users/tests/
 ```
+
+## Graduation Demo Data
+
+Seed the evaluator-ready demo accounts from a clean local state:
+
+```bash
+python3 manage.py seed_graduation_demo --reset
+```
+
+Demo credentials:
+
+- `demo.new@sha8alny.local` / `DemoPass123!`
+- `demo.progress@sha8alny.local` / `DemoPass123!`
+
+For the full local and hosted demo workflow, use `docs/product/GRADUATION_DEMO_RUNBOOK.md`.
 
 ## Configuration
 
@@ -171,7 +186,7 @@ The active AI architecture is Gemini-first for demo use:
 
 For local switching later, the optional Ollama settings remain available in `.env.example`, but they are not required for the default demo path.
 
-If you need the architecture rationale, start with `docs/product/ADR-001-LOCAL-GEMMA-ARCHITECTURE.md`.
+If you need the active provider rationale, start with `docs/product/ADR-002-HOSTED-DEMO-AI-RUNTIME.md`.
 
 ### Settings Modules
 

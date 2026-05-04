@@ -3,12 +3,12 @@
 Auto-generated from all feature plans. Last updated: 2026-04-21
 
 ## Active Technologies
-- Python 3.13 backend; TypeScript 5.8 on React 18.3 frontend + Django 5, Django REST Framework, Celery, Redis cache/broker, Simple JWT, local Gemma via Ollama, React Router 6, TanStack Query 5, Vitest, Testing Library (002-ai-rag-experiment)
+- Python 3.13 backend; TypeScript 5.8 on React 18.3 frontend + Django 5, Django REST Framework, Celery, Redis cache/broker, Simple JWT, hosted Gemini default demo runtime, local Gemma via Ollama fallback, React Router 6, TanStack Query 5, Vitest, Testing Library (002-ai-rag-experiment)
 - Existing Django relational persistence with JSON-backed assessment payloads; Redis-backed cache in base/production; SQLite acceptable in development (002-ai-rag-experiment)
 
 - Frontend: TypeScript 5.8, React 18.3, Vite 5, React Router 6, TanStack Query 5, Tailwind CSS 3, Radix UI primitives, Vitest, Testing Library
 - Backend: Python 3.13, Django 5.0, Django REST Framework, Simple JWT, drf-spectacular, pytest, Celery, Redis, PostgreSQL for production, SQLite for development
-- AI stack: local Gemma 4 E4B via Ollama, deterministic Django service orchestration, ChromaDB vector store, sentence-transformers embeddings (`all-MiniLM-L6-v2`)
+- AI stack: hosted Gemini by default for evaluator demos, optional local Gemma via Ollama fallback, deterministic Django service orchestration, ChromaDB vector store, sentence-transformers embeddings (`all-MiniLM-L6-v2`)
 - Repository shape: full-stack monorepo with active code in `Frontend/`, `Backend/`, `ai-models/`, and current engineering docs in `docs/product/`
 
 ## Project Structure
@@ -84,11 +84,12 @@ archive/
 - Treat AI orchestration as deterministic backend workflow code, not agentic planning inside the product runtime.
 
 ## Recent Changes
+- 2026-05-04 demo runtime alignment: Hosted Gemini is the default demo provider, with local Gemma/Ollama retained as the fallback path.
 - 003-assessment-baseline-gate: Added Python 3.13 backend; TypeScript 5.8 on React 18.3 frontend + Django 5, Django REST Framework, Celery, Redis cache/broker, Simple JWT, local Gemma via Ollama, React Router 6, TanStack Query 5, Vitest, Testing Library
 - 002-ai-rag-experiment: Added Python 3.13 backend; TypeScript 5.8 on React 18.3 frontend + Django 5, Django REST Framework, Celery, Redis cache/broker, Simple JWT, local Gemma via Ollama, React Router 6, TanStack Query 5, Vitest, Testing Library
 
 - 001-frontend-visual-rebuild: Rebuilt the frontend around the career-atlas visual system, feature-first structure, lazy-loaded routes, shared authenticated shell, and contract-tested frontend/backend interfaces.
-- 2026-04-07 architecture reset: Accepted `docs/product/ADR-001-LOCAL-GEMMA-ARCHITECTURE.md` as the active AI architecture, replacing old OpenAI/Anthropic/LangChain/Pinecone assumptions with local Gemma via Ollama.
+- 2026-04-07 architecture reset: Accepted `docs/product/ADR-001-LOCAL-GEMMA-ARCHITECTURE.md` to replace old OpenAI/Anthropic/LangChain/Pinecone assumptions; later superseded for demo operations by hosted Gemini default with local Ollama fallback.
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

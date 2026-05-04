@@ -1,9 +1,9 @@
 # Sha8alny - Technology Stack
 
-> **⚠️ AI STACK UPDATE — April 2026**
+> **AI STACK UPDATE — May 2026**
 >
-> The AI/ML section below has been updated to reflect the current local Gemma architecture.
-> See [ADR-001](ADR-001-LOCAL-GEMMA-ARCHITECTURE.md) for rationale.
+> The active demo runtime defaults to hosted Gemini with local Gemma/Ollama as the fallback.
+> See [ADR-002](ADR-002-HOSTED-DEMO-AI-RUNTIME.md) for the provider contract.
 
 ## Overview
 This document outlines the complete technology stack for the Sha8alny platform, including backend, frontend, database, AI/ML infrastructure, and supporting services.
@@ -44,11 +44,11 @@ This document outlines the complete technology stack for the Sha8alny platform, 
 **Database:**
 - **psycopg2-binary**: PostgreSQL adapter for Python/Django
 
-**AI/ML Integration (Local Gemma — see ADR-001):**
-- **httpx**: HTTP client for Ollama API communication
+**AI/ML Integration (Gemini default, Ollama fallback — see ADR-002):**
+- **httpx**: HTTP client for hosted Gemini and local Ollama API communication
 - **chromadb**: Local vector database for RAG
 - **sentence-transformers**: Embeddings generation (all-MiniLM-L6-v2)
-- ~~openai, anthropic, langchain, pinecone-client~~ — *RETIRED, see ADR-001*
+- ~~openai, anthropic, langchain, pinecone-client~~ — *RETIRED, see ADR-001/ADR-002*
 
 **Testing & Quality:**
 - **pytest-django**: Testing framework
@@ -158,15 +158,16 @@ This document outlines the complete technology stack for the Sha8alny platform, 
 
 ## AI/ML Infrastructure
 
-> Updated April 2026 — see [ADR-001](ADR-001-LOCAL-GEMMA-ARCHITECTURE.md)
+> Updated May 2026 — see [ADR-002](ADR-002-HOSTED-DEMO-AI-RUNTIME.md)
 
 ### LLM Strategy
-**Single Local Model — Deterministic Workflow:**
+**Provider-Selectable Runtime — Deterministic Workflow:**
 
-- **Model:** Google Gemma 4 E4B (4-bit quantized, ~6 GB)
-- **Runtime:** Ollama (local inference server)
-- **Concurrency:** One active inference at a time (single-lane Celery queue)
-- **Cost:** $0 — entirely local, no API keys required
+- **Default model path:** Hosted Gemini API for evaluator demos
+- **Fallback model path:** Google Gemma via Ollama for local/offline runs
+- **Runtime config:** `AI_PROVIDER=gemini` or `AI_PROVIDER=ollama`
+- **Concurrency:** Controlled by backend service and Celery configuration
+- **Cost:** Hosted demos require a Gemini key; local fallback has no API cost
 - **Config:** `Backend/apps/core/ai_settings.py`
 
 **What the model handles:**
@@ -192,7 +193,7 @@ This document outlines the complete technology stack for the Sha8alny platform, 
 **RAG Pipeline:**
 ```
 User Query → Embedding → ChromaDB Search → Context Retrieval →
-Prompt Assembly → Gemma Generation → Validation → Response
+Prompt Assembly → Provider Generation → Validation → Response
 ```
 
 **Embedding Model:**
@@ -498,5 +499,5 @@ Prompt Assembly → Gemma Generation → Validation → Response
 
 ---
 
-*Last Updated: April 2026*  
-*Status: AI stack finalized for local Gemma architecture (ADR-001). Other components remain as planned.*
+*Last Updated: May 2026*
+*Status: AI stack finalized as hosted Gemini default with local Gemma/Ollama fallback (ADR-002). Other components remain as planned.*

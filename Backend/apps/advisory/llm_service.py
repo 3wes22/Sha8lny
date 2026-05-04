@@ -412,21 +412,39 @@ class LLMAdvisoryService:
             pass
 
         try:
+            from apps.progress.services import ProgressService
+
             active_roadmap = Roadmap.objects.filter(
                 user=user,
                 is_deleted=False,
-                status__in=[Roadmap.ACTIVE, Roadmap.IN_PROGRESS, Roadmap.DRAFT],
+                status__in=[Roadmap.ACTIVE, Roadmap.IN_PROGRESS],
             ).order_by("-updated_at").first()
+            if active_roadmap is None:
+                active_roadmap = Roadmap.objects.filter(
+                    user=user,
+                    is_deleted=False,
+                    status=Roadmap.DRAFT,
+                ).order_by("-updated_at").first()
             if active_roadmap:
-                next_focus = None
-                if isinstance(active_roadmap.ai_insights, dict):
+                progress = ProgressService.get_progress_snapshot(user, active_roadmap)
+                next_focus = (
+                    progress.current_milestone.title
+                    if progress.current_milestone
+                    else progress.current_phase.title
+                    if progress.current_phase
+                    else None
+                )
+                if next_focus is None and isinstance(active_roadmap.ai_insights, dict):
                     next_focus = active_roadmap.ai_insights.get("summary")
                 context["active_roadmap"] = {
                     "id": str(active_roadmap.id),
                     "target_career": active_roadmap.target_career,
                     "current_level": active_roadmap.current_level,
                     "target_level": active_roadmap.target_level,
+                    "completion_percentage": float(active_roadmap.completion_percentage or 0),
                     "next_focus": next_focus,
+                    "current_streak_days": progress.current_streak_days,
+                    "total_learning_hours": float(progress.total_learning_hours or 0),
                 }
         except Exception:
             pass

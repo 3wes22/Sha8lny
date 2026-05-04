@@ -100,13 +100,14 @@ Keep backend contract changes isolated from visual redesign work whenever possib
 
 ```bash
 cd Backend
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
 # set GEMINI_API_KEY in Backend/.env
-python manage.py migrate
-python manage.py runserver
+python3 manage.py migrate
+python3 manage.py seed_graduation_demo --reset
+python3 manage.py runserver
 ```
 
 ### Frontend
@@ -127,3 +128,5 @@ pip install -r requirements.txt
 ```
 
 The default inference path now uses the hosted Gemini API. For backend and `ai-models` flows, configure `GEMINI_API_KEY` before running generation features.
+
+For the evaluator-ready demo flow and reset steps, use [GRADUATION_DEMO_RUNBOOK.md](docs/product/GRADUATION_DEMO_RUNBOOK.md).

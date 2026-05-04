@@ -70,7 +70,22 @@ vi.mock("@/lib/api", () => ({
       total_phases: 4,
       completed_milestones: 2,
       total_milestones: 6,
+      completed_courses: 3,
       estimated_total_hours: 40,
+      roadmap_status: "in_progress",
+      current_phase: {
+        id: "phase-1",
+        title: "Core React foundations",
+        status: "in_progress",
+        completion_percentage: 50,
+      },
+      pace: {
+        current_streak_days: 3,
+        total_learning_hours: 12.5,
+        average_hours_per_week: 4.25,
+        last_activity_date: "2026-05-03",
+        on_track: true,
+      },
     }),
   },
 }));
@@ -86,5 +101,7 @@ describe("DashboardPage", () => {
     expect(screen.getAllByText(/Completed milestones/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Ship milestone/i)[0]).toBeInTheDocument();
     expect(screen.getAllByText(/Core React foundations/i)[0]).toBeInTheDocument();
+    expect(screen.getByText(/3 day streak/i)).toBeInTheDocument();
+    expect(screen.getByText(/^3$/)).toBeInTheDocument();
   });
 });

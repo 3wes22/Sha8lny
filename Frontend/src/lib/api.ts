@@ -645,15 +645,30 @@ export interface RoadmapStats {
   completed_phases: number;
   total_milestones: number;
   completed_milestones: number;
+  completed_courses?: number;
   total_courses: number;
   estimated_total_hours: number;
   completion_percentage: number;
+  roadmap_status?: Roadmap["status"];
   current_focus_node_id?: string;
   next_action?: {
     type: "phase" | "milestone" | "course" | "roadmap";
     id?: string;
     title: string;
     summary: string;
+  };
+  current_phase?: {
+    id: string;
+    title: string;
+    status: RoadmapPhase["status"];
+    completion_percentage: number;
+  } | null;
+  pace?: {
+    current_streak_days: number;
+    total_learning_hours: number;
+    average_hours_per_week?: number | null;
+    last_activity_date?: string | null;
+    on_track: boolean;
   };
 }
 

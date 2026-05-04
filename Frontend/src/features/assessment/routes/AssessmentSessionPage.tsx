@@ -54,9 +54,7 @@ export default function AssessmentSessionPage() {
       }
 
       try {
-        if (!assessment) {
-          setLoading(true);
-        }
+        setLoading(true);
 
         const data = await assessmentApi.get(assessmentId);
         if (ignore) {

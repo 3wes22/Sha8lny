@@ -35,10 +35,20 @@ class Command(BaseCommand):
 
         for template_data in templates_data:
             slug = slugify(template_data['title'])
-            template, created = RoadmapTemplate.objects.update_or_create(
-                slug=slug,
-                defaults=template_data
+            template_payload = {**template_data, 'slug': slug}
+            template = (
+                RoadmapTemplate.objects.filter(slug=slug).first()
+                or RoadmapTemplate.objects.filter(title=template_data['title']).first()
             )
+
+            if template:
+                for field, value in template_payload.items():
+                    setattr(template, field, value)
+                template.save()
+                created = False
+            else:
+                template = RoadmapTemplate.objects.create(**template_payload)
+                created = True
 
             if created:
                 created_count += 1

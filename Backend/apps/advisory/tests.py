@@ -1,9 +1,14 @@
 import pytest
+from decimal import Decimal
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.advisory.llm_service import LLMAdvisoryService
 from apps.advisory.models import Conversation, Message
+from apps.assessments.models import Assessment, AssessmentResult
+from apps.progress.services import ProgressService
+from apps.roadmaps.models import RoadmapTemplate
+from apps.roadmaps.services import RoadmapService
 from apps.users.models import User
 
 
@@ -20,6 +25,23 @@ def advisory_user(db):
         username="advisory_contract_user",
         full_name="Advisory Contract User",
         date_of_birth="1998-01-01",
+    )
+
+
+@pytest.fixture
+def advisory_roadmap_template(db):
+    return RoadmapTemplate.objects.create(
+        title="Backend Engineer Roadmap",
+        slug="advisory-backend-engineer-roadmap",
+        description="A practical roadmap for backend engineering.",
+        short_description="Backend focus",
+        target_career="Backend Engineer",
+        career_level=RoadmapTemplate.ENTRY_LEVEL,
+        estimated_duration_weeks=20,
+        difficulty_level="intermediate",
+        prerequisites=["Python basics"],
+        learning_outcomes=["Ship backend services"],
+        is_published=True,
     )
 
 
@@ -124,3 +146,56 @@ def test_llm_service_falls_back_when_retrieval_fails(monkeypatch):
     assert response
     assert metadata["source"] == "fallback"
     assert metadata["error_code"] == "retrieval_failed"
+
+
+@pytest.mark.django_db
+def test_build_user_context_prefers_active_roadmap_and_progress(
+    advisory_user,
+    advisory_roadmap_template,
+):
+    assessment = Assessment.objects.create(
+        user=advisory_user,
+        assessment_type="skills",
+        target_career="Backend Engineer",
+        questions=[],
+        total_questions=0,
+        status="completed",
+        ai_processing_status="completed",
+    )
+    AssessmentResult.objects.create(
+        assessment=assessment,
+        overall_score=84,
+        skill_scores={"python": 88},
+        strengths=["Problem solving"],
+        areas_for_improvement=["System design"],
+        recommended_careers=[{"title": "Backend Engineer", "match_score": 91}],
+        recommended_learning_paths=[],
+        ai_insights="Strong backend fundamentals",
+        llm_model_used="mock-v1",
+        ai_confidence_score=0.8,
+    )
+
+    active_roadmap = RoadmapService.create_roadmap_from_template(
+        user=advisory_user,
+        template=advisory_roadmap_template,
+    )
+    RoadmapService.update_roadmap_status(active_roadmap, "active")
+
+    draft_roadmap = RoadmapService.create_roadmap_from_template(
+        user=advisory_user,
+        template=advisory_roadmap_template,
+    )
+
+    progress = ProgressService.get_or_create_progress(advisory_user, active_roadmap)
+    progress.current_streak_days = 4
+    progress.total_learning_hours = Decimal("9.50")
+    progress.save(update_fields=["current_streak_days", "total_learning_hours", "updated_at"])
+
+    service = LLMAdvisoryService()
+    context = service.build_user_context(advisory_user)
+
+    assert context["latest_assessment"]["target_career"] == "Backend Engineer"
+    assert context["active_roadmap"]["id"] == str(active_roadmap.id)
+    assert context["active_roadmap"]["id"] != str(draft_roadmap.id)
+    assert context["active_roadmap"]["current_streak_days"] == 4
+    assert context["active_roadmap"]["total_learning_hours"] == 9.5

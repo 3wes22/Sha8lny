@@ -94,7 +94,7 @@ class UserProgressViewSet(viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        progress = ProgressService.get_or_create_progress(request.user, roadmap)
+        progress = ProgressService.get_progress_snapshot(request.user, roadmap)
         serializer = UserProgressSerializer(progress)
         return Response(serializer.data)
 

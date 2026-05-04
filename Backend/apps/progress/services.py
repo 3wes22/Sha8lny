@@ -14,7 +14,7 @@ from django.core.exceptions import ValidationError
 
 from .models import UserProgress, CourseCompletion, MilestoneAchievement, TimeLog
 from apps.users.models import User
-from apps.roadmaps.models import Roadmap, RoadmapMilestone, RoadmapCourse
+from apps.roadmaps.models import Roadmap, RoadmapPhase, RoadmapMilestone, RoadmapCourse
 from apps.courses.models import Course
 from apps.notifications.signals import (
     milestone_achieved, course_completed, phase_completed,
@@ -24,6 +24,42 @@ from apps.notifications.signals import (
 
 class ProgressService:
     """Service for user progress management"""
+
+    @staticmethod
+    def _resolve_current_focus_from_phases(
+        phases: list[RoadmapPhase],
+    ) -> tuple[Optional[RoadmapMilestone], Optional[RoadmapPhase]]:
+        current_phase = next(
+            (phase for phase in phases if phase.status == RoadmapPhase.IN_PROGRESS),
+            None,
+        )
+        if current_phase is None:
+            current_phase = next(
+                (phase for phase in phases if phase.status == RoadmapPhase.NOT_STARTED),
+                None,
+            )
+        if current_phase is None and phases:
+            current_phase = phases[-1]
+
+        if current_phase is None:
+            return None, None
+
+        milestones = list(current_phase.milestones.all().order_by("order"))
+        current_milestone = next(
+            (
+                milestone
+                for milestone in milestones
+                if milestone.status in {RoadmapMilestone.IN_PROGRESS, RoadmapMilestone.NOT_STARTED}
+            ),
+            None,
+        )
+
+        return current_milestone, current_phase
+
+    @staticmethod
+    def _resolve_current_focus(roadmap: Roadmap) -> tuple[Optional[RoadmapMilestone], Optional[RoadmapPhase]]:
+        phases = list(roadmap.phases.all().order_by("order"))
+        return ProgressService._resolve_current_focus_from_phases(phases)
 
     @staticmethod
     def get_or_create_progress(user: User, roadmap: Roadmap) -> UserProgress:
@@ -45,26 +81,58 @@ class ProgressService:
         return progress
 
     @staticmethod
-    def update_progress_metrics(user: User, roadmap: Roadmap) -> UserProgress:
-        """
-        Recalculate and update all progress metrics for a roadmap.
+    def _calculate_progress_state(
+        user: User,
+        roadmap: Roadmap,
+        progress: Optional[UserProgress] = None,
+    ) -> Dict[str, Any]:
+        """Calculate roadmap progress without writing to the database."""
+        now = timezone.now()
+        phases = list(roadmap.phases.all().order_by("order").prefetch_related("milestones"))
+        total_phases = len(phases)
+        total_milestones = 0
+        completed_milestones = 0
+        phase_states = []
 
-        This should be called after completing courses, milestones, or phases.
-        """
-        progress = ProgressService.get_or_create_progress(user, roadmap)
+        for phase in phases:
+            milestones = list(phase.milestones.all().order_by("order"))
+            total = len(milestones)
+            total_milestones += total
+            completed = sum(1 for milestone in milestones if milestone.status == RoadmapMilestone.COMPLETED)
+            completed_milestones += completed
+            has_active_work = phase.status == RoadmapPhase.IN_PROGRESS or any(
+                milestone.status in {RoadmapMilestone.IN_PROGRESS, RoadmapMilestone.COMPLETED}
+                for milestone in milestones
+            )
+            phase_completion = round((completed / total) * 100, 2) if total > 0 else 0
 
-        # Count completed items
-        total_phases = roadmap.phases.count()
-        completed_phases = roadmap.phases.filter(status='completed').count()
+            desired_status = RoadmapPhase.NOT_STARTED
+            desired_started_at = phase.started_at
+            desired_completed_at = None
 
-        total_milestones = RoadmapMilestone.objects.filter(
-            phase__roadmap=roadmap
-        ).count()
-        completed_milestones = MilestoneAchievement.objects.filter(
-            user=user,
-            milestone__phase__roadmap=roadmap,
-            is_deleted=False
-        ).count()
+            if total > 0 and completed == total:
+                desired_status = RoadmapPhase.COMPLETED
+                desired_started_at = phase.started_at or now
+                desired_completed_at = phase.completed_at or now
+            elif has_active_work:
+                desired_status = RoadmapPhase.IN_PROGRESS
+                desired_started_at = phase.started_at or now
+
+            phase.completion_percentage = Decimal(str(phase_completion))
+            phase.status = desired_status
+            phase.started_at = desired_started_at
+            phase.completed_at = desired_completed_at
+            phase_states.append(
+                {
+                    "phase": phase,
+                    "completion_percentage": Decimal(str(phase_completion)),
+                    "status": desired_status,
+                    "started_at": desired_started_at,
+                    "completed_at": desired_completed_at,
+                }
+            )
+
+        completed_phases = sum(1 for phase in phases if phase.status == RoadmapPhase.COMPLETED)
 
         completed_courses = CourseCompletion.objects.filter(
             user=user,
@@ -72,26 +140,131 @@ class ProgressService:
             is_deleted=False
         ).count()
 
-        # Calculate overall completion percentage
-        if total_milestones > 0:
-            completion = (completed_milestones / total_milestones) * 100
-        else:
-            completion = 0
+        completion = round((completed_milestones / total_milestones) * 100, 2) if total_milestones > 0 else 0
+        current_milestone, current_phase = ProgressService._resolve_current_focus_from_phases(phases)
 
-        # Update progress
-        progress.phases_completed = completed_phases
-        progress.milestones_completed = completed_milestones
-        progress.courses_completed = completed_courses
-        progress.overall_completion_percentage = Decimal(str(round(completion, 2)))
+        total_learning_hours = (
+            Decimal(str(progress.total_learning_hours or 0))
+            if progress
+            else Decimal("0.00")
+        )
+        average_hours_per_week = None
+        progress_created_at = progress.created_at if progress and progress.created_at else roadmap.created_at
+        if progress_created_at:
+            weeks = max(1, (now.date() - progress_created_at.date()).days / 7)
+            average_hours_per_week = total_learning_hours / Decimal(str(weeks))
+
+        if roadmap.started_at and roadmap.estimated_duration_weeks:
+            elapsed_weeks = max(1, (now.date() - roadmap.started_at.date()).days / 7)
+            expected_completion = min(100, (elapsed_weeks / roadmap.estimated_duration_weeks) * 100)
+            on_track = completion + 5 >= expected_completion
+        else:
+            on_track = True
+
+        roadmap_status = roadmap.status
+        roadmap_started_at = roadmap.started_at
+        roadmap_completed_at = roadmap.completed_at
+        if completion >= 100:
+            roadmap_status = Roadmap.COMPLETED
+            roadmap_completed_at = roadmap.completed_at or now
+        elif completion > 0:
+            if roadmap.status == Roadmap.DRAFT:
+                roadmap_status = Roadmap.IN_PROGRESS
+            roadmap_started_at = roadmap.started_at or now
+            roadmap_completed_at = None
+        elif roadmap.status == Roadmap.COMPLETED:
+            roadmap_status = Roadmap.IN_PROGRESS
+            roadmap_completed_at = None
+
+        return {
+            "phase_states": phase_states,
+            "total_phases": total_phases,
+            "phases_completed": completed_phases,
+            "total_milestones": total_milestones,
+            "milestones_completed": completed_milestones,
+            "courses_completed": completed_courses,
+            "current_phase": current_phase,
+            "current_milestone": current_milestone,
+            "overall_completion_percentage": Decimal(str(completion)),
+            "average_hours_per_week": average_hours_per_week,
+            "on_track": on_track,
+            "roadmap_status": roadmap_status,
+            "roadmap_started_at": roadmap_started_at,
+            "roadmap_completed_at": roadmap_completed_at,
+        }
+
+    @staticmethod
+    def get_progress_snapshot(user: User, roadmap: Roadmap) -> UserProgress:
+        """Return calculated progress for read paths without persisting side effects."""
+        progress = ProgressService.get_user_roadmap_progress(user, roadmap)
+        if progress is None:
+            progress = UserProgress(user=user, roadmap=roadmap)
+            progress.created_at = roadmap.created_at
+            progress.updated_at = timezone.now()
+
+        state = ProgressService._calculate_progress_state(user, roadmap, progress)
+        progress.phases_completed = state["phases_completed"]
+        progress.milestones_completed = state["milestones_completed"]
+        progress.courses_completed = state["courses_completed"]
+        progress.current_phase = state["current_phase"]
+        progress.current_milestone = state["current_milestone"]
+        progress.overall_completion_percentage = state["overall_completion_percentage"]
+        progress.average_hours_per_week = state["average_hours_per_week"]
+        progress.on_track = state["on_track"]
+        return progress
+
+    @staticmethod
+    def get_derived_roadmap_status(user: User, roadmap: Roadmap) -> str:
+        """Return the calculated roadmap status without writing it."""
+        progress = ProgressService.get_user_roadmap_progress(user, roadmap)
+        return ProgressService._calculate_progress_state(user, roadmap, progress)["roadmap_status"]
+
+    @staticmethod
+    def update_progress_metrics(user: User, roadmap: Roadmap) -> UserProgress:
+        """
+        Recalculate and persist all progress metrics for a roadmap.
+
+        This should be called after completing courses, milestones, or phases.
+        """
+        progress = ProgressService.get_or_create_progress(user, roadmap)
+        state = ProgressService._calculate_progress_state(user, roadmap, progress)
+
+        for phase_state in state["phase_states"]:
+            phase = phase_state["phase"]
+            for field in ("completion_percentage", "status", "started_at", "completed_at"):
+                setattr(phase, field, phase_state[field])
+            phase.save(update_fields=["completion_percentage", "status", "started_at", "completed_at", "updated_at"])
+
+        progress.phases_completed = state["phases_completed"]
+        progress.milestones_completed = state["milestones_completed"]
+        progress.courses_completed = state["courses_completed"]
+        progress.current_phase = state["current_phase"]
+        progress.current_milestone = state["current_milestone"]
+        progress.overall_completion_percentage = state["overall_completion_percentage"]
+        progress.average_hours_per_week = state["average_hours_per_week"]
+        progress.on_track = state["on_track"]
         progress.save()
 
-        # Check if roadmap is completed
-        if completion >= 100:
-            roadmap.status = 'completed'
-            roadmap.completed_at = timezone.now()
-            roadmap.save(update_fields=['status', 'completed_at', 'updated_at'])
+        roadmap_update_fields = []
+        completion_decimal = state["overall_completion_percentage"]
+        if completion_decimal != roadmap.completion_percentage:
+            roadmap.completion_percentage = completion_decimal
+            roadmap_update_fields.append("completion_percentage")
 
-            # Emit signal
+        previous_roadmap_status = roadmap.status
+        for field, state_key in (
+            ("status", "roadmap_status"),
+            ("started_at", "roadmap_started_at"),
+            ("completed_at", "roadmap_completed_at"),
+        ):
+            if getattr(roadmap, field) != state[state_key]:
+                setattr(roadmap, field, state[state_key])
+                roadmap_update_fields.append(field)
+
+        if roadmap_update_fields:
+            roadmap.save(update_fields=[*roadmap_update_fields, "updated_at"])
+
+        if previous_roadmap_status != Roadmap.COMPLETED and roadmap.status == Roadmap.COMPLETED:
             roadmap_completed.send(sender=Roadmap, instance=roadmap, user=user)
 
         return progress
@@ -289,6 +462,12 @@ class MilestoneService:
         ).first()
 
         if existing:
+            if milestone.status != RoadmapMilestone.COMPLETED or milestone.completed_at is None:
+                milestone.status = RoadmapMilestone.COMPLETED
+                milestone.completed_at = timezone.now()
+                milestone.save(update_fields=["status", "completed_at", "updated_at"])
+                ProgressService.update_progress_metrics(user, milestone.phase.roadmap)
+                ProgressService.update_streak(user, milestone.phase.roadmap)
             return existing
 
         # Calculate time to complete (if milestone has start tracking)
@@ -341,6 +520,39 @@ class MilestoneService:
         return achievement
 
     @staticmethod
+    @transaction.atomic
+    def update_milestone_status(
+        user: User,
+        milestone: RoadmapMilestone,
+        status: str,
+    ) -> RoadmapMilestone:
+        """Update milestone status and keep achievement rows consistent."""
+        if status == RoadmapMilestone.COMPLETED:
+            MilestoneService.achieve_milestone(user, milestone)
+            milestone.refresh_from_db()
+            return milestone
+
+        milestone.status = status
+        if status == RoadmapMilestone.NOT_STARTED:
+            milestone.completed_at = None
+        milestone.save(update_fields=["status", "completed_at", "updated_at"])
+
+        MilestoneAchievement.objects.filter(
+            user=user,
+            milestone=milestone,
+            is_deleted=False,
+        ).update(
+            is_deleted=True,
+            deleted_at=timezone.now(),
+        )
+
+        roadmap = milestone.phase.roadmap
+        if status == RoadmapMilestone.IN_PROGRESS:
+            ProgressService.update_streak(user, roadmap)
+        ProgressService.update_progress_metrics(user, roadmap)
+        return milestone
+
+    @staticmethod
     def get_user_achievements(user: User) -> List[MilestoneAchievement]:
         """Get all milestone achievements for user"""
         return list(MilestoneAchievement.objects.filter(
@@ -391,7 +603,7 @@ class TimeLogService:
 
         # Update total learning hours if roadmap specified
         if roadmap:
-            progress = ProgressService.get_or_create_progress(user, roadmap)
+            progress = ProgressService.update_streak(user, roadmap)
             progress.total_learning_hours += Decimal(str(time_log.duration_hours))
 
             # Calculate average hours per week

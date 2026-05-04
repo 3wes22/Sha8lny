@@ -1,9 +1,11 @@
 # ADR-001: Local Gemma Deterministic Workflow Architecture
 
-**Status:** Accepted  
+**Status:** Superseded for demo operations by [ADR-002](ADR-002-HOSTED-DEMO-AI-RUNTIME.md)
 **Date:** 2026-04-07  
 **Deciders:** Sha8alny development team  
 **Supersedes:** All prior references to OpenAI/Anthropic/LangChain/Pinecone as the active AI architecture.
+
+**Superseded note (2026-05-04):** The local Gemma/Ollama architecture remains the supported local fallback, but the evaluator demo runtime now defaults to hosted Gemini. See ADR-002 for the active provider contract.
 
 ---
 

@@ -46,6 +46,7 @@ from apps.roadmaps.tasks import (
     generate_ai_roadmap_task,
     run_generate_ai_roadmap,
 )
+from apps.progress.services import MilestoneService, ProgressService
 from apps.assessments.models import AssessmentResult
 from apps.core.ai_throttles import AIBurstThrottle, AISustainedThrottle
 
@@ -309,6 +310,12 @@ class RoadmapViewSet(viewsets.ModelViewSet):
         new_status = serializer.validated_data['status']
 
         if phase_id:
+            if new_status != RoadmapPhase.IN_PROGRESS:
+                return Response(
+                    {'error': 'Phase progress is derived from milestones. Mark milestones to complete or reset a phase.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             # Update phase status
             try:
                 phase = RoadmapPhase.objects.get(id=phase_id, roadmap=roadmap)
@@ -328,6 +335,10 @@ class RoadmapViewSet(viewsets.ModelViewSet):
                     roadmap.started_at = timezone.now()
                     roadmap.save()
 
+                if new_status in {'in_progress', 'completed'}:
+                    ProgressService.update_streak(request.user, roadmap)
+                ProgressService.update_progress_metrics(request.user, roadmap)
+
                 return Response(
                     {'message': 'Phase progress updated successfully'},
                     status=status.HTTP_200_OK
@@ -346,29 +357,7 @@ class RoadmapViewSet(viewsets.ModelViewSet):
                     id=milestone_id,
                     phase__roadmap=roadmap
                 )
-                milestone.status = new_status
-
-                if new_status == 'completed' and not milestone.completed_at:
-                    milestone.completed_at = timezone.now()
-
-                milestone.save()
-
-                # Update phase if all milestones completed
-                phase = milestone.phase
-                total = phase.milestones.count()
-                completed = phase.milestones.filter(status='completed').count()
-
-                if completed == total:
-                    phase.status = 'completed'
-                    phase.completion_percentage = 100.00
-                    phase.completed_at = timezone.now()
-                    phase.save()
-
-                # Update roadmap status
-                if milestone.status == 'in_progress' and roadmap.status == 'draft':
-                    roadmap.status = 'in_progress'
-                    roadmap.started_at = timezone.now()
-                    roadmap.save()
+                MilestoneService.update_milestone_status(request.user, milestone, new_status)
 
                 return Response(
                     {'message': 'Milestone progress updated successfully'},
@@ -426,11 +415,19 @@ class RoadmapViewSet(viewsets.ModelViewSet):
         """
         roadmap = self.get_object()
         stats = RoadmapService.get_roadmap_statistics(roadmap)
+        progress = ProgressService.get_progress_snapshot(request.user, roadmap)
         serializer = RoadmapSerializer(roadmap)
         summary = serializer.data.get('journey_summary', {})
+        current_phase = progress.current_phase
+        completion_percentage = float(progress.overall_completion_percentage or 0)
 
         stats.update(
             {
+                'completed_phases': progress.phases_completed,
+                'completed_milestones': progress.milestones_completed,
+                'completion_percentage': completion_percentage,
+                'roadmap_status': ProgressService.get_derived_roadmap_status(request.user, roadmap),
+                'completed_courses': progress.courses_completed,
                 'current_focus_node_id': serializer.data.get('current_focus_node_id'),
                 'next_action': {
                     'type': summary.get('next_action_type', 'roadmap'),
@@ -438,10 +435,33 @@ class RoadmapViewSet(viewsets.ModelViewSet):
                     'title': summary.get('next_action_title', roadmap.title),
                     'summary': summary.get('next_action_summary', roadmap.description or ''),
                 },
+                'current_phase': (
+                    {
+                        'id': str(current_phase.id),
+                        'title': current_phase.title,
+                        'status': current_phase.status,
+                        'completion_percentage': float(current_phase.completion_percentage or 0),
+                    }
+                    if current_phase
+                    else None
+                ),
+                'pace': {
+                    'current_streak_days': progress.current_streak_days,
+                    'total_learning_hours': float(progress.total_learning_hours or 0),
+                    'average_hours_per_week': (
+                        float(progress.average_hours_per_week)
+                        if progress.average_hours_per_week is not None
+                        else None
+                    ),
+                    'last_activity_date': progress.last_activity_date,
+                    'on_track': progress.on_track,
+                },
             }
         )
 
-        return Response(stats, status=status.HTTP_200_OK)
+        response_serializer = RoadmapStatsSerializer(data=stats)
+        response_serializer.is_valid(raise_exception=True)
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
         """Soft delete roadmap."""

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 const mocks = vi.hoisted(() => ({
   roadmapTemplateList: vi.fn(),
@@ -7,7 +8,16 @@ const mocks = vi.hoisted(() => ({
   roadmapGet: vi.fn(),
   roadmapCreateFromTemplate: vi.fn(),
   roadmapActivate: vi.fn(),
+  navigate: vi.fn(),
 }));
+
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => mocks.navigate,
+  };
+});
 
 vi.mock("@/lib/api", () => ({
   getApiErrorMessage: vi.fn((_, fallback) => fallback),
@@ -154,5 +164,44 @@ describe("RoadmapPage", () => {
     }, { timeout: 3000 });
 
     expect(await screen.findByText(/Personalized roadmap description/i)).toBeInTheDocument();
+  });
+
+  it("navigates to the dashboard after activating a draft roadmap", async () => {
+    const user = userEvent.setup();
+
+    mocks.roadmapList
+      .mockResolvedValueOnce({ results: [] })
+      .mockResolvedValueOnce({ results: [] })
+      .mockResolvedValueOnce({ results: [{ id: "roadmap-draft-1", status: "draft" }] });
+    mocks.roadmapGet.mockResolvedValue({
+      id: "roadmap-draft-1",
+      title: "Frontend Engineer",
+      description: "Draft roadmap description",
+      status: "draft",
+      completion_percentage: "0",
+      total_phases: 0,
+      phases: [],
+    });
+    mocks.roadmapActivate.mockResolvedValue({
+      id: "roadmap-draft-1",
+      title: "Frontend Engineer",
+      description: "Draft roadmap description",
+      status: "active",
+      completion_percentage: "0",
+      total_phases: 0,
+      phases: [],
+    });
+
+    render(<RoadmapPage />);
+
+    const activateButton = await screen.findByRole("button", { name: /Activate roadmap/i });
+    await act(async () => {
+      await user.click(activateButton);
+    });
+
+    await waitFor(() => {
+      expect(mocks.roadmapActivate).toHaveBeenCalledWith("roadmap-draft-1");
+      expect(mocks.navigate).toHaveBeenCalledWith("/dashboard");
+    });
   });
 });

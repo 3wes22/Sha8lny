@@ -5,7 +5,7 @@ Hosted Gemini is the default demo runtime.
 Optional provider-specific settings remain available so switching back to a
 local Ollama runtime later does not require another architecture rewrite.
 
-See ADR-001: docs/product/ADR-001-LOCAL-GEMMA-ARCHITECTURE.md
+See ADR-002: docs/product/ADR-002-HOSTED-DEMO-AI-RUNTIME.md
 """
 
 from decouple import config
@@ -80,7 +80,7 @@ OLLAMA_TEMPERATURE = config(
 OLLAMA_NUM_CTX = config("OLLAMA_NUM_CTX", default=4096, cast=int)
 
 # ---------------------------------------------------------------------------
-# Celery AI queue – single-lane by design (see ADR-001)
+# Celery AI queue - controlled provider runtime by design (see ADR-002)
 # ---------------------------------------------------------------------------
 AI_CELERY_QUEUE = config("AI_CELERY_QUEUE", default="ai")
 AI_CELERY_CONCURRENCY = config("AI_CELERY_CONCURRENCY", default=1, cast=int)

@@ -87,6 +87,7 @@ describe("AssessmentSessionPage", () => {
       >
         <Routes>
           <Route element={<AssessmentSessionPage />} path="/assessment/session/:assessmentId" />
+          <Route element={<div>Assessment results</div>} path="/assessment/results/:assessmentId" />
         </Routes>
       </MemoryRouter>,
     );
@@ -140,6 +141,7 @@ describe("AssessmentSessionPage", () => {
       >
         <Routes>
           <Route element={<AssessmentSessionPage />} path="/assessment/session/:assessmentId" />
+          <Route element={<div>Assessment results</div>} path="/assessment/results/:assessmentId" />
         </Routes>
       </MemoryRouter>,
     );
@@ -195,12 +197,15 @@ describe("AssessmentSessionPage", () => {
       >
         <Routes>
           <Route element={<AssessmentSessionPage />} path="/assessment/session/:assessmentId" />
+          <Route element={<div>Assessment results</div>} path="/assessment/results/:assessmentId" />
         </Routes>
       </MemoryRouter>,
     );
 
     expect(await screen.findByText(/Which endpoint shape best matches the update/i)).toBeInTheDocument();
-    await user.click(screen.getByText("PATCH /users/{id}"));
+    await act(async () => {
+      await user.click(screen.getByText("PATCH /users/{id}"));
+    });
 
     expect(screen.getByText("Selected signal")).toBeInTheDocument();
     expect(screen.queryByText(/^high$/i)).not.toBeInTheDocument();
@@ -273,14 +278,21 @@ describe("AssessmentSessionPage", () => {
       >
         <Routes>
           <Route element={<AssessmentSessionPage />} path="/assessment/session/:assessmentId" />
+          <Route element={<div>Assessment results</div>} path="/assessment/results/:assessmentId" />
         </Routes>
       </MemoryRouter>,
     );
 
     expect(await screen.findByText(/select all that apply/i)).toBeInTheDocument();
-    await user.click(screen.getByText("Add an OrderItems junction table"));
-    await user.click(screen.getByText("Use foreign keys from OrderItems to Orders and Products"));
-    await user.click(screen.getByRole("button", { name: /submit assessment/i }));
+    await act(async () => {
+      await user.click(screen.getByText("Add an OrderItems junction table"));
+    });
+    await act(async () => {
+      await user.click(screen.getByText("Use foreign keys from OrderItems to Orders and Products"));
+    });
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /submit assessment/i }));
+    });
 
     expect(mocks.assessmentSubmit).toHaveBeenCalledWith("assessment-1", {
       responses: [
@@ -374,13 +386,16 @@ describe("AssessmentSessionPage", () => {
       >
         <Routes>
           <Route element={<AssessmentSessionPage />} path="/assessment/session/:assessmentId" />
+          <Route element={<div>Assessment results</div>} path="/assessment/results/:assessmentId" />
         </Routes>
       </MemoryRouter>,
     );
 
     await flushAssessmentEffects();
 
-    await user.click(screen.getByText("Mid"));
+    await act(async () => {
+      await user.click(screen.getByText("Mid"));
+    });
     await act(async () => {
       await user.click(screen.getByRole("button", { name: /submit assessment/i }));
       await Promise.resolve();
