@@ -131,14 +131,15 @@ class AssessmentViewSet(viewsets.ModelViewSet):
 
         role_graph = load_role_graph(resolve_role_key(target_career))
         questions, metadata = AssessmentAIService.generate_stage_one(role_graph.role_key, role_graph)
+        client_questions = AssessmentService._normalize_staged_questions(questions)
         runtime_health = get_ai_runtime_health()
 
         response_payload = {
             'target_career': target_career,
             'role_key': role_graph.role_key,
             'role_label': role_graph.role_label,
-            'question_count': len(questions),
-            'questions': questions,
+            'question_count': len(client_questions),
+            'questions': client_questions,
             'metadata': metadata.to_dict(),
             'runtime_health': runtime_health,
         }
@@ -146,7 +147,7 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         if require_live_llm and metadata.fallback_used:
             return Response(
                 {
-                    'error': 'Live Gemma generation is unavailable',
+                    'error': 'Live Gemini generation is unavailable',
                     **response_payload,
                 },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,

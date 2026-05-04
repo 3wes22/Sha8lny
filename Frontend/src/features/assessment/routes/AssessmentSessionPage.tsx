@@ -3,7 +3,7 @@ import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
-import { AnalyzingTransition } from "@/features/assessment/components/AnalyzingTransition";
+import { AssessmentLoadingAnimation } from "@/features/assessment/components/AssessmentLoadingAnimation";
 import { AssessmentProgressRail } from "@/features/assessment/components/AssessmentProgressRail";
 import { AssessmentQuestionCard } from "@/features/assessment/components/AssessmentQuestionCard";
 import { ChoiceReveal } from "@/features/assessment/components/ChoiceReveal";
@@ -12,7 +12,15 @@ import { PageShell } from "@/shared/components/PageShell";
 import { StatePanel } from "@/shared/components/StatePanel";
 import { useToast } from "@/hooks/use-toast";
 
-type AnswerMap = Record<string, string | number>;
+type AnswerValue = string | number | string[];
+type AnswerMap = Record<string, AnswerValue>;
+
+function hasAnswer(value: AnswerValue | undefined): boolean {
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+  return value !== undefined && value !== "";
+}
 
 function getActiveQuestions(assessment: Assessment | null): AssessmentQuestion[] {
   if (!assessment) {
@@ -132,24 +140,14 @@ export default function AssessmentSessionPage() {
   }
 
   if (submissionState === "stage_1_generating") {
-    return (
-      <StatePanel
-        description="We are generating the first stage of questions. Stay on this screen and it will become ready automatically."
-        state="processing"
-        title="Preparing assessment"
-      />
-    );
+    return <AssessmentLoadingAnimation phase="generating" />;
   }
 
   if (analyzingStage) {
     return (
-      <PageShell
-        description="The assessment is moving to the next processing step."
-        eyebrow="Assessment session"
-        title="Assessment in progress"
-      >
-        <AnalyzingTransition stage={analyzingStage} />
-      </PageShell>
+      <AssessmentLoadingAnimation
+        phase={analyzingStage === "stage_1" ? "analyzing_stage_1" : "analyzing_stage_2"}
+      />
     );
   }
 
@@ -166,16 +164,14 @@ export default function AssessmentSessionPage() {
   const currentQuestion = activeQuestions[currentIndex];
   const answeredCount = activeQuestions.filter((question) => {
     const value = answers[String(question.id)];
-    return value !== undefined && value !== "";
+    return hasAnswer(value);
   }).length;
 
   const handleSubmit = async () => {
     if (!assessmentId) return;
 
     const missingRequired = activeQuestions.filter(
-      (question) =>
-        question.type !== "text" &&
-        (answers[String(question.id)] === undefined || answers[String(question.id)] === ""),
+      (question) => !hasAnswer(answers[String(question.id)]),
     );
     if (missingRequired.length > 0) {
       toast({
@@ -233,7 +229,7 @@ export default function AssessmentSessionPage() {
             assessment={{ ...assessment, questions: activeQuestions }}
             currentIndex={currentIndex}
           />
-          <ChoiceReveal value={answers[String(currentQuestion.id)]} />
+          <ChoiceReveal question={currentQuestion} value={answers[String(currentQuestion.id)]} />
         </div>
       }
     >

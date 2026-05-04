@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+import json
 import re
 
 import pytest
@@ -37,6 +38,8 @@ def _build_stage_responses(questions):
     responses = []
     for question in questions:
         answer = "mid"
+        if question.get("interaction_mode") == "multi_select" and question.get("options"):
+            answer = [option["value"] for option in question["options"][:2]]
         if question["type"] == "text":
             answer = "I can explain my tradeoffs clearly in production scenarios."
         responses.append(
@@ -50,31 +53,171 @@ def _build_stage_responses(questions):
 
 
 def _question_payload_from_prompt(prompt: str, *, stage: int) -> dict:
-    targets: list[tuple[str, str]] = []
-    for line in prompt.splitlines():
-        match = re.match(r"^- ([a-z0-9_]+): .+ \(([^)]+)\)$", line.strip())
-        if match:
-            targets.append((match.group(1), match.group(2)))
-
-    return {
-        "questions": [
+    blueprints: list[dict] = []
+    if "Blueprints:\n" in prompt:
+        blueprints = json.loads(prompt.split("Blueprints:\n", 1)[1].strip())
+    else:
+        targets: list[tuple[str, str]] = []
+        for line in prompt.splitlines():
+            match = re.match(r"^- ([a-z0-9_]+): .+ \(([^)]+)\)$", line.strip())
+            if match:
+                targets.append((match.group(1), match.group(2)))
+        blueprints = [
             {
-                "id": f"s{stage}_q{index}",
-                "stage": stage,
+                "slot": index,
                 "subskill_key": subskill_key,
                 "dimension_key": dimension_key,
-                "question_text": f"Generated question for {subskill_key.replace('_', ' ')}",
-                "question_type": "multiple_choice",
-                "interaction_mode": "single_select",
-                "options": [
-                    {"value": "low", "label": "Low", "score": 1},
-                    {"value": "mid", "label": "Mid", "score": 3},
-                    {"value": "high", "label": "High", "score": 5},
-                ],
+                "competency": subskill_key.replace("_", " "),
+                "question_type": "single_choice",
                 "difficulty": 3,
                 "estimated_seconds": 45,
             }
             for index, (subskill_key, dimension_key) in enumerate(targets, start=1)
+        ]
+
+    prompt_seed_map = {
+        "http_api_design": (
+            "A client retries a payment write after a timeout and the service must avoid duplicate side effects.",
+            "Which API contract is the strongest next step?",
+        ),
+        "relational_modeling": (
+            "An order workflow now needs multiple products per order plus quantity and price at purchase time.",
+            "Which schema decision best fits the scenario?",
+        ),
+        "logging_monitoring": (
+            "A checkout flow returns intermittent 500s and only some requests expose the failure in traces.",
+            "Which observability move is strongest first?",
+        ),
+        "requirement_translation": (
+            "A stakeholder says the new export feature must be reliable for launch but does not define the user-visible target.",
+            "Which follow-up turns that into an actionable requirement?",
+        ),
+        "service_decomposition": (
+            "A monolith team wants to split inventory reservation from payment capture without losing workflow consistency.",
+            "Which service-boundary tradeoff matters most?",
+        ),
+    }
+
+    return {
+        "questions": [
+            {
+                "id": f"s{stage}_q{blueprint['slot']}",
+                "stage": stage,
+                "subskill_key": blueprint["subskill_key"],
+                "dimension_key": blueprint["dimension_key"],
+                "competency": blueprint["competency"],
+                "learning_objective": f"Generated objective for {blueprint['subskill_key']}",
+                "scenario_context": (
+                    prompt_seed_map.get(
+                        blueprint["subskill_key"],
+                        (
+                            f"A staged assessment scenario targets {blueprint['subskill_key'].replace('_', ' ')} in a production-like workflow.",
+                            f"Which option best handles {blueprint['subskill_key'].replace('_', ' ')}?",
+                        ),
+                    )[0]
+                ),
+                "stem": (
+                    f"{prompt_seed_map.get(blueprint['subskill_key'], ('', 'Which actions are strongest?'))[1]} Select all that apply."
+                    if blueprint["question_type"] == "multi_select"
+                    else f"Explain the best approach for {blueprint['subskill_key'].replace('_', ' ')} in this scenario."
+                    if blueprint["question_type"] == "open_ended"
+                    else prompt_seed_map.get(
+                        blueprint["subskill_key"],
+                        (
+                            "",
+                            f"Which option best handles {blueprint['subskill_key'].replace('_', ' ')}?",
+                        ),
+                    )[1]
+                ),
+                "question_type": blueprint["question_type"],
+                "options": (
+                    []
+                    if blueprint["question_type"] == "open_ended"
+                    else [
+                        {
+                            "id": "a",
+                            "label": f"Inspect the current evidence and narrow the failure boundary for {blueprint['subskill_key'].replace('_', ' ')}.",
+                        },
+                        {
+                            "id": "b",
+                            "label": f"Apply the most likely fix to {blueprint['subskill_key'].replace('_', ' ')} before confirming the root cause.",
+                        },
+                        {
+                            "id": "c",
+                            "label": f"Define the measurable contract or guardrail that {blueprint['subskill_key'].replace('_', ' ')} must satisfy.",
+                        },
+                        {
+                            "id": "d",
+                            "label": f"Broaden the change scope around {blueprint['subskill_key'].replace('_', ' ')} so related modules are updated together.",
+                        },
+                        *(
+                            [
+                                {
+                                    "id": "e",
+                                    "label": f"Add rollback protection around the risky {blueprint['subskill_key'].replace('_', ' ')} path once the evidence is clear.",
+                                }
+                            ]
+                            if blueprint["question_type"] == "multi_select"
+                            else []
+                        ),
+                    ]
+                ),
+                "answer_key": (
+                    {
+                        "expected_concepts": ["trace id", "structured logging", "latency percentiles"],
+                        "required_concept_count": 2,
+                        "scoring": "concept_coverage",
+                    }
+                    if blueprint["question_type"] == "open_ended"
+                    else {
+                        "correct_option_ids": ["b", "d"] if blueprint["question_type"] == "multi_select" else ["c"],
+                        "scoring": "partial_credit" if blueprint["question_type"] == "multi_select" else "single_best",
+                    }
+                ),
+                "explanation": "Generated explanation.",
+                "correct_answer_rationale": "Generated rationale for the strongest answer.",
+                "option_rationales": (
+                    []
+                    if blueprint["question_type"] == "open_ended"
+                    else [
+                        {
+                            "option_id": "a",
+                            "is_correct": False,
+                            "rationale": "Generated rationale for option A.",
+                        },
+                        {
+                            "option_id": "b",
+                            "is_correct": blueprint["question_type"] == "multi_select",
+                            "rationale": "Generated rationale for option B.",
+                        },
+                        {
+                            "option_id": "c",
+                            "is_correct": blueprint["question_type"] != "multi_select",
+                            "rationale": "Generated rationale for option C.",
+                        },
+                        {
+                            "option_id": "d",
+                            "is_correct": blueprint["question_type"] == "multi_select",
+                            "rationale": "Generated rationale for option D.",
+                        },
+                        *(
+                            [
+                                {
+                                    "option_id": "e",
+                                    "is_correct": False,
+                                    "rationale": "Generated rationale for option E.",
+                                }
+                            ]
+                            if blueprint["question_type"] == "multi_select"
+                            else []
+                        ),
+                    ]
+                ),
+                "validation_flags": [],
+                "difficulty": blueprint.get("difficulty", 3),
+                "estimated_seconds": blueprint.get("estimated_seconds", 45),
+            }
+            for blueprint in blueprints
         ]
     }
 
@@ -201,7 +344,14 @@ def test_staged_assessment_caps_llm_invocations_at_three(api_client, assessment_
     cache.clear()
     calls = {"count": 0}
 
-    def fake_generate_structured(self, *, prompt, system="", required_keys=()):  # noqa: ARG001
+    def fake_generate_structured(
+        self,
+        *,
+        prompt,
+        system="",
+        required_keys=(),
+        response_json_schema=None,
+    ):  # noqa: ARG001
         calls["count"] += 1
         metadata = build_ai_metadata(
             source="llm",
@@ -286,7 +436,7 @@ def test_deterministic_staged_analysis_uses_graph_driven_role_recommendations():
         source="fallback",
         processing_time_ms=8,
         model=None,
-        provider="sha8alny",
+        provider="gemini",
         version=role_graph.version,
         fallback_used=True,
     )

@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 
 from apps.core.ai_contracts import AIInvocationMetadata
 from apps.core.ai_logging import build_ai_metadata
-from apps.core.ai_settings import OLLAMA_MODEL
+from apps.core.ai_settings import AI_PROVIDER, GEMINI_FLASH_LITE_MODEL
 from apps.core.gemma_client import GemmaClient
 
 
@@ -87,9 +87,9 @@ def _normalize_phases(raw_phases: List[Dict[str, Any]], fallback_phases: List[Di
 
 
 class RoadmapAIService:
-    """Personalize deterministic roadmap blueprints with Gemma when available."""
+    """Personalize deterministic roadmap blueprints with Gemini when available."""
 
-    RUNTIME_VERSION = "roadmap-gemma-v1"
+    RUNTIME_VERSION = "roadmap-gemini-v1"
     FALLBACK_VERSION = "roadmap-fallback-v1"
 
     @staticmethod
@@ -119,7 +119,10 @@ class RoadmapAIService:
             "Personalize the roadmap copy while preserving the structure."
         )
 
-        client = GemmaClient()
+        client = GemmaClient(
+            task_type="roadmap_personalization",
+            max_output_tokens=900,
+        )
         try:
             result = client.generate_structured(
                 prompt=prompt,
@@ -155,8 +158,8 @@ class RoadmapAIService:
                 metadata=build_ai_metadata(
                     source="fallback",
                     processing_time_ms=0,
-                    model=OLLAMA_MODEL,
-                    provider="sha8alny",
+                    model=GEMINI_FLASH_LITE_MODEL,
+                    provider=AI_PROVIDER,
                     version=RoadmapAIService.FALLBACK_VERSION,
                     fallback_used=True,
                     error_code=type(error).__name__,

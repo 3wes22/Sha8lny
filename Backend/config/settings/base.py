@@ -339,18 +339,12 @@ SESSION_COOKIE_HTTPONLY = True
 
 
 # ---------------------------------------------------------------------------
-# AI/LLM Configuration — ADR-001: Local Gemma Architecture
+# AI/LLM Configuration — Hosted Gemini default with provider abstraction
 # ---------------------------------------------------------------------------
-# All AI runtime settings (Ollama host, model, timeouts, queue config) live in:
+# All AI runtime settings (provider selection, Gemini models, retries, optional
+# Ollama fallback, queue config) live in:
 #   apps/core/ai_settings.py
 # Import from there in any module that needs AI configuration.
-#
-# The following cloud-provider keys are RETIRED (see ADR-001).
-# They are kept commented out so no one re-adds them thinking they're missing.
-# OPENAI_API_KEY = config('OPENAI_API_KEY', default='')      # RETIRED
-# ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='') # RETIRED
-# PINECONE_API_KEY = config('PINECONE_API_KEY', default='')   # RETIRED
-# PINECONE_ENVIRONMENT = config('PINECONE_ENVIRONMENT', default='') # RETIRED
 
 
 # External API Configuration

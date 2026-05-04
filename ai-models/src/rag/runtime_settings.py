@@ -1,10 +1,9 @@
 """
-Shared runtime settings for the local RAG package.
+Shared runtime settings for the RAG support package.
 
-When the package runs inside the Django backend, prefer the backend's
-canonical AI settings module so `Backend/.env` remains the single source of
-truth. When the package runs standalone, fall back to process environment
-variables and safe local defaults.
+When the package runs inside the Django backend, prefer the backend's canonical
+AI settings module so `Backend/.env` remains the single source of truth. When
+the package runs standalone, fall back to process environment variables.
 """
 
 from __future__ import annotations
@@ -14,12 +13,16 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434"
-DEFAULT_OLLAMA_MODEL = "gemma4:e2b"
-DEFAULT_OLLAMA_TIMEOUT_SECONDS = 60
-DEFAULT_OLLAMA_TEMPERATURE = 0.3
+DEFAULT_AI_PROVIDER = "gemini"
+DEFAULT_GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+DEFAULT_GEMINI_FLASH_LITE_MODEL = "gemini-2.5-flash-lite"
+DEFAULT_GEMINI_FLASH_MODEL = "gemini-2.5-flash"
+DEFAULT_LLM_TIMEOUT_SECONDS = 60
+DEFAULT_LLM_TEMPERATURE = 0.2
 DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-DEFAULT_CHROMA_PERSIST_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "vector_db"
+DEFAULT_CHROMA_PERSIST_DIR = (
+    Path(__file__).resolve().parent.parent.parent / "data" / "vector_db"
+)
 
 
 def _load_backend_ai_settings() -> Any | None:
@@ -30,32 +33,53 @@ def _load_backend_ai_settings() -> Any | None:
     return ai_settings
 
 
-def get_ollama_base_url() -> str:
+def get_ai_provider() -> str:
     backend_settings = _load_backend_ai_settings()
     if backend_settings is not None:
-        return backend_settings.OLLAMA_HOST
-    return os.getenv("OLLAMA_HOST", DEFAULT_OLLAMA_BASE_URL)
+        return backend_settings.AI_PROVIDER
+    return os.getenv("AI_PROVIDER", DEFAULT_AI_PROVIDER)
 
 
-def get_ollama_model() -> str:
+def get_gemini_api_key() -> str:
     backend_settings = _load_backend_ai_settings()
     if backend_settings is not None:
-        return backend_settings.OLLAMA_MODEL
-    return os.getenv("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL)
+        return backend_settings.GEMINI_API_KEY
+    return os.getenv("GEMINI_API_KEY", "")
 
 
-def get_ollama_timeout_seconds() -> int:
+def get_gemini_api_base_url() -> str:
     backend_settings = _load_backend_ai_settings()
     if backend_settings is not None:
-        return int(backend_settings.OLLAMA_TIMEOUT_SECONDS)
-    return int(os.getenv("OLLAMA_TIMEOUT_SECONDS", DEFAULT_OLLAMA_TIMEOUT_SECONDS))
+        return backend_settings.GEMINI_API_BASE_URL
+    return os.getenv("GEMINI_API_BASE_URL", DEFAULT_GEMINI_API_BASE_URL)
 
 
-def get_ollama_temperature() -> float:
+def get_gemini_flash_lite_model() -> str:
     backend_settings = _load_backend_ai_settings()
     if backend_settings is not None:
-        return float(backend_settings.OLLAMA_TEMPERATURE)
-    return float(os.getenv("OLLAMA_TEMPERATURE", DEFAULT_OLLAMA_TEMPERATURE))
+        return backend_settings.GEMINI_FLASH_LITE_MODEL
+    return os.getenv("GEMINI_FLASH_LITE_MODEL", DEFAULT_GEMINI_FLASH_LITE_MODEL)
+
+
+def get_gemini_flash_model() -> str:
+    backend_settings = _load_backend_ai_settings()
+    if backend_settings is not None:
+        return backend_settings.GEMINI_FLASH_MODEL
+    return os.getenv("GEMINI_FLASH_MODEL", DEFAULT_GEMINI_FLASH_MODEL)
+
+
+def get_llm_timeout_seconds() -> int:
+    backend_settings = _load_backend_ai_settings()
+    if backend_settings is not None:
+        return int(backend_settings.LLM_TIMEOUT_SECONDS)
+    return int(os.getenv("LLM_TIMEOUT_SECONDS", DEFAULT_LLM_TIMEOUT_SECONDS))
+
+
+def get_llm_temperature() -> float:
+    backend_settings = _load_backend_ai_settings()
+    if backend_settings is not None:
+        return float(backend_settings.LLM_TEMPERATURE)
+    return float(os.getenv("LLM_TEMPERATURE", DEFAULT_LLM_TEMPERATURE))
 
 
 def get_embedding_model() -> str:

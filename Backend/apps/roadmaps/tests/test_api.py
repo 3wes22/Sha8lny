@@ -16,7 +16,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.assessments.models import Assessment, AssessmentResult
-from apps.core.ai_settings import OLLAMA_MODEL
+from apps.core.ai_settings import GEMINI_FLASH_LITE_MODEL
 from apps.users.models import User
 from apps.roadmaps.models import (
     RoadmapTemplate, Roadmap, RoadmapPhase,
@@ -242,7 +242,7 @@ class TestRoadmapCreationAPI:
         roadmap.refresh_from_db()
         assert roadmap.assessment == assessment_result
         assert roadmap.ai_processed_at is not None
-        assert roadmap.llm_model_used == OLLAMA_MODEL
+        assert roadmap.llm_model_used == GEMINI_FLASH_LITE_MODEL
         assert roadmap.metadata['generation']['source'] == 'assessment_result'
         assert roadmap.metadata['generation']['version'] == 'roadmap-generator-v1'
         assert roadmap.metadata['generation']['runtime_version']

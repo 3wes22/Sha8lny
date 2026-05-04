@@ -1,74 +1,47 @@
 """
-LLM Generator for Career Advisory
+LLM generator for career advisory.
 
-Integrates with Ollama for local Gemma inference.
-Handles response generation with RAG context and scope filtering.
+Uses the hosted Gemini API for demo-friendly inference.
 """
 
-import time
-import requests
-from typing import Optional, Dict, Any, Tuple
-import logging
+from __future__ import annotations
 
+import logging
+from typing import Any, Dict, Optional, Tuple
+
+import httpx
+
+from .retriever import get_relevant_context
+from .runtime_settings import (
+    get_gemini_api_base_url,
+    get_gemini_api_key,
+    get_gemini_flash_model,
+    get_llm_temperature,
+    get_llm_timeout_seconds,
+)
 from .scope_rules import (
     SYSTEM_PROMPT,
     classify_message,
-    get_redirect_response,
     get_clarifying_question,
+    get_redirect_response,
 )
-from .retriever import get_relevant_context
-from .runtime_settings import (
-    get_ollama_base_url,
-    get_ollama_model,
-    get_ollama_temperature,
-    get_ollama_timeout_seconds,
-)
+
 
 logger = logging.getLogger(__name__)
 
 
-# ============================================================================
-# CONFIGURATION
-# ============================================================================
-
-# Response timing (variable delay based on length)
 MIN_DELAY_SECONDS = 0.5
 MAX_DELAY_SECONDS = 3.0
-CHARS_PER_SECOND = 100  # Simulated typing speed
-
-# Model parameters
-DEFAULT_MAX_TOKENS = 1024
+CHARS_PER_SECOND = 100
+DEFAULT_MAX_TOKENS = 512
 
 
-# ============================================================================
-# OLLAMA CLIENT
-# ============================================================================
-
-def check_ollama_available() -> bool:
-    """Check if Ollama server is running."""
-    base_url = get_ollama_base_url()
-    try:
-        response = requests.get(f"{base_url}/api/version", timeout=2)
-        return response.status_code == 200
-    except requests.exceptions.RequestException:
-        return False
+def has_gemini_api_key() -> bool:
+    """Return whether a Gemini API key is configured."""
+    return bool(str(get_gemini_api_key() or "").strip())
 
 
-def check_model_available(model: Optional[str] = None) -> bool:
-    """Check if the specified model is downloaded."""
-    base_url = get_ollama_base_url()
-    model = model or get_ollama_model()
-    try:
-        response = requests.get(f"{base_url}/api/tags", timeout=5)
-        if response.status_code == 200:
-            models = response.json().get("models", [])
-            return any(m.get("name", "").startswith(model) for m in models)
-        return False
-    except requests.exceptions.RequestException:
-        return False
-
-
-def generate_with_ollama(
+def generate_with_gemini(
     prompt: str,
     system: str = SYSTEM_PROMPT,
     model: Optional[str] = None,
@@ -76,73 +49,64 @@ def generate_with_ollama(
     max_tokens: int = DEFAULT_MAX_TOKENS,
 ) -> str:
     """
-    Generate response using Ollama API.
-    
-    Args:
-        prompt: User message with context
-        system: System prompt
-        model: Model name override
-        temperature: Creativity level (0.0-1.0)
-        max_tokens: Maximum response length
-        
-    Returns:
-        Generated response text
-        
-    Raises:
-        ConnectionError: If Ollama is not available
-        RuntimeError: If generation fails
+    Generate a response using the hosted Gemini API.
     """
-    if not check_ollama_available():
-        raise ConnectionError(
-            "Ollama server is not running. Start it with: ollama serve"
-        )
+    api_key = str(get_gemini_api_key() or "").strip()
+    if not api_key:
+        raise ConnectionError("GEMINI_API_KEY is not configured.")
 
-    base_url = get_ollama_base_url()
-    model = model or get_ollama_model()
-    temperature = get_ollama_temperature() if temperature is None else temperature
-    timeout_seconds = get_ollama_timeout_seconds()
+    base_url = get_gemini_api_base_url().rstrip("/")
+    model = model or get_gemini_flash_model()
+    temperature = get_llm_temperature() if temperature is None else temperature
+    timeout_seconds = get_llm_timeout_seconds()
 
-    try:
-        response = requests.post(
-            f"{base_url}/api/generate",
-            json={
-                "model": model,
-                "prompt": prompt,
-                "system": system,
-                "stream": False,
-                "options": {
-                    "temperature": temperature,
-                    "num_predict": max_tokens,
+    response = httpx.post(
+        f"{base_url}/models/{model}:generateContent?key={api_key}",
+        json={
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": prompt}],
                 }
+            ],
+            "systemInstruction": {
+                "role": "system",
+                "parts": [{"text": system}],
             },
-            timeout=timeout_seconds,
+            "generationConfig": {
+                "temperature": temperature,
+                "candidateCount": 1,
+                "maxOutputTokens": max_tokens,
+            },
+        },
+        timeout=timeout_seconds,
+    )
+
+    if response.status_code >= 400:
+        raise RuntimeError(
+            f"Gemini API error: {response.status_code} {response.text.strip()}"
         )
-        
-        if response.status_code != 200:
-            raise RuntimeError(f"Ollama API error: {response.status_code}")
-        
-        result = response.json()
-        return result.get("response", "").strip()
-        
-    except requests.exceptions.Timeout:
-        raise RuntimeError("Response generation timed out")
-    except requests.exceptions.RequestException as e:
-        raise RuntimeError(f"Ollama request failed: {e}")
 
+    result = response.json()
+    candidates = result.get("candidates", []) if isinstance(result, dict) else []
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        content = candidate.get("content") if isinstance(candidate.get("content"), dict) else {}
+        parts = content.get("parts") if isinstance(content.get("parts"), list) else []
+        for part in parts:
+            if isinstance(part, dict) and str(part.get("text") or "").strip():
+                return str(part.get("text") or "").strip()
 
-# ============================================================================
-# RESPONSE GENERATION
-# ============================================================================
+    raise RuntimeError("Gemini returned an empty response")
+
 
 def calculate_delay(response_text: str) -> float:
     """
-    Calculate variable delay based on response length.
-    Simulates natural typing/thinking time.
+    Calculate a variable delay based on response length.
     """
     char_count = len(response_text)
     delay = char_count / CHARS_PER_SECOND
-    
-    # Clamp to min/max
     return max(MIN_DELAY_SECONDS, min(delay, MAX_DELAY_SECONDS))
 
 
@@ -156,33 +120,29 @@ def build_prompt_with_context(
     Build the full prompt including context and conversation history.
     """
     prompt_parts = []
-    
-    # Add user profile context if available
+
     if user_profile:
         profile_summary = format_user_profile(user_profile)
         if profile_summary:
             prompt_parts.append(f"### User Profile\n{profile_summary}\n")
-    
-    # Add RAG context
+
     if rag_context and rag_context != "No specific context available.":
         prompt_parts.append(f"### Relevant Knowledge\n{rag_context}\n")
-    
-    # Add conversation history (last 3 exchanges)
+
     if conversation_history:
-        history_text = format_conversation_history(conversation_history[-6:])  # Last 3 exchanges
+        history_text = format_conversation_history(conversation_history[-6:])
         if history_text:
             prompt_parts.append(f"### Conversation History\n{history_text}\n")
-    
-    # Add current message
+
     prompt_parts.append(f"### User Message\n{user_message}")
-    
+
     return "\n".join(prompt_parts)
 
 
 def format_user_profile(profile: Dict[str, Any]) -> str:
     """Format user profile for prompt context."""
     parts = []
-    
+
     if profile.get("name"):
         parts.append(f"Name: {profile['name']}")
     if profile.get("current_job_title"):
@@ -190,9 +150,9 @@ def format_user_profile(profile: Dict[str, Any]) -> str:
     if profile.get("career_goal"):
         parts.append(f"Career Goal: {profile['career_goal']}")
     if profile.get("skills"):
-        skills = profile["skills"][:5]  # Top 5 skills
+        skills = profile["skills"][:5]
         parts.append(f"Skills: {', '.join(skills)}")
-    
+
     return "\n".join(parts)
 
 
@@ -200,13 +160,13 @@ def format_conversation_history(messages: list) -> str:
     """Format recent messages for prompt context."""
     if not messages:
         return ""
-    
+
     formatted = []
     for msg in messages:
         role = "User" if msg.get("role") == "user" else "Advisor"
-        content = msg.get("content", "")[:200]  # Truncate long messages
+        content = msg.get("content", "")[:200]
         formatted.append(f"{role}: {content}")
-    
+
     return "\n".join(formatted)
 
 
@@ -218,74 +178,51 @@ def generate_response(
 ) -> Tuple[str, float]:
     """
     Generate a career advisory response.
-    
-    Args:
-        user_message: The user's question
-        conversation_history: Previous messages in conversation
-        user_profile: User's profile data (optional)
-        use_rag: Whether to retrieve context from knowledge base
-        
-    Returns:
-        (response_text, delay_seconds)
     """
-    # Step 1: Classify the message
-    classification, hint = classify_message(user_message)
-    
-    # Step 2: Handle based on classification
+    classification, _ = classify_message(user_message)
+
     if classification == "unclear":
-        # Return clarifying question
         response = get_clarifying_question()
         return response, calculate_delay(response)
-    
+
     if classification == "coding_redirect":
-        # Redirect to career-focused response
         response = get_redirect_response(user_message)
         return response, calculate_delay(response)
-    
-    # Step 3: Get RAG context for in-scope questions
+
     rag_context = ""
     if use_rag:
         try:
             rag_context = get_relevant_context(user_message)
-        except Exception as e:
-            logger.warning(f"RAG retrieval failed: {e}")
+        except Exception as error:
+            logger.warning("RAG retrieval failed: %s", error)
             rag_context = ""
-    
-    # Step 4: Build full prompt
+
     full_prompt = build_prompt_with_context(
         user_message=user_message,
         rag_context=rag_context,
         conversation_history=conversation_history,
         user_profile=user_profile,
     )
-    
-    # Step 5: Generate response with Ollama
+
     try:
-        response = generate_with_ollama(full_prompt)
-    except ConnectionError as e:
-        # Ollama not available - return helpful error
+        response = generate_with_gemini(full_prompt)
+    except ConnectionError as error:
         response = (
             "I apologize, but I'm currently unable to generate a response. "
-            "The AI system is temporarily unavailable. Please try again in a moment, "
-            "or check that Ollama is running on your system."
+            "The hosted Gemini API is not configured. Please set GEMINI_API_KEY "
+            "and try again."
         )
-        logger.error(f"Ollama unavailable: {e}")
-    except RuntimeError as e:
+        logger.error("Gemini unavailable: %s", error)
+    except RuntimeError as error:
         response = (
             "I encountered an issue generating a response. Please try rephrasing "
             "your question or try again in a moment."
         )
-        logger.error(f"Generation error: {e}")
-    
-    # Step 6: Calculate delay
+        logger.error("Generation error: %s", error)
+
     delay = calculate_delay(response)
-    
     return response, delay
 
-
-# ============================================================================
-# FALLBACK RESPONSES (When Ollama is unavailable)
-# ============================================================================
 
 FALLBACK_RESPONSES = {
     "career_path": (
@@ -319,42 +256,11 @@ FALLBACK_RESPONSES = {
 
 
 def get_fallback_response(user_message: str) -> str:
-    """Get a fallback response when LLM is unavailable."""
+    """Get a fallback response when hosted inference is unavailable."""
     message_lower = user_message.lower()
-    
+
     if any(word in message_lower for word in ["career", "path", "become", "transition"]):
         return FALLBACK_RESPONSES["career_path"]
-    elif any(word in message_lower for word in ["learn", "study", "course", "skill"]):
+    if any(word in message_lower for word in ["learn", "study", "course", "skill"]):
         return FALLBACK_RESPONSES["learning"]
-    else:
-        return FALLBACK_RESPONSES["default"]
-
-
-# ============================================================================
-# TEST
-# ============================================================================
-
-if __name__ == "__main__":
-    print("Testing LLM Generator...\n")
-    
-    # Check Ollama status
-    print(f"Ollama available: {check_ollama_available()}")
-    print(f"Gemma model available: {check_model_available()}")
-    
-    if check_ollama_available() and check_model_available():
-        # Test generation
-        test_messages = [
-            "How do I become a backend developer?",
-            "How to implement recursion?",  # Should redirect
-            "help",  # Should clarify
-        ]
-        
-        for msg in test_messages:
-            print(f"\n{'='*50}")
-            print(f"User: {msg}")
-            response, delay = generate_response(msg)
-            print(f"Response ({delay:.1f}s delay):\n{response}")
-    else:
-        print("\nOllama not available. Using fallback response:")
-        response = get_fallback_response("How do I become a developer?")
-        print(response)
+    return FALLBACK_RESPONSES["default"]

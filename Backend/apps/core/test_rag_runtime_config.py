@@ -2,15 +2,22 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+from apps.core.ai_bridge import ensure_ai_models_path
+
+
+ensure_ai_models_path()
+
 
 def test_rag_runtime_settings_use_backend_ai_settings():
     from apps.core.ai_settings import (
         CHROMA_PERSIST_DIR,
         EMBEDDING_MODEL,
-        OLLAMA_HOST,
-        OLLAMA_MODEL,
-        OLLAMA_TEMPERATURE,
-        OLLAMA_TIMEOUT_SECONDS,
+        AI_PROVIDER,
+        GEMINI_API_BASE_URL,
+        GEMINI_FLASH_LITE_MODEL,
+        GEMINI_FLASH_MODEL,
+        LLM_TEMPERATURE,
+        LLM_TIMEOUT_SECONDS,
     )
     from rag import runtime_settings
 
@@ -20,10 +27,12 @@ def test_rag_runtime_settings_use_backend_ai_settings():
         else runtime_settings.DEFAULT_CHROMA_PERSIST_DIR
     )
 
-    assert runtime_settings.get_ollama_base_url() == OLLAMA_HOST
-    assert runtime_settings.get_ollama_model() == OLLAMA_MODEL
-    assert runtime_settings.get_ollama_timeout_seconds() == OLLAMA_TIMEOUT_SECONDS
-    assert runtime_settings.get_ollama_temperature() == OLLAMA_TEMPERATURE
+    assert runtime_settings.get_ai_provider() == AI_PROVIDER
+    assert runtime_settings.get_gemini_api_base_url() == GEMINI_API_BASE_URL
+    assert runtime_settings.get_gemini_flash_lite_model() == GEMINI_FLASH_LITE_MODEL
+    assert runtime_settings.get_gemini_flash_model() == GEMINI_FLASH_MODEL
+    assert runtime_settings.get_llm_timeout_seconds() == LLM_TIMEOUT_SECONDS
+    assert runtime_settings.get_llm_temperature() == LLM_TEMPERATURE
     assert runtime_settings.get_embedding_model() == EMBEDDING_MODEL
     assert runtime_settings.get_chroma_persist_dir() == expected_persist_dir
 
@@ -97,7 +106,7 @@ def test_rag_vector_store_uses_configured_chroma_persist_dir(monkeypatch, tmp_pa
     assert captured["path"] == str(tmp_path / "custom-chroma")
 
 
-def test_rag_generator_uses_configured_ollama_settings(monkeypatch):
+def test_rag_generator_uses_configured_gemini_settings(monkeypatch):
     import rag.generator as generator
 
     captured = {}
@@ -109,7 +118,10 @@ def test_rag_generator_uses_configured_ollama_settings(monkeypatch):
             return None
 
         def json(self):
-            return {"response": "generated"}
+            return {
+                "candidates": [{"content": {"parts": [{"text": "generated"}]}}],
+                "usageMetadata": {"promptTokenCount": 2, "candidatesTokenCount": 4},
+            }
 
     def fake_post(url, json, timeout):
         captured["url"] = url
@@ -117,22 +129,24 @@ def test_rag_generator_uses_configured_ollama_settings(monkeypatch):
         captured["timeout"] = timeout
         return FakeResponse()
 
-    monkeypatch.setattr(generator, "check_ollama_available", lambda: True)
-    monkeypatch.setattr(generator.requests, "post", fake_post)
+    monkeypatch.setattr(generator.httpx, "post", fake_post)
     monkeypatch.setattr(
         generator,
-        "get_ollama_base_url",
-        lambda: "http://ollama.test:11434",
+        "get_gemini_api_base_url",
+        lambda: "https://gemini.test/v1beta",
         raising=False,
     )
-    monkeypatch.setattr(generator, "get_ollama_model", lambda: "gemma-test", raising=False)
-    monkeypatch.setattr(generator, "get_ollama_timeout_seconds", lambda: 19, raising=False)
-    monkeypatch.setattr(generator, "get_ollama_temperature", lambda: 0.15, raising=False)
+    monkeypatch.setattr(generator, "get_gemini_flash_model", lambda: "gemini-2.5-flash", raising=False)
+    monkeypatch.setattr(generator, "get_llm_timeout_seconds", lambda: 19, raising=False)
+    monkeypatch.setattr(generator, "get_llm_temperature", lambda: 0.15, raising=False)
+    monkeypatch.setattr(generator, "get_gemini_api_key", lambda: "test-key", raising=False)
 
-    response = generator.generate_with_ollama("Plan my learning path.")
+    response = generator.generate_with_gemini("Plan my learning path.")
 
     assert response == "generated"
-    assert captured["url"] == "http://ollama.test:11434/api/generate"
-    assert captured["json"]["model"] == "gemma-test"
-    assert captured["json"]["options"]["temperature"] == 0.15
+    assert (
+        captured["url"]
+        == "https://gemini.test/v1beta/models/gemini-2.5-flash:generateContent?key=test-key"
+    )
+    assert captured["json"]["generationConfig"]["temperature"] == 0.15
     assert captured["timeout"] == 19

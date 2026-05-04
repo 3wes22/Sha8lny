@@ -695,25 +695,29 @@ export interface AssessmentQuestion {
   stage?: number;
   subskill_key?: string;
   dimension_key?: string;
+  question_type?: "single_choice" | "multi_select" | "open_ended" | "multiple_choice" | "text" | "scale";
   type: 'multiple_choice' | 'scale' | 'text';
   question: string;
   category: string;
+  competency?: string;
+  learning_objective?: string;
   helper?: string;
   options?: Array<{
+    id?: string;
     value: string;
     label: string;
-    score: number;
+    score?: number;
   }>;
   min_value?: number;
   max_value?: number;
   labels?: Record<string, string>;
-  interaction_mode?: "single_select" | "scale" | "text" | "visual_choice";
+  interaction_mode?: "single_select" | "multi_select" | "scale" | "text" | "visual_choice";
   estimated_seconds?: number;
 }
 
 export interface AssessmentResponse {
   question_id: string | number;
-  answer: string | number;
+  answer: string | number | string[];
   timestamp?: string;
 }
 

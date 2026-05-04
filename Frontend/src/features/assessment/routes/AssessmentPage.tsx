@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AssessmentIntroHero } from "@/features/assessment/components/AssessmentIntroHero";
+import { AssessmentLoadingAnimation } from "@/features/assessment/components/AssessmentLoadingAnimation";
 import { assessmentApi } from "@/lib/api";
 import { ChoiceCard } from "@/shared/components/ChoiceCard";
 import { PageShell } from "@/shared/components/PageShell";
@@ -53,6 +54,11 @@ export default function AssessmentPage() {
       setCreatingAssessment(false);
     }
   };
+
+  // ── Full-screen loading takeover while AI generates questions ──
+  if (creatingAssessment) {
+    return <AssessmentLoadingAnimation phase="generating" />;
+  }
 
   return (
     <PageShell

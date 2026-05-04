@@ -20,6 +20,14 @@ from apps.core.ai_contracts import (
     AssessmentAnalysisInput,
     AssessmentAnalysisResult,
 )
+from apps.core.ai_validation import (
+    build_stage_choice_options,
+    normalize_choice_options,
+    normalize_interaction_mode,
+    normalize_stage_options,
+    normalize_stage_question_type,
+    stage_question_type_to_ui_type,
+)
 
 
 class BaselineAssessmentAnalyzer:
@@ -275,6 +283,76 @@ class AssessmentService:
     """Service for assessment management"""
 
     @staticmethod
+    def _normalize_staged_questions(questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        normalized_questions: List[Dict[str, Any]] = []
+        for question in questions or []:
+            if not isinstance(question, dict):
+                continue
+
+            normalized_question = {
+                key: value
+                for key, value in dict(question).items()
+                if key
+                not in {
+                    "answer_key",
+                    "explanation",
+                    "validation_flags",
+                    "scenario_context",
+                    "correct_answer_rationale",
+                    "option_rationales",
+                }
+            }
+            semantic_type = normalize_stage_question_type(
+                normalized_question.get("question_type") or normalized_question.get("type"),
+                raw_mode=normalized_question.get("interaction_mode"),
+                raw_options=normalized_question.get("options"),
+                default="single_choice",
+            )
+            normalized_question["question_type"] = semantic_type
+            ui_type, default_mode = stage_question_type_to_ui_type(semantic_type)
+            normalized_question["type"] = ui_type
+
+            if normalized_question.get("type") == "multiple_choice":
+                category = str(normalized_question.get("category") or "").strip()
+                normalized_question["interaction_mode"] = normalize_interaction_mode(
+                    normalized_question.get("interaction_mode"),
+                    question_type="multiple_choice",
+                    default_mode=default_mode,
+                )
+                raw_options = normalized_question.get("options")
+                if isinstance(raw_options, list) and raw_options and all(
+                    isinstance(option, dict) and str(option.get("label") or "").strip()
+                    for option in raw_options
+                ):
+                    normalized_question["options"] = normalize_stage_options(
+                        raw_options,
+                        question_type=semantic_type,
+                        default_options=[],
+                    )
+                elif category:
+                    normalized_question["options"] = normalize_choice_options(
+                        normalized_question.get("options"),
+                        default_options=build_stage_choice_options(category),
+                    )
+            elif normalized_question.get("type") == "scale":
+                normalized_question["interaction_mode"] = normalize_interaction_mode(
+                    normalized_question.get("interaction_mode"),
+                    question_type="scale",
+                    default_mode="scale",
+                )
+            elif normalized_question.get("type") == "text":
+                normalized_question["interaction_mode"] = normalize_interaction_mode(
+                    normalized_question.get("interaction_mode"),
+                    question_type="text",
+                    default_mode="text",
+                )
+                normalized_question["options"] = []
+
+            normalized_questions.append(normalized_question)
+
+        return normalized_questions
+
+    @staticmethod
     def is_staged_assessment(assessment: Assessment) -> bool:
         return assessment.is_staged
 
@@ -283,10 +361,10 @@ class AssessmentService:
         if not assessment.is_staged:
             return assessment.questions or []
         if assessment.stage == 'stage_2':
-            return assessment.stage_two_questions or []
+            return AssessmentService._normalize_staged_questions(assessment.stage_two_questions or [])
         if assessment.stage == 'completed':
             return []
-        return assessment.stage_one_questions or []
+        return AssessmentService._normalize_staged_questions(assessment.stage_one_questions or [])
 
     @staticmethod
     def get_active_responses(assessment: Assessment) -> List[Dict[str, Any]]:

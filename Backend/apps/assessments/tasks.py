@@ -95,8 +95,12 @@ def run_generate_stage_one(assessment_id: str, *, task_id: str = "") -> str:
         {
             "task_id": task_id,
             "trace_id": metadata.trace_id,
+            "source": metadata.source,
             "fallback_used": metadata.fallback_used,
             "model": metadata.model,
+            "provider": metadata.provider,
+            "processing_time_ms": metadata.processing_time_ms,
+            "error_code": metadata.error_code,
             "version": graph.version,
             "ready_at": timezone.now().isoformat(),
         },
@@ -143,8 +147,12 @@ def run_process_stage_one_submission(assessment_id: str, *, task_id: str = "") -
         {
             "task_id": task_id,
             "trace_id": metadata.trace_id,
+            "source": metadata.source,
             "fallback_used": metadata.fallback_used,
             "model": metadata.model,
+            "provider": metadata.provider,
+            "processing_time_ms": metadata.processing_time_ms,
+            "error_code": metadata.error_code,
             "ready_at": timezone.now().isoformat(),
         },
     )
@@ -208,8 +216,12 @@ def run_process_final_evaluation(assessment_id: str, *, task_id: str = "") -> st
         {
             "task_id": task_id,
             "trace_id": evaluation.analysis.metadata.trace_id,
+            "source": evaluation.analysis.metadata.source,
             "fallback_used": evaluation.analysis.metadata.fallback_used,
             "model": evaluation.analysis.metadata.model,
+            "provider": evaluation.analysis.metadata.provider,
+            "processing_time_ms": evaluation.analysis.metadata.processing_time_ms,
+            "error_code": evaluation.analysis.metadata.error_code,
             "completed_at": timezone.now().isoformat(),
         },
     )

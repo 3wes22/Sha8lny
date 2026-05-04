@@ -103,6 +103,8 @@ cd Backend
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
+# set GEMINI_API_KEY in Backend/.env
 python manage.py migrate
 python manage.py runserver
 ```
@@ -123,3 +125,5 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
+
+The default inference path now uses the hosted Gemini API. For backend and `ai-models` flows, configure `GEMINI_API_KEY` before running generation features.

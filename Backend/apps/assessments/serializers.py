@@ -8,6 +8,7 @@ from rest_framework import serializers
 
 from apps.assessments.models import Assessment, AssessmentResult
 from apps.assessments.services import AssessmentService
+from apps.core.ai_settings import AI_PROVIDER
 
 
 class AssessmentSerializer(serializers.ModelSerializer):
@@ -218,14 +219,19 @@ class AssessmentResultSerializer(serializers.ModelSerializer):
 
     def get_ai_metadata(self, obj):
         assessment = getattr(obj, 'assessment', None)
+        generation_metadata = (
+            (assessment.roadmap_signal or {}).get('generation_metadata', {})
+            if assessment and isinstance(assessment.roadmap_signal, dict)
+            else {}
+        )
         return {
             'source': 'baseline',
             'processing_time_ms': int(float(obj.processing_time_seconds or 0) * 1000),
             'model': obj.llm_model_used or None,
-            'provider': 'ollama' if obj.llm_model_used else 'sha8alny',
+            'provider': generation_metadata.get('provider') or AI_PROVIDER,
             'version': obj.version,
             'trace_id': assessment.ai_trace_id if assessment else None,
-            'fallback_used': bool(assessment and (assessment.roadmap_signal or {}).get('generation_metadata', {}).get('fallback_used')),
+            'fallback_used': bool(generation_metadata.get('fallback_used')),
             'error_code': assessment.ai_processing_error if assessment and assessment.ai_processing_status == 'failed' else None,
         }
 

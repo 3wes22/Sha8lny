@@ -142,20 +142,20 @@ class TestAssessmentAPI:
         monkeypatch.setattr(
             "apps.assessments.views.get_ai_runtime_health",
             lambda: {
-                "runtime": "ollama",
-                "ollama_available": True,
+                "runtime": "gemini",
+                "provider_available": True,
                 "model_available": True,
-                "settings": {"model": "gemma4:e2b"},
+                "settings": {"default_model": "gemini-2.5-flash-lite"},
             },
         )
 
         response = self.client.get(reverse("assessment-runtime-health"))
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.data["runtime"] == "ollama"
-        assert response.data["ollama_available"] is True
+        assert response.data["runtime"] == "gemini"
+        assert response.data["provider_available"] is True
         assert response.data["model_available"] is True
-        assert response.data["settings"]["model"] == "gemma4:e2b"
+        assert response.data["settings"]["default_model"] == "gemini-2.5-flash-lite"
 
     def test_preview_questions_returns_generation_metadata(self, monkeypatch):
         def fake_generate_stage_one(role_key, role_graph):
@@ -175,8 +175,8 @@ class TestAssessmentAPI:
                 AIInvocationMetadata(
                     source="llm",
                     processing_time_ms=1200,
-                    model="gemma4:e2b",
-                    provider="ollama",
+                    model="gemini-2.5-flash-lite",
+                    provider="gemini",
                     version=role_graph.version,
                     trace_id="trace-preview-1",
                     fallback_used=False,
@@ -190,10 +190,10 @@ class TestAssessmentAPI:
         monkeypatch.setattr(
             "apps.assessments.views.get_ai_runtime_health",
             lambda: {
-                "runtime": "ollama",
-                "ollama_available": True,
+                "runtime": "gemini",
+                "provider_available": True,
                 "model_available": True,
-                "settings": {"model": "gemma4:e2b"},
+                "settings": {"default_model": "gemini-2.5-flash-lite"},
             },
         )
 
@@ -207,10 +207,10 @@ class TestAssessmentAPI:
         assert response.data["target_career"] == "Backend Developer"
         assert response.data["role_key"] == "backend"
         assert response.data["question_count"] == 1
-        assert response.data["metadata"]["model"] == "gemma4:e2b"
-        assert response.data["metadata"]["provider"] == "ollama"
+        assert response.data["metadata"]["model"] == "gemini-2.5-flash-lite"
+        assert response.data["metadata"]["provider"] == "gemini"
         assert response.data["metadata"]["fallback_used"] is False
-        assert response.data["runtime_health"]["ollama_available"] is True
+        assert response.data["runtime_health"]["provider_available"] is True
         assert response.data["questions"][0]["id"] == "s1_q1"
 
     def test_preview_questions_can_require_live_llm(self, monkeypatch):
@@ -232,7 +232,7 @@ class TestAssessmentAPI:
                     source="fallback",
                     processing_time_ms=12,
                     model=None,
-                    provider="sha8alny",
+                    provider="gemini",
                     version=role_graph.version,
                     trace_id="trace-preview-fallback",
                     fallback_used=True,
@@ -247,10 +247,10 @@ class TestAssessmentAPI:
         monkeypatch.setattr(
             "apps.assessments.views.get_ai_runtime_health",
             lambda: {
-                "runtime": "ollama",
-                "ollama_available": False,
+                "runtime": "gemini",
+                "provider_available": False,
                 "model_available": False,
-                "settings": {"model": "gemma4:e2b"},
+                "settings": {"default_model": "gemini-2.5-flash-lite"},
             },
         )
 
@@ -261,9 +261,9 @@ class TestAssessmentAPI:
         )
 
         assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-        assert response.data["error"] == "Live Gemma generation is unavailable"
+        assert response.data["error"] == "Live Gemini generation is unavailable"
         assert response.data["metadata"]["fallback_used"] is True
-        assert response.data["runtime_health"]["ollama_available"] is False
+        assert response.data["runtime_health"]["provider_available"] is False
 
     def test_submit_assessment_responses(self):
         """Test submitting assessment responses queues async evaluation."""

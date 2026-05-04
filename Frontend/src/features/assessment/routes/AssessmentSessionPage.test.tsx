@@ -145,6 +145,151 @@ describe("AssessmentSessionPage", () => {
     );
 
     expect(await screen.findByText(/How comfortable are you with JavaScript/i)).toBeInTheDocument();
+    expect(screen.getByText("Basic")).toBeInTheDocument();
+    expect(screen.queryByText(/Score signal:/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the selected option label instead of the scored value", async () => {
+    const user = userEvent.setup();
+
+    mocks.assessmentGet.mockResolvedValue({
+      id: "assessment-1",
+      assessment_type: "skills",
+      stage: "stage_1",
+      active_questions: [
+        {
+          id: "s1_q1",
+          type: "multiple_choice",
+          category: "HTTP API Design",
+          question: "Which endpoint shape best matches the update?",
+          options: [
+            { value: "low", label: "POST /users/update_profile", score: 1 },
+            { value: "mid", label: "PUT /users/{id}/profile", score: 3 },
+            { value: "high", label: "PATCH /users/{id}", score: 5 },
+          ],
+        },
+      ],
+      questions: [
+        {
+          id: "s1_q1",
+          type: "multiple_choice",
+          category: "HTTP API Design",
+          question: "Which endpoint shape best matches the update?",
+          options: [
+            { value: "low", label: "POST /users/update_profile", score: 1 },
+            { value: "mid", label: "PUT /users/{id}/profile", score: 3 },
+            { value: "high", label: "PATCH /users/{id}", score: 5 },
+          ],
+        },
+      ],
+      responses: [],
+      generation_status: "completed",
+      ai_processing_status: "completed",
+      presentation: { submission_state: "stage_1_ready" },
+    });
+
+    render(
+      <MemoryRouter
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+        initialEntries={["/assessment/session/assessment-1"]}
+      >
+        <Routes>
+          <Route element={<AssessmentSessionPage />} path="/assessment/session/:assessmentId" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/Which endpoint shape best matches the update/i)).toBeInTheDocument();
+    await user.click(screen.getByText("PATCH /users/{id}"));
+
+    expect(screen.getByText("Selected signal")).toBeInTheDocument();
+    expect(screen.queryByText(/^high$/i)).not.toBeInTheDocument();
+  });
+
+  it("submits multi-select answers as an array of option ids", async () => {
+    const user = userEvent.setup();
+
+    mocks.assessmentGet.mockResolvedValue({
+      id: "assessment-1",
+      assessment_type: "skills",
+      stage: "stage_2",
+      active_questions: [
+        {
+          id: "s2_q1",
+          type: "multiple_choice",
+          question_type: "multi_select",
+          interaction_mode: "multi_select",
+          category: "Relational Modeling",
+          question: "For an orders and products schema, select all that apply.",
+          options: [
+            { id: "a", value: "a", label: "Add an OrderItems junction table" },
+            { id: "b", value: "b", label: "Store product rows directly on Orders" },
+            { id: "c", value: "c", label: "Use foreign keys from OrderItems to Orders and Products" },
+            { id: "d", value: "d", label: "Add quantity on the OrderItems relationship" },
+          ],
+        },
+      ],
+      questions: [
+        {
+          id: "s2_q1",
+          type: "multiple_choice",
+          question_type: "multi_select",
+          interaction_mode: "multi_select",
+          category: "Relational Modeling",
+          question: "For an orders and products schema, select all that apply.",
+          options: [
+            { id: "a", value: "a", label: "Add an OrderItems junction table" },
+            { id: "b", value: "b", label: "Store product rows directly on Orders" },
+            { id: "c", value: "c", label: "Use foreign keys from OrderItems to Orders and Products" },
+            { id: "d", value: "d", label: "Add quantity on the OrderItems relationship" },
+          ],
+        },
+      ],
+      responses: [],
+      generation_status: "completed",
+      ai_processing_status: "completed",
+      presentation: { submission_state: "stage_2_ready" },
+    });
+
+    mocks.assessmentSubmit.mockResolvedValue({
+      assessment: {
+        id: "assessment-1",
+        assessment_type: "skills",
+        stage: "stage_2",
+        active_questions: [],
+        questions: [],
+        responses: [],
+        generation_status: "processing",
+        ai_processing_status: "processing",
+        presentation: { submission_state: "stage_2_analyzing" },
+      },
+      submission_state: "stage_2_analyzing",
+    });
+
+    render(
+      <MemoryRouter
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+        initialEntries={["/assessment/session/assessment-1"]}
+      >
+        <Routes>
+          <Route element={<AssessmentSessionPage />} path="/assessment/session/:assessmentId" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/select all that apply/i)).toBeInTheDocument();
+    await user.click(screen.getByText("Add an OrderItems junction table"));
+    await user.click(screen.getByText("Use foreign keys from OrderItems to Orders and Products"));
+    await user.click(screen.getByRole("button", { name: /submit assessment/i }));
+
+    expect(mocks.assessmentSubmit).toHaveBeenCalledWith("assessment-1", {
+      responses: [
+        expect.objectContaining({
+          question_id: "s2_q1",
+          answer: ["a", "c"],
+        }),
+      ],
+    });
   });
 
   it("submits stage one, shows analyzing, and then renders stage two questions", async () => {

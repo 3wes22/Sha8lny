@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 
 _AI_MODELS_SRC = (
-    Path(__file__).resolve().parent.parent.parent.parent.parent
+    Path(__file__).resolve().parent.parent.parent.parent
     / "ai-models"
     / "src"
 )

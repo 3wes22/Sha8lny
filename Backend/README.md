@@ -50,7 +50,7 @@ Backend/
 - **Background Tasks**: Celery + Redis
 - **Authentication**: JWT (Simple JWT) + Auth0
 - **Real-time**: Django Channels (WebSockets)
-- **AI/ML**: Local Gemma via Ollama, shared backend AI runtime, ChromaDB, sentence-transformers
+- **AI/ML**: Hosted Gemini API, shared backend AI runtime, ChromaDB, sentence-transformers
 - **Web Scraping**: Scrapy, Selenium, BeautifulSoup
 
 ## Setup Instructions
@@ -75,14 +75,11 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install backend dependencies plus the local ai-models package
 pip install -r requirements.txt
 
-# Pull the local Gemma model used by the backend AI runtime
-ollama pull gemma4:e2b
-
 # Copy environment variables
 cp .env.example .env
 
 # Edit .env and fill in your configuration
-# At minimum, set SECRET_KEY and database credentials
+# At minimum, set SECRET_KEY and GEMINI_API_KEY
 ```
 
 ### 3. Database Setup
@@ -157,18 +154,22 @@ Key environment variables (see .env.example for full list):
 - `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`: Database credentials
 - `REDIS_URL`: Redis connection URL
 - `DJANGO_CACHE_BACKEND`: Django cache backend path. Defaults to `django.core.cache.backends.locmem.LocMemCache` when unset.
-- `OLLAMA_HOST`: Ollama base URL (defaults to `http://127.0.0.1:11434`)
-- `OLLAMA_MODEL`: Local model name (defaults to `gemma4:e2b`; override to `gemma4:e4b` on stronger hardware)
+- `AI_PROVIDER`: Active inference provider. Defaults to `gemini`.
+- `GEMINI_API_KEY`: Gemini API key for hosted inference.
+- `GEMINI_FLASH_LITE_MODEL`: Default low-cost model for structured generation and lightweight tasks.
+- `GEMINI_FLASH_MODEL`: Stronger model for harder reasoning tasks.
 - `CHROMA_PERSIST_DIR`: Optional Chroma persistence directory
 
-### Local AI Runtime
+### AI Runtime
 
-The active AI architecture is local-first:
+The active AI architecture is Gemini-first for demo use:
 
-- backend AI features call Ollama through `Backend/apps/core/gemma_client.py`
+- backend AI features call the shared provider client through `Backend/apps/core/gemma_client.py`
 - the backend imports `rag` and other helpers from the editable local `ai-models/` package
-- advisory, assessment, and roadmap flows no longer rely on OpenAI, Anthropic, LangChain, or Pinecone
+- advisory, assessment, and roadmap flows use Gemini by default and can still switch to Ollama later through `AI_PROVIDER`
 - staged `skills` assessments use at most 3 LLM calls per completed run: stage 1 generation, stage 2 generation, and final evaluation
+
+For local switching later, the optional Ollama settings remain available in `.env.example`, but they are not required for the default demo path.
 
 If you need the architecture rationale, start with `docs/product/ADR-001-LOCAL-GEMMA-ARCHITECTURE.md`.
 

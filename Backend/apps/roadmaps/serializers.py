@@ -20,6 +20,7 @@ from apps.roadmaps.models import (
     RoadmapCourse
 )
 from apps.courses.serializers import CourseListSerializer
+from apps.core.ai_settings import AI_PROVIDER
 from apps.users.serializers import SkillSerializer
 
 
@@ -412,7 +413,7 @@ class RoadmapSerializer(serializers.ModelSerializer):
             'source': generation.get('source', 'baseline'),
             'processing_time_ms': int(float(obj.processing_time_seconds or 0) * 1000),
             'model': obj.llm_model_used or None,
-            'provider': generation.get('provider') or ('ollama' if obj.llm_model_used else 'sha8alny'),
+            'provider': generation.get('provider') or AI_PROVIDER,
             'version': generation.get('runtime_version') or generation.get('version'),
             'trace_id': generation.get('trace_id') or str(obj.id),
             'fallback_used': bool(generation.get('fallback_used')),
