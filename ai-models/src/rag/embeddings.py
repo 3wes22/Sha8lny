@@ -1,13 +1,11 @@
 """
-Embedding Engine for RAG System
-
-Uses Sentence-Transformers (all-MiniLM-L6-v2) for semantic embeddings.
-~22M parameters, 384-dimensional embeddings, runs on CPU.
+Embedding Engine for RAG System.
 """
 
 from typing import List, Union
-from pathlib import Path
 import numpy as np
+
+from .runtime_settings import get_embedding_model
 
 # Lazy loading to avoid slow imports at module level
 _model = None
@@ -19,7 +17,7 @@ def get_model():
     if _model is None:
         try:
             from sentence_transformers import SentenceTransformer
-            _model = SentenceTransformer('all-MiniLM-L6-v2')
+            _model = SentenceTransformer(get_embedding_model())
         except ImportError:
             raise ImportError(
                 "sentence-transformers not installed. "

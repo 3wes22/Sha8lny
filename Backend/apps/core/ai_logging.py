@@ -8,6 +8,7 @@ import logging
 from typing import Any, Optional
 from uuid import uuid4
 
+from apps.core.ai_settings import AI_PROVIDER
 from apps.core.ai_contracts import AIInvocationMetadata
 
 
@@ -19,7 +20,7 @@ def build_ai_metadata(
     source: str,
     processing_time_ms: int,
     model: Optional[str],
-    provider: Optional[str] = "ollama",
+    provider: Optional[str] = AI_PROVIDER,
     version: Optional[str] = None,
     fallback_used: bool = False,
     error_code: Optional[str] = None,

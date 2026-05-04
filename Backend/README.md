@@ -46,11 +46,11 @@ Backend/
 - **Framework**: Django 5.0+
 - **API**: Django REST Framework
 - **Database**: PostgreSQL (SQLite for development)
-- **Cache**: Redis
+- **Cache**: Django cache framework (`LocMemCache` by default in development, Redis in production)
 - **Background Tasks**: Celery + Redis
 - **Authentication**: JWT (Simple JWT) + Auth0
 - **Real-time**: Django Channels (WebSockets)
-- **AI/ML**: Local Gemma via Ollama, shared backend AI runtime, ChromaDB, sentence-transformers
+- **AI/ML**: Hosted Gemini API, shared backend AI runtime, ChromaDB, sentence-transformers
 - **Web Scraping**: Scrapy, Selenium, BeautifulSoup
 
 ## Setup Instructions
@@ -59,7 +59,7 @@ Backend/
 
 - Python 3.11+
 - PostgreSQL 14+ (optional for development, can use SQLite)
-- Redis (for caching and Celery)
+- Redis (recommended for Celery and production-like caching)
 
 ### 2. Installation
 
@@ -69,20 +69,17 @@ git clone <repository-url>
 cd Sha8alny/Backend
 
 # Create virtual environment (recommended)
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install backend dependencies plus the local ai-models package
 pip install -r requirements.txt
 
-# Pull the local Gemma model used by the backend AI runtime
-ollama pull gemma4:e4b
-
 # Copy environment variables
 cp .env.example .env
 
 # Edit .env and fill in your configuration
-# At minimum, set SECRET_KEY and database credentials
+# At minimum, set SECRET_KEY and GEMINI_API_KEY
 ```
 
 ### 3. Database Setup
@@ -90,10 +87,10 @@ cp .env.example .env
 **For Development (SQLite - Default)**:
 ```bash
 # Run migrations
-python manage.py migrate
+python3 manage.py migrate
 
 # Create superuser
-python manage.py createsuperuser
+python3 manage.py createsuperuser
 ```
 
 **For PostgreSQL**:
@@ -105,17 +102,17 @@ createdb sha8alny_db
 # Uncomment PostgreSQL configuration in config/settings/development.py
 
 # Run migrations
-python manage.py migrate
+python3 manage.py migrate
 
 # Create superuser
-python manage.py createsuperuser
+python3 manage.py createsuperuser
 ```
 
 ### 4. Run Development Server
 
 ```bash
 # Start Django development server
-python manage.py runserver
+python3 manage.py runserver
 
 # Server will be available at http://localhost:8000
 ```
@@ -145,6 +142,21 @@ pytest --cov=apps --cov-report=html
 pytest apps/users/tests/
 ```
 
+## Graduation Demo Data
+
+Seed the evaluator-ready demo accounts from a clean local state:
+
+```bash
+python3 manage.py seed_graduation_demo --reset
+```
+
+Demo credentials:
+
+- `demo.new@sha8alny.local` / `DemoPass123!`
+- `demo.progress@sha8alny.local` / `DemoPass123!`
+
+For the full local and hosted demo workflow, use `docs/product/GRADUATION_DEMO_RUNBOOK.md`.
+
 ## Configuration
 
 ### Environment Variables
@@ -156,19 +168,25 @@ Key environment variables (see .env.example for full list):
 - `ALLOWED_HOSTS`: Comma-separated list of allowed hosts
 - `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`: Database credentials
 - `REDIS_URL`: Redis connection URL
-- `OLLAMA_HOST`: Ollama base URL (defaults to `http://127.0.0.1:11434`)
-- `OLLAMA_MODEL`: Local model name (defaults to `gemma4:e4b`)
+- `DJANGO_CACHE_BACKEND`: Django cache backend path. Defaults to `django.core.cache.backends.locmem.LocMemCache` when unset.
+- `AI_PROVIDER`: Active inference provider. Defaults to `gemini`.
+- `GEMINI_API_KEY`: Gemini API key for hosted inference.
+- `GEMINI_FLASH_LITE_MODEL`: Default low-cost model for structured generation and lightweight tasks.
+- `GEMINI_FLASH_MODEL`: Stronger model for harder reasoning tasks.
 - `CHROMA_PERSIST_DIR`: Optional Chroma persistence directory
 
-### Local AI Runtime
+### AI Runtime
 
-The active AI architecture is local-first:
+The active AI architecture is Gemini-first for demo use:
 
-- backend AI features call Ollama through `Backend/apps/core/gemma_client.py`
+- backend AI features call the shared provider client through `Backend/apps/core/gemma_client.py`
 - the backend imports `rag` and other helpers from the editable local `ai-models/` package
-- advisory, assessment, and roadmap flows no longer rely on OpenAI, Anthropic, LangChain, or Pinecone
+- advisory, assessment, and roadmap flows use Gemini by default and can still switch to Ollama later through `AI_PROVIDER`
+- staged `skills` assessments use at most 3 LLM calls per completed run: stage 1 generation, stage 2 generation, and final evaluation
 
-If you need the architecture rationale, start with `docs/product/ADR-001-LOCAL-GEMMA-ARCHITECTURE.md`.
+For local switching later, the optional Ollama settings remain available in `.env.example`, but they are not required for the default demo path.
+
+If you need the active provider rationale, start with `docs/product/ADR-002-HOSTED-DEMO-AI-RUNTIME.md`.
 
 ### Settings Modules
 

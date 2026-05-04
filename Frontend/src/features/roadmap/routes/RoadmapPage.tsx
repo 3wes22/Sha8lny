@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Loader2, Map, Sparkles } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
+import { ROUTES } from "@/app/routes";
 import { Button } from "@/components/ui/button";
 import { ChoiceCard } from "@/shared/components/ChoiceCard";
 import { PageShell } from "@/shared/components/PageShell";
@@ -14,6 +16,7 @@ import { toast } from "sonner";
 const CURRENT_ROADMAP_STATUSES = ["in_progress", "active", "draft"] as const;
 
 const RoadmapPage: React.FC = () => {
+  const navigate = useNavigate();
   const [templates, setTemplates] = useState<RoadmapTemplate[]>([]);
   const [activeRoadmap, setActiveRoadmap] = useState<RoadmapType | null>(null);
   const [loading, setLoading] = useState(true);
@@ -93,6 +96,7 @@ const RoadmapPage: React.FC = () => {
     try {
       setActiveRoadmap(await roadmapApi.activate(activeRoadmap.id));
       toast.success("Roadmap activated.");
+      navigate(ROUTES.dashboard);
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Failed to activate roadmap"));
     }

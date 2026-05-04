@@ -20,6 +20,7 @@ from apps.roadmaps.models import (
     RoadmapCourse
 )
 from apps.courses.serializers import CourseListSerializer
+from apps.core.ai_settings import AI_PROVIDER
 from apps.users.serializers import SkillSerializer
 
 
@@ -412,7 +413,7 @@ class RoadmapSerializer(serializers.ModelSerializer):
             'source': generation.get('source', 'baseline'),
             'processing_time_ms': int(float(obj.processing_time_seconds or 0) * 1000),
             'model': obj.llm_model_used or None,
-            'provider': generation.get('provider') or ('ollama' if obj.llm_model_used else 'sha8alny'),
+            'provider': generation.get('provider') or AI_PROVIDER,
             'version': generation.get('runtime_version') or generation.get('version'),
             'trace_id': generation.get('trace_id') or str(obj.id),
             'fallback_used': bool(generation.get('fallback_used')),
@@ -603,8 +604,12 @@ class RoadmapStatsSerializer(serializers.Serializer):
     completed_phases = serializers.IntegerField()
     total_milestones = serializers.IntegerField()
     completed_milestones = serializers.IntegerField()
+    completed_courses = serializers.IntegerField(required=False)
     total_courses = serializers.IntegerField()
     estimated_total_hours = serializers.FloatField()
     completion_percentage = serializers.FloatField()
+    roadmap_status = serializers.CharField(required=False)
     current_focus_node_id = serializers.UUIDField(required=False, allow_null=True)
     next_action = serializers.DictField(required=False)
+    current_phase = serializers.DictField(required=False, allow_null=True)
+    pace = serializers.DictField(required=False)

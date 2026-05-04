@@ -5,8 +5,8 @@ import type { AssessmentQuestion } from "@/lib/api";
 
 interface AssessmentQuestionCardProps {
   question: AssessmentQuestion;
-  value?: string | number;
-  onChange: (value: string | number) => void;
+  value?: string | number | string[];
+  onChange: (value: string | number | string[]) => void;
 }
 
 export function AssessmentQuestionCard({
@@ -14,6 +14,18 @@ export function AssessmentQuestionCard({
   value,
   onChange,
 }: AssessmentQuestionCardProps) {
+  const selectedValues = Array.isArray(value) ? value.map(String) : [];
+
+  const toggleMultiSelectValue = (optionValue: string) => {
+    const nextValues = new Set(selectedValues);
+    if (nextValues.has(optionValue)) {
+      nextValues.delete(optionValue);
+    } else {
+      nextValues.add(optionValue);
+    }
+    onChange(Array.from(nextValues));
+  };
+
   return (
     <div className="atlas-panel p-6">
       <p className="type-kicker">{question.category}</p>
@@ -27,10 +39,17 @@ export function AssessmentQuestionCard({
           <div className="grid gap-3 md:grid-cols-2">
             {question.options.map((option) => (
               <ChoiceCard
-                description={`Score signal: ${option.score}`}
-                key={option.value}
-                onClick={() => onChange(option.value)}
-                selected={value === option.value}
+                key={option.id ?? option.value}
+                onClick={() =>
+                  question.interaction_mode === "multi_select"
+                    ? toggleMultiSelectValue(option.value)
+                    : onChange(option.value)
+                }
+                selected={
+                  question.interaction_mode === "multi_select"
+                    ? selectedValues.includes(option.value)
+                    : value === option.value
+                }
                 title={option.label}
               />
             ))}

@@ -580,7 +580,7 @@ export interface ChatRequest {
 }
 
 export interface AIInvocationMetadata {
-  source: 'llm' | 'fallback' | 'baseline';
+  source: 'llm' | 'fallback' | 'baseline' | 'cache';
   processing_time_ms: number;
   model: string | null;
   provider?: string | null;
@@ -588,6 +588,27 @@ export interface AIInvocationMetadata {
   trace_id?: string | null;
   fallback_used?: boolean;
   error_code?: string | null;
+}
+
+export interface SubSkillEvidence {
+  subskill_key: string;
+  dimension_key: string;
+  observed_level: number;
+  target_level: number;
+  gap: number;
+  confidence: number;
+  evidence_strength: "strong" | "moderate" | "weak";
+}
+
+export interface RoadmapSignal {
+  role: string;
+  target_level: string;
+  subskill_gaps: SubSkillEvidence[];
+  confidence_score: number;
+  evidence_strength: string;
+  priority_order: string[];
+  prerequisite_links: Record<string, string[]>;
+  generation_metadata: Record<string, unknown>;
 }
 
 export interface ChatResponse {
@@ -624,15 +645,30 @@ export interface RoadmapStats {
   completed_phases: number;
   total_milestones: number;
   completed_milestones: number;
+  completed_courses?: number;
   total_courses: number;
   estimated_total_hours: number;
   completion_percentage: number;
+  roadmap_status?: Roadmap["status"];
   current_focus_node_id?: string;
   next_action?: {
     type: "phase" | "milestone" | "course" | "roadmap";
     id?: string;
     title: string;
     summary: string;
+  };
+  current_phase?: {
+    id: string;
+    title: string;
+    status: RoadmapPhase["status"];
+    completion_percentage: number;
+  } | null;
+  pace?: {
+    current_streak_days: number;
+    total_learning_hours: number;
+    average_hours_per_week?: number | null;
+    last_activity_date?: string | null;
+    on_track: boolean;
   };
 }
 
@@ -670,33 +706,62 @@ export interface NotificationStats {
 }
 
 export interface AssessmentQuestion {
-  id: number;
+  id: string | number;
+  stage?: number;
+  subskill_key?: string;
+  dimension_key?: string;
+  question_type?: "single_choice" | "multi_select" | "open_ended" | "multiple_choice" | "text" | "scale";
   type: 'multiple_choice' | 'scale' | 'text';
   question: string;
   category: string;
+  competency?: string;
+  learning_objective?: string;
   helper?: string;
   options?: Array<{
+    id?: string;
     value: string;
     label: string;
-    score: number;
+    score?: number;
   }>;
   min_value?: number;
   max_value?: number;
   labels?: Record<string, string>;
-  interaction_mode?: "single_select" | "scale" | "text" | "visual_choice";
+  interaction_mode?: "single_select" | "multi_select" | "scale" | "text" | "visual_choice";
   estimated_seconds?: number;
 }
 
 export interface AssessmentResponse {
-  question_id: number;
-  answer: string | number;
+  question_id: string | number;
+  answer: string | number | string[];
   timestamp?: string;
 }
+
+export type AssessmentSubmissionState =
+  | "draft"
+  | "generating"
+  | "ready"
+  | "submitting"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "stage_1_generating"
+  | "stage_1_ready"
+  | "stage_1_analyzing"
+  | "stage_2_ready"
+  | "stage_2_analyzing";
 
 export interface Assessment {
   id: string;
   assessment_type: 'skills' | 'career_interests' | 'personality' | 'learning_style' | 'comprehensive';
   target_career?: string;
+  stage?: 'stage_1' | 'stage_2' | 'completed';
+  generation_status?: 'pending' | 'processing' | 'completed' | 'failed';
+  active_questions: AssessmentQuestion[];
+  gap_profile_summary?: {
+    high_priority_count: number;
+    uncertain_count: number;
+    overall_calibration: number;
+  } | null;
   questions: AssessmentQuestion[];
   responses: AssessmentResponse[];
   ai_processing_status: 'pending' | 'processing' | 'completed' | 'failed';
@@ -710,12 +775,13 @@ export interface Assessment {
   time_spent_seconds: number;
   is_complete: boolean;
   has_result: boolean;
+  generation_metadata?: Record<string, unknown>;
   presentation?: {
     question_count: number;
     current_index: number;
     progress_ratio: number;
     interaction_modes: string[];
-    submission_state: "draft" | "generating" | "ready" | "submitting" | "processing" | "completed" | "failed";
+    submission_state: AssessmentSubmissionState;
     result_summary_available: boolean;
     estimated_minutes: number;
   };
@@ -738,7 +804,7 @@ export interface AssessmentSubmitResponse {
   message: string;
   assessment: Assessment;
   result_id: string | null;
-  submission_state?: "processing" | "completed";
+  submission_state?: AssessmentSubmissionState;
 }
 
 export interface AssessmentResult {
@@ -760,6 +826,7 @@ export interface AssessmentResult {
   }>;
   ai_insights: string;
   ai_confidence_score?: number;
+  roadmap_signal?: RoadmapSignal;
   llm_model_used: string;
   llm_prompt_tokens?: number;
   llm_completion_tokens?: number;
@@ -772,7 +839,7 @@ export interface AssessmentResult {
     category: string;
   }>;
   status_message?: string;
-  submission_state?: "processing" | "completed" | "failed";
+  submission_state?: AssessmentSubmissionState;
   next_actions?: Array<{
     label: string;
     route: string;

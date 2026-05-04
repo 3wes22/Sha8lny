@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AssessmentIntroHero } from "@/features/assessment/components/AssessmentIntroHero";
+import { AssessmentLoadingAnimation } from "@/features/assessment/components/AssessmentLoadingAnimation";
 import { assessmentApi } from "@/lib/api";
 import { ChoiceCard } from "@/shared/components/ChoiceCard";
 import { PageShell } from "@/shared/components/PageShell";
@@ -13,12 +14,14 @@ import { StatePanel } from "@/shared/components/StatePanel";
 import { useToast } from "@/hooks/use-toast";
 
 const careerPaths = [
-  ["Software Engineer", "Build and ship product software."],
-  ["Frontend Developer", "Focus on responsive, high-quality interfaces."],
   ["Backend Developer", "Design APIs, services, and platform logic."],
+  ["Frontend Developer", "Focus on responsive, high-quality interfaces."],
+  ["Full Stack Developer", "Ship product features across client and server layers."],
   ["Data Scientist", "Work with analysis, models, and experimentation."],
-  ["Product Manager", "Lead direction, discovery, and delivery."],
-  ["UI/UX Designer", "Shape flows, interfaces, and usability systems."],
+  ["DevOps Engineer", "Own delivery pipelines, reliability, and infrastructure."],
+  ["Android Developer", "Build native Android experiences, releases, and app workflows."],
+  ["Machine Learning Engineer", "Train, ship, and monitor production ML systems."],
+  ["UI/UX Designer", "Shape product flows, prototypes, and accessible design systems."],
 ];
 
 export default function AssessmentPage() {
@@ -51,6 +54,11 @@ export default function AssessmentPage() {
       setCreatingAssessment(false);
     }
   };
+
+  // ── Full-screen loading takeover while AI generates questions ──
+  if (creatingAssessment) {
+    return <AssessmentLoadingAnimation phase="generating" />;
+  }
 
   return (
     <PageShell

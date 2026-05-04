@@ -272,6 +272,84 @@ class RoadmapService:
                     ]
                 }
             ]
+        elif 'mobile' in career_lower or 'flutter' in career_lower or 'ios' in career_lower or 'android' in career_lower:
+            phases_data = [
+                {
+                    'title': 'Mobile Fundamentals',
+                    'description': 'Learn mobile development basics and build your first app',
+                    'weeks': 6,
+                    'objectives': ['Learn Dart/Flutter or Swift/Kotlin', 'Build basic UI layouts', 'Understand mobile navigation'],
+                    'milestones': [
+                        {'title': 'Dart & Flutter Basics (or Swift/Kotlin)', 'type': 'course', 'hours': 30, 'skills': ['Flutter', 'Dart']},
+                        {'title': 'Build a Simple Counter/Calculator App', 'type': 'project', 'hours': 10, 'skills': ['Flutter']},
+                        {'title': 'Mobile UI Layouts & Navigation', 'type': 'course', 'hours': 20, 'skills': ['Flutter', 'Mobile UI']},
+                        {'title': 'State Management Basics', 'type': 'course', 'hours': 15, 'skills': ['Provider', 'State Management']},
+                    ]
+                },
+                {
+                    'title': 'App Development',
+                    'description': 'Build real apps with API integration and local storage',
+                    'weeks': 8,
+                    'objectives': ['Integrate REST APIs', 'Handle local storage', 'Build multi-screen apps'],
+                    'milestones': [
+                        {'title': 'REST API Integration in Flutter', 'type': 'course', 'hours': 20, 'skills': ['API', 'HTTP']},
+                        {'title': 'Local Storage & SQLite', 'type': 'course', 'hours': 12, 'skills': ['SQLite', 'Storage']},
+                        {'title': 'Build a Notes/Task Manager App', 'type': 'project', 'hours': 25, 'skills': ['Flutter', 'API', 'SQLite']},
+                        {'title': 'Push Notifications & Platform Features', 'type': 'course', 'hours': 10, 'skills': ['Notifications', 'Platform APIs']},
+                    ]
+                },
+                {
+                    'title': 'Publishing & Portfolio',
+                    'description': 'Polish, test, and publish your app',
+                    'weeks': 6,
+                    'objectives': ['Write tests', 'Optimize performance', 'Publish to stores'],
+                    'milestones': [
+                        {'title': 'Testing Mobile Apps', 'type': 'course', 'hours': 12, 'skills': ['Testing', 'Widget Tests']},
+                        {'title': 'Performance Optimization', 'type': 'course', 'hours': 10, 'skills': ['Performance', 'Profiling']},
+                        {'title': 'App Store & Play Store Submission', 'type': 'course', 'hours': 8, 'skills': ['Publishing', 'App Store']},
+                        {'title': 'Build & Publish a Portfolio App', 'type': 'project', 'hours': 35, 'skills': ['Flutter', 'Publishing']},
+                    ]
+                }
+            ]
+        elif 'devops' in career_lower or 'sre' in career_lower or 'cloud' in career_lower:
+            phases_data = [
+                {
+                    'title': 'Linux & Networking Fundamentals',
+                    'description': 'Master the foundations of systems and networking',
+                    'weeks': 6,
+                    'objectives': ['Learn Linux command line', 'Understand networking', 'Master Git workflows'],
+                    'milestones': [
+                        {'title': 'Linux Command Line & Shell Scripting', 'type': 'course', 'hours': 25, 'skills': ['Linux', 'Bash']},
+                        {'title': 'Networking Fundamentals (TCP/IP, DNS, HTTP)', 'type': 'course', 'hours': 15, 'skills': ['Networking']},
+                        {'title': 'Git Workflows & Collaboration', 'type': 'course', 'hours': 10, 'skills': ['Git']},
+                        {'title': 'Set Up a Linux Server (VPS)', 'type': 'project', 'hours': 12, 'skills': ['Linux', 'SSH']},
+                    ]
+                },
+                {
+                    'title': 'Containers & CI/CD',
+                    'description': 'Learn Docker, CI/CD pipelines, and infrastructure automation',
+                    'weeks': 10,
+                    'objectives': ['Master Docker', 'Build CI/CD pipelines', 'Learn infrastructure as code'],
+                    'milestones': [
+                        {'title': 'Docker & Docker Compose', 'type': 'course', 'hours': 25, 'skills': ['Docker', 'Containers']},
+                        {'title': 'CI/CD with GitHub Actions', 'type': 'course', 'hours': 18, 'skills': ['CI/CD', 'GitHub Actions']},
+                        {'title': 'Infrastructure as Code (Terraform basics)', 'type': 'course', 'hours': 20, 'skills': ['Terraform', 'IaC']},
+                        {'title': 'Containerize & Deploy a Full-Stack App', 'type': 'project', 'hours': 25, 'skills': ['Docker', 'CI/CD']},
+                    ]
+                },
+                {
+                    'title': 'Cloud & Monitoring',
+                    'description': 'Deploy to cloud and implement monitoring',
+                    'weeks': 8,
+                    'objectives': ['Learn a cloud platform', 'Set up monitoring', 'Obtain a certification'],
+                    'milestones': [
+                        {'title': 'AWS or GCP Fundamentals', 'type': 'course', 'hours': 30, 'skills': ['AWS', 'Cloud']},
+                        {'title': 'Monitoring & Logging (Prometheus, Grafana)', 'type': 'course', 'hours': 15, 'skills': ['Monitoring', 'Grafana']},
+                        {'title': 'AWS Cloud Practitioner Certification Prep', 'type': 'course', 'hours': 20, 'skills': ['AWS', 'Certification']},
+                        {'title': 'Build a Production-Ready Deployment Pipeline', 'type': 'project', 'hours': 30, 'skills': ['AWS', 'Docker', 'CI/CD', 'Monitoring']},
+                    ]
+                }
+            ]
         else:
             # Generic structure for other careers
             phases_data = [
@@ -344,6 +422,11 @@ class RoadmapService:
         if selected_target:
             return selected_target
 
+        roadmap_signal = assessment.roadmap_signal if isinstance(assessment.roadmap_signal, dict) else {}
+        signal_role = (roadmap_signal.get('role') or '').strip()
+        if signal_role:
+            return signal_role.replace('_', ' ').title()
+
         recommended_careers = assessment.recommended_careers or []
         for item in recommended_careers:
             title = (item or {}).get('title') if isinstance(item, dict) else None
@@ -389,10 +472,44 @@ class RoadmapService:
         return deduped
 
     @staticmethod
+    def _humanize_signal_key(value: str) -> str:
+        return (value or '').replace('_', ' ').strip().title()
+
+    @staticmethod
+    def _signal_gap_entries(assessment: Optional[AssessmentResult]) -> List[Dict[str, Any]]:
+        if not assessment or not isinstance(assessment.roadmap_signal, dict):
+            return []
+        entries = assessment.roadmap_signal.get('subskill_gaps') or []
+        return [entry for entry in entries if isinstance(entry, dict)]
+
+    @staticmethod
+    def _extract_gap_labels(assessment: Optional[AssessmentResult]) -> List[str]:
+        signal_entries = RoadmapService._signal_gap_entries(assessment)
+        if signal_entries:
+            ordered = sorted(
+                signal_entries,
+                key=lambda entry: (entry.get('gap', 0), -entry.get('confidence', 0)),
+                reverse=True,
+            )
+            return RoadmapService._dedupe_preserve_order(
+                [RoadmapService._humanize_signal_key(entry.get('subskill_key', '')) for entry in ordered]
+            )[:4]
+        if not assessment:
+            return []
+        return RoadmapService._dedupe_preserve_order(assessment.areas_for_improvement or [])[:4]
+
+    @staticmethod
     def _extract_priority_skills(assessment: Optional[AssessmentResult]) -> List[str]:
         """Get prioritized skills from assessment recommendations."""
         if not assessment:
             return []
+
+        roadmap_signal = assessment.roadmap_signal if isinstance(assessment.roadmap_signal, dict) else {}
+        priority_order = roadmap_signal.get('priority_order') or []
+        if isinstance(priority_order, list) and priority_order:
+            return RoadmapService._dedupe_preserve_order(
+                [RoadmapService._humanize_signal_key(item) for item in priority_order if isinstance(item, str)]
+            )[:4]
 
         learning_paths = assessment.recommended_learning_paths or []
         extracted: List[str] = []
@@ -412,6 +529,16 @@ class RoadmapService:
         if not assessment:
             return []
 
+        signal_entries = RoadmapService._signal_gap_entries(assessment)
+        if signal_entries:
+            ordered = sorted(
+                signal_entries,
+                key=lambda entry: (entry.get('gap', 0), -entry.get('observed_level', 0)),
+            )
+            return RoadmapService._dedupe_preserve_order(
+                [RoadmapService._humanize_signal_key(entry.get('subskill_key', '')) for entry in ordered]
+            )[:3]
+
         return RoadmapService._dedupe_preserve_order(
             [item.get('skill', '') for item in assessment.top_skills if isinstance(item, dict)]
         )[:3]
@@ -429,6 +556,10 @@ class RoadmapService:
             return 'Publish an end-to-end data analysis case study'
         if 'fullstack' in career_lower or 'full stack' in career_lower or 'full-stack' in career_lower:
             return 'Ship a full-stack portfolio application'
+        if 'mobile' in career_lower or 'flutter' in career_lower or 'ios' in career_lower or 'android' in career_lower:
+            return 'Publish a polished mobile app to App Store or Play Store'
+        if 'devops' in career_lower or 'sre' in career_lower or 'cloud' in career_lower:
+            return 'Build and document a CI/CD pipeline for a real project'
 
         return f'Ship a portfolio project aligned with {target_career}'
 
@@ -600,10 +731,10 @@ class RoadmapService:
 
         matched_template = RoadmapTemplateService.get_template_by_career(target_career)
         template = matched_template[0] if matched_template else None
-        strengths = assessment.strengths[:3] if assessment else []
-        gaps = assessment.areas_for_improvement[:3] if assessment else []
-        priority_skills = RoadmapService._extract_priority_skills(assessment)
         top_skills = RoadmapService._extract_top_skills(assessment)
+        priority_skills = RoadmapService._extract_priority_skills(assessment)
+        strengths = top_skills[:3] if top_skills else (assessment.strengths[:3] if assessment else [])
+        gaps = RoadmapService._extract_gap_labels(assessment)
 
         metadata = {
             'generation': {
@@ -659,10 +790,10 @@ class RoadmapService:
         assessment = roadmap.assessment
         matched_template = RoadmapTemplateService.get_template_by_career(roadmap.target_career)
         template = roadmap.template or (matched_template[0] if matched_template else None)
-        strengths = assessment.strengths[:3] if assessment else []
-        gaps = assessment.areas_for_improvement[:3] if assessment else []
-        priority_skills = RoadmapService._extract_priority_skills(assessment)
         top_skills = RoadmapService._extract_top_skills(assessment)
+        priority_skills = RoadmapService._extract_priority_skills(assessment)
+        strengths = top_skills[:3] if top_skills else (assessment.strengths[:3] if assessment else [])
+        gaps = RoadmapService._extract_gap_labels(assessment)
 
         generation = roadmap.metadata.get('generation', {}) if isinstance(roadmap.metadata, dict) else {}
         generation.update(

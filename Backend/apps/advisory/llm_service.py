@@ -1,7 +1,7 @@
 """
 LLM advisory orchestration for the Django backend.
 
-This module uses the shared Gemma runtime and the local `rag` package when it
+This module uses the shared Gemini runtime and the local `rag` package when it
 is available as an installed dependency. It intentionally avoids direct
 `sys.path` manipulation.
 """
@@ -13,6 +13,7 @@ from importlib import import_module
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from apps.core.ai_logging import build_ai_metadata
+from apps.core.ai_settings import AI_PROVIDER
 from apps.core.gemma_client import GemmaClient
 from apps.roadmaps.models import Roadmap
 
@@ -60,7 +61,7 @@ class LLMAdvisoryService:
     """Synchronous advisory orchestration on top of the shared AI runtime."""
 
     SCOPE_VERSION = "advisory-scope-v1"
-    RUNTIME_VERSION = "advisory-gemma-v1"
+    RUNTIME_VERSION = "advisory-gemini-v1"
     FALLBACK_VERSION = "advisory-fallback-v1"
 
     @property
@@ -210,7 +211,7 @@ class LLMAdvisoryService:
             source="scope_filter",
             processing_time_ms=0,
             model=None,
-            provider="sha8alny",
+            provider=AI_PROVIDER,
             version=self.SCOPE_VERSION,
             fallback_used=True,
         ).to_dict()
@@ -249,7 +250,7 @@ class LLMAdvisoryService:
             source="fallback",
             processing_time_ms=0,
             model=None,
-            provider="sha8alny",
+            provider=AI_PROVIDER,
             version=self.FALLBACK_VERSION,
             fallback_used=True,
             error_code=error_code,
@@ -331,7 +332,10 @@ class LLMAdvisoryService:
         )
 
         try:
-            result = GemmaClient().generate_text(
+            result = GemmaClient(
+                task_type="career_matching",
+                max_output_tokens=480,
+            ).generate_text(
                 prompt=prompt,
                 system=str(runtime.get("system_prompt") or DEFAULT_SYSTEM_PROMPT),
             )
@@ -408,21 +412,39 @@ class LLMAdvisoryService:
             pass
 
         try:
+            from apps.progress.services import ProgressService
+
             active_roadmap = Roadmap.objects.filter(
                 user=user,
                 is_deleted=False,
-                status__in=[Roadmap.ACTIVE, Roadmap.IN_PROGRESS, Roadmap.DRAFT],
+                status__in=[Roadmap.ACTIVE, Roadmap.IN_PROGRESS],
             ).order_by("-updated_at").first()
+            if active_roadmap is None:
+                active_roadmap = Roadmap.objects.filter(
+                    user=user,
+                    is_deleted=False,
+                    status=Roadmap.DRAFT,
+                ).order_by("-updated_at").first()
             if active_roadmap:
-                next_focus = None
-                if isinstance(active_roadmap.ai_insights, dict):
+                progress = ProgressService.get_progress_snapshot(user, active_roadmap)
+                next_focus = (
+                    progress.current_milestone.title
+                    if progress.current_milestone
+                    else progress.current_phase.title
+                    if progress.current_phase
+                    else None
+                )
+                if next_focus is None and isinstance(active_roadmap.ai_insights, dict):
                     next_focus = active_roadmap.ai_insights.get("summary")
                 context["active_roadmap"] = {
                     "id": str(active_roadmap.id),
                     "target_career": active_roadmap.target_career,
                     "current_level": active_roadmap.current_level,
                     "target_level": active_roadmap.target_level,
+                    "completion_percentage": float(active_roadmap.completion_percentage or 0),
                     "next_focus": next_focus,
+                    "current_streak_days": progress.current_streak_days,
+                    "total_learning_hours": float(progress.total_learning_hours or 0),
                 }
         except Exception:
             pass

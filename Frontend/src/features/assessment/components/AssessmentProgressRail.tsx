@@ -14,12 +14,14 @@ export function AssessmentProgressRail({
 }: AssessmentProgressRailProps) {
   const totalQuestions = assessment.questions.length;
   const progressValue = totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0;
+  const stageLabel = assessment.stage === "stage_2" ? "Stage 2 of 2" : "Stage 1 of 2";
 
   return (
     <div className="atlas-panel p-5">
       <p className="type-kicker">Assessment rail</p>
       <div className="mt-4 space-y-4">
         <div>
+          <p className="text-sm uppercase tracking-[0.18em] text-muted-foreground">{stageLabel}</p>
           <p className="text-sm font-semibold">
             Question {currentIndex + 1} of {totalQuestions}
           </p>

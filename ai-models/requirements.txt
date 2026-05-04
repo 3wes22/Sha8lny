@@ -26,6 +26,7 @@ redis>=5.0.0
 
 # Utilities
 python-dotenv>=1.0.0
+httpx>=0.25.0
 datasets>=2.14.0  # Hugging Face datasets
 huggingface-hub>=0.19.0
 

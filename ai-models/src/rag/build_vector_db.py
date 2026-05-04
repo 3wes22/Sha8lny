@@ -21,6 +21,8 @@ from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
+from .runtime_settings import get_chroma_persist_dir, get_embedding_model
+
 # ---------------------------------------------------------------------------
 # Configuration — all paths relative to this file's location
 # ---------------------------------------------------------------------------
@@ -283,15 +285,18 @@ def build_vector_database():
     print("=" * 60)
 
     # Load embedding model
-    print("\n📥 Loading embedding model (all-MiniLM-L6-v2)...")
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    embedding_model = get_embedding_model()
+    persist_dir = get_chroma_persist_dir()
+
+    print(f"\n📥 Loading embedding model ({embedding_model})...")
+    model = SentenceTransformer(embedding_model)
 
     # Initialise ChromaDB
-    print(f"📁 Initializing ChromaDB at: {VECTOR_DB_DIR}")
-    VECTOR_DB_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"📁 Initializing ChromaDB at: {persist_dir}")
+    persist_dir.mkdir(parents=True, exist_ok=True)
 
     client = chromadb.PersistentClient(
-        path=str(VECTOR_DB_DIR),
+        path=str(persist_dir),
         settings=Settings(anonymized_telemetry=False),
     )
 
@@ -338,7 +343,7 @@ def build_vector_database():
     print("✅ Vector Database Built Successfully!")
     print("=" * 60)
     print(f"📊 Total documents: {collection.count()}")
-    print(f"📁 Database location: {VECTOR_DB_DIR}")
+    print(f"📁 Database location: {persist_dir}")
     print(f"📐 Embedding dimension: 384")
     print(f"🔧 Collection: career_knowledge")
 

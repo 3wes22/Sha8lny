@@ -14,6 +14,9 @@ interface Message {
   content: string;
 }
 
+const ADVISORY_UNAVAILABLE_MESSAGE =
+  "The advisor is temporarily unavailable. Keep moving with your roadmap and try this question again in a moment.";
+
 export default function AdvisoryPage() {
   const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>([
@@ -56,6 +59,14 @@ export default function AdvisoryPage() {
         { id: `${Date.now()}-assistant`, role: "assistant", content: response.response },
       ]);
     } catch {
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: `${Date.now()}-fallback`,
+          role: "assistant",
+          content: ADVISORY_UNAVAILABLE_MESSAGE,
+        },
+      ]);
       toast({
         title: "Advisor unavailable",
         description: "Could not reach the advisory service.",

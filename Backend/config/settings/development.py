@@ -56,13 +56,10 @@ INTERNAL_IPS = [
 # Email backend - Console backend for development (prints to console)
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-# Cache - Use dummy cache in development (no caching)
-# Uncomment Redis cache from base.py when ready to test caching
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.dummy.DummyCache',
-    }
-}
+# Cache - defaults come from `DJANGO_CACHE_BACKEND` in base settings.
+# Local development uses `django.core.cache.backends.locmem.LocMemCache` by
+# default, which requires no external setup. Override the environment variable
+# to Redis or an equivalent backend when needed.
 
 # Logging - More verbose in development
 LOGGING['loggers']['django']['level'] = 'DEBUG'

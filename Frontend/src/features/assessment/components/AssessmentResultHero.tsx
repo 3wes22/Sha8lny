@@ -16,6 +16,12 @@ export function AssessmentResultHero({
   onCreateRoadmap,
   creatingRoadmap = false,
 }: AssessmentResultHeroProps) {
+  const confidenceLabel = result.ai_confidence_score
+    ? `${Math.round(result.ai_confidence_score)}%`
+    : result.roadmap_signal
+      ? `${Math.round(result.roadmap_signal.confidence_score * 100)}%`
+      : "Signal ready";
+
   return (
     <section className="poster-surface overflow-hidden rounded-[2rem] border border-border/70">
       <div className="relative grid gap-8 px-6 py-8 md:px-8 lg:grid-cols-[1.1fr_0.9fr]">
@@ -60,7 +66,7 @@ export function AssessmentResultHero({
               <p className="text-sm font-semibold">Confidence</p>
             </div>
             <p className="mt-3 text-2xl font-bold">
-              {result.ai_confidence_score ? `${Math.round(result.ai_confidence_score)}%` : "Signal ready"}
+              {confidenceLabel}
             </p>
           </div>
         </div>

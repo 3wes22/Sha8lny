@@ -61,11 +61,11 @@ describe("AdvisoryPage", () => {
 
     render(<AdvisoryPage />);
 
-    await user.type(
-      screen.getByPlaceholderText(/Ask about next steps, job fit, or how to approach your roadmap/i),
-      "What should I focus on next?",
-    );
     await act(async () => {
+      await user.type(
+        screen.getByPlaceholderText(/Ask about next steps, job fit, or how to approach your roadmap/i),
+        "What should I focus on next?",
+      );
       await user.click(screen.getByRole("button"));
     });
 
@@ -77,11 +77,11 @@ describe("AdvisoryPage", () => {
     });
     expect(await screen.findByText(/Start with one portfolio project\./i)).toBeInTheDocument();
 
-    await user.type(
-      screen.getByPlaceholderText(/Ask about next steps, job fit, or how to approach your roadmap/i),
-      "What after that?",
-    );
     await act(async () => {
+      await user.type(
+        screen.getByPlaceholderText(/Ask about next steps, job fit, or how to approach your roadmap/i),
+        "What after that?",
+      );
       await user.click(screen.getByRole("button"));
     });
 
@@ -96,5 +96,24 @@ describe("AdvisoryPage", () => {
       });
     });
     expect(await screen.findByText(/tighten your resume around that proof of work/i)).toBeInTheDocument();
+  });
+
+  it("shows an in-chat fallback message when the advisory request fails", async () => {
+    mocks.chat.mockReset();
+    mocks.chat.mockRejectedValueOnce(new Error("offline"));
+    const user = userEvent.setup();
+
+    render(<AdvisoryPage />);
+
+    await act(async () => {
+      await user.type(
+        screen.getByPlaceholderText(/Ask about next steps, job fit, or how to approach your roadmap/i),
+        "Help me decide what to do next.",
+      );
+      await user.click(screen.getByRole("button"));
+    });
+
+    expect(await screen.findByText(/advisor is temporarily unavailable/i)).toBeInTheDocument();
+    expect(mocks.toast).toHaveBeenCalled();
   });
 });

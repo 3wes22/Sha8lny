@@ -8,6 +8,8 @@ echo "Downloading AI Models for Sha8alny"
 echo "====================================="
 echo ""
 
+EMBEDDING_MODEL="${EMBEDDING_MODEL:-all-MiniLM-L6-v2}"
+
 # Create directories
 mkdir -p models/base
 cd models/base
@@ -19,11 +21,12 @@ if ! command -v python &> /dev/null; then
 fi
 
 # 1. Download Sentence Transformers (small, fast)
-echo "[1/3] Downloading Sentence Transformers (all-MiniLM-L6-v2)..."
+echo "[1/3] Downloading Sentence Transformers (${EMBEDDING_MODEL})..."
 python -c "
 from sentence_transformers import SentenceTransformer
-model = SentenceTransformer('all-MiniLM-L6-v2')
-model.save('sentence-transformers/all-MiniLM-L6-v2')
+model_name = '${EMBEDDING_MODEL}'
+model = SentenceTransformer(model_name)
+model.save(f'sentence-transformers/{model_name}')
 print('✓ Sentence Transformers downloaded (~90MB)')
 "
 

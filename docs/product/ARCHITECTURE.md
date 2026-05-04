@@ -1,20 +1,19 @@
 # Sha8alny - System Architecture
 
-> **⚠️ AI ARCHITECTURE UPDATE — April 2026**
+> **AI ARCHITECTURE UPDATE — May 2026**
 >
 > This document was written when the project planned to use OpenAI GPT-4,
 > Anthropic Claude, LangChain orchestration, and Pinecone vector storage.
 > **That design was never implemented.**
 >
 > The **current active AI architecture** is:
-> - **Runtime:** Gemma 4 E4B via Ollama (local, zero-cost)
+> - **Default runtime:** Hosted Gemini API for evaluator demos
+> - **Fallback runtime:** Gemma via Ollama for local/offline use
 > - **Orchestration:** Deterministic Django services (no multi-agent)
 > - **Vector store:** ChromaDB (local)
 > - **Config:** `Backend/apps/core/ai_settings.py`
 >
-> See [ADR-001](ADR-001-LOCAL-GEMMA-ARCHITECTURE.md) and
-> [Gemma Architecture Adoption Plan](GEMMA_ARCHITECTURE_ADOPTION_PLAN.md)
-> for the current design.
+> See [ADR-002](ADR-002-HOSTED-DEMO-AI-RUNTIME.md) for the current provider contract.
 >
 > Sections below that reference OpenAI, Anthropic, LangChain, or Pinecone
 > describe the **original plan, not the implementation**.

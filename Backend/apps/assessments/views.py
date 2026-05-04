@@ -1,48 +1,42 @@
 """
-Assessments Service Views
-
-Implements REST API views for AI-powered skill assessments.
-
-SRS References:
-- FR-6: Generate Skill Assessment
-- FR-7: Assessment Versioning
-- FR-8: AI Processing
+Assessment API views with staged-skills rollout and legacy compatibility.
 """
+
+from __future__ import annotations
 
 from types import SimpleNamespace
 from uuid import uuid4
 
 from django.conf import settings
-from rest_framework import viewsets, status, permissions
+from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.views import APIView
-from django.db.models import Q, Count, Avg
-from django.db import models
-from django.utils import timezone
 
+from apps.assessments.ai_pipeline import AssessmentAIService
 from apps.assessments.models import Assessment, AssessmentResult
+from apps.assessments.role_graph import load_role_graph, resolve_role_key
 from apps.assessments.serializers import (
-    AssessmentSerializer,
     AssessmentCreateSerializer,
+    AssessmentListSerializer,
     AssessmentResponseSerializer,
     AssessmentResultSerializer,
-    AssessmentListSerializer,
+    AssessmentSerializer,
 )
+from apps.assessments.services import AssessmentService
 from apps.assessments.tasks import (
     evaluate_assessment_answers_task,
     generate_assessment_questions_task,
+    generate_stage_one_task,
+    process_final_evaluation_task,
+    process_stage_one_submission_task,
     run_evaluate_assessment_answers,
     run_generate_assessment_questions,
+    run_generate_stage_one,
+    run_process_final_evaluation,
+    run_process_stage_one_submission,
 )
-from apps.assessments.services import (
-    AssessmentResultService,
-)
-
-
-# ============================================================================
-# ASSESSMENT VIEWS
-# ============================================================================
+from apps.core.ai_throttles import AIBurstThrottle, AISustainedThrottle
+from apps.core.health_checks import get_ai_runtime_health
 
 
 def dispatch_assessment_task(task, eager_runner, assessment_id: str):
@@ -54,92 +48,56 @@ def dispatch_assessment_task(task, eager_runner, assessment_id: str):
 
 
 class AssessmentViewSet(viewsets.ModelViewSet):
-    """
-    Manage user skill assessments.
-
-    SRS Appendix B Endpoints:
-    - POST /assessment/ - Generate assessment (FR-6)
-    - GET /assessment/latest - Latest assessment
-    - GET /assessment/history - All assessments (FR-7)
-    - POST /assessment/{id}/submit/ - Submit responses
-    - GET /assessment/{id}/result/ - Get AI-processed result (FR-8)
-    """
     permission_classes = [permissions.IsAuthenticated]
+    _AI_ACTIONS = {'create', 'submit'}
+
+    def get_throttles(self):
+        if self.action in self._AI_ACTIONS:
+            return [AIBurstThrottle(), AISustainedThrottle()]
+        return super().get_throttles()
 
     def get_queryset(self):
-        """Return assessments for current user only."""
         return Assessment.objects.filter(
             user=self.request.user,
-            is_deleted=False
+            is_deleted=False,
         ).order_by('-created_at')
 
     def get_serializer_class(self):
-        """Use appropriate serializer per action."""
         if self.action == 'create':
             return AssessmentCreateSerializer
-        elif self.action == 'list' or self.action == 'history':
+        if self.action in {'list', 'history'}:
             return AssessmentListSerializer
-        elif self.action == 'submit':
+        if self.action == 'submit':
             return AssessmentResponseSerializer
         return AssessmentSerializer
 
     def create(self, request, *args, **kwargs):
-        """
-        Generate new skill assessment.
-
-        SRS FR-6: System shall accept user input (CV text, Career goals, Skills)
-        SRS Appendix B: POST /assessment/
-
-        Request Body:
-        {
-            "assessment_type": "skills",  # or career_interests, personality, learning_style, comprehensive
-            "cv_text": "...",  # optional
-            "career_goals": "...",  # optional
-            "current_skills": ["Python", "Django"]  # optional
-        }
-
-        Returns:
-        {
-            "id": "uuid",
-            "assessment_type": "skills",
-            "status": "draft",
-            "questions": [...],  # AI-generated questions (TODO: integrate LLM)
-            ...
-        }
-        """
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         assessment = serializer.save()
-        task = dispatch_assessment_task(
-            generate_assessment_questions_task,
-            run_generate_assessment_questions,
-            str(assessment.id),
-        )
+        if assessment.is_staged:
+            task = dispatch_assessment_task(
+                generate_stage_one_task,
+                run_generate_stage_one,
+                str(assessment.id),
+            )
+        else:
+            task = dispatch_assessment_task(
+                generate_assessment_questions_task,
+                run_generate_assessment_questions,
+                str(assessment.id),
+            )
         assessment.ai_task_id = getattr(task, "id", "") or ""
         assessment.save(update_fields=["ai_task_id", "updated_at"])
 
-        return Response(
-            AssessmentSerializer(assessment).data,
-            status=status.HTTP_201_CREATED
-        )
+        return Response(AssessmentSerializer(assessment).data, status=status.HTTP_201_CREATED)
 
     def list(self, request, *args, **kwargs):
-        """
-        List user's assessments with optional filtering.
-
-        Query Parameters:
-        - assessment_type: Filter by type (skills, career_interests, etc.)
-        - status: Filter by status (draft, in_progress, completed)
-        """
         queryset = self.get_queryset()
-
-        # Filter by assessment type
         assessment_type = request.query_params.get('assessment_type')
         if assessment_type:
             queryset = queryset.filter(assessment_type=assessment_type)
-
-        # Filter by status
         status_filter = request.query_params.get('status')
         if status_filter:
             queryset = queryset.filter(status=status_filter)
@@ -152,135 +110,152 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'], url_path='runtime/health')
+    def runtime_health(self, request):
+        return Response(get_ai_runtime_health())
+
+    @action(detail=False, methods=['post'], url_path='preview-questions')
+    def preview_questions(self, request):
+        target_career = str(request.data.get('target_career') or '').strip()
+        if not target_career:
+            return Response(
+                {'error': 'target_career is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        require_live_llm = request.data.get('require_live_llm', False)
+        if isinstance(require_live_llm, str):
+            require_live_llm = require_live_llm.strip().lower() in {'1', 'true', 'yes', 'on'}
+        else:
+            require_live_llm = bool(require_live_llm)
+
+        role_graph = load_role_graph(resolve_role_key(target_career))
+        questions, metadata = AssessmentAIService.generate_stage_one(role_graph.role_key, role_graph)
+        client_questions = AssessmentService._normalize_staged_questions(questions)
+        runtime_health = get_ai_runtime_health()
+
+        response_payload = {
+            'target_career': target_career,
+            'role_key': role_graph.role_key,
+            'role_label': role_graph.role_label,
+            'question_count': len(client_questions),
+            'questions': client_questions,
+            'metadata': metadata.to_dict(),
+            'runtime_health': runtime_health,
+        }
+
+        if require_live_llm and metadata.fallback_used:
+            return Response(
+                {
+                    'error': 'Live Gemini generation is unavailable',
+                    **response_payload,
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        return Response(response_payload, status=status.HTTP_200_OK)
+
     @action(detail=False, methods=['get'])
     def latest(self, request):
-        """
-        Get user's latest assessment.
-
-        SRS Appendix B: GET /assessment/latest
-
-        Query Parameters:
-        - assessment_type: Filter by type (optional)
-
-        Returns: Single assessment object or 404
-        """
         queryset = self.get_queryset()
-
-        # Filter by type if provided
         assessment_type = request.query_params.get('assessment_type')
         if assessment_type:
             queryset = queryset.filter(assessment_type=assessment_type)
-
         latest_assessment = queryset.first()
-
         if not latest_assessment:
-            return Response(
-                {'error': 'No assessments found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        serializer = AssessmentSerializer(latest_assessment)
-        return Response(serializer.data)
+            return Response({'error': 'No assessments found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(AssessmentSerializer(latest_assessment).data)
 
     @action(detail=False, methods=['get'])
     def history(self, request):
-        """
-        Get assessment history for user.
-
-        SRS FR-7: Assessment Versioning
-        SRS Appendix B: GET /assessment/history
-
-        Query Parameters:
-        - assessment_type: Filter by type
-        - status: Filter by status
-        - limit: Number of results (default: 20, max: 100)
-
-        Returns: List of assessments ordered by creation date
-        """
         queryset = self.get_queryset()
-
-        # Apply filters (same as list)
         assessment_type = request.query_params.get('assessment_type')
         if assessment_type:
             queryset = queryset.filter(assessment_type=assessment_type)
-
         status_filter = request.query_params.get('status')
         if status_filter:
             queryset = queryset.filter(status=status_filter)
-
-        # Apply limit
         limit = request.query_params.get('limit', '20')
         try:
-            limit = min(int(limit), 100)  # Max 100 results
-            queryset = queryset[:limit]
+            queryset = queryset[: min(int(limit), 100)]
         except ValueError:
             pass
-
-        serializer = AssessmentListSerializer(queryset, many=True)
-        return Response(serializer.data)
+        return Response(AssessmentListSerializer(queryset, many=True).data)
 
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
-        """
-        Submit assessment responses.
-
-        POST /assessment/{id}/submit/
-
-        Request Body:
-        {
-            "responses": [
-                {
-                    "question_id": "q1",
-                    "answer": "Python, Django, REST APIs",
-                    "confidence_level": 4
-                },
-                ...
-            ]
-        }
-
-        Actions:
-        1. Validate responses against assessment questions
-        2. Save responses to assessment.responses field
-        3. Update assessment status to 'completed'
-        4. Trigger AI processing (async via Celery - TODO)
-        5. Return updated assessment
-
-        SRS FR-6: User submits responses
-        """
         assessment = self.get_object()
-
-        # Check if assessment is already completed
-        if assessment.status == 'completed':
-            return Response(
-                {'error': 'Assessment already completed'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
         serializer = AssessmentResponseSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         responses = serializer.validated_data['responses']
 
+        if assessment.is_staged:
+            active_questions = AssessmentService.get_active_questions(assessment)
+            if not active_questions:
+                return Response(
+                    {'error': 'Assessment questions are still being prepared'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            if assessment.stage == 'stage_1':
+                assessment = AssessmentService.submit_stage_one(str(assessment.id), request.user, responses)
+                task = dispatch_assessment_task(
+                    process_stage_one_submission_task,
+                    run_process_stage_one_submission,
+                    str(assessment.id),
+                )
+                assessment.ai_task_id = getattr(task, "id", "") or ""
+                assessment.save(update_fields=['ai_task_id', 'updated_at'])
+                return Response(
+                    {
+                        'message': 'Stage one submitted successfully and stage two is being prepared',
+                        'assessment': AssessmentSerializer(assessment).data,
+                        'result_id': None,
+                        'submission_state': 'stage_1_analyzing',
+                    },
+                    status=status.HTTP_202_ACCEPTED,
+                )
+
+            if assessment.stage == 'stage_2':
+                assessment = AssessmentService.submit_stage_two(str(assessment.id), request.user, responses)
+                task = dispatch_assessment_task(
+                    process_final_evaluation_task,
+                    run_process_final_evaluation,
+                    str(assessment.id),
+                )
+                assessment.ai_task_id = getattr(task, "id", "") or ""
+                assessment.save(update_fields=['ai_task_id', 'updated_at'])
+                return Response(
+                    {
+                        'message': 'Assessment submitted successfully and queued for final analysis',
+                        'assessment': AssessmentSerializer(assessment).data,
+                        'result_id': None,
+                        'submission_state': 'stage_2_analyzing',
+                    },
+                    status=status.HTTP_202_ACCEPTED,
+                )
+
+            return Response(
+                {'error': 'Assessment already completed'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if assessment.status == 'completed':
+            return Response({'error': 'Assessment already completed'}, status=status.HTTP_400_BAD_REQUEST)
         if not assessment.questions:
             return Response(
                 {'error': 'Assessment questions are still being generated'},
-                status=status.HTTP_409_CONFLICT
+                status=status.HTTP_409_CONFLICT,
             )
 
-        assessment.responses = responses
-        assessment.status = 'completed'
-        assessment.completed_at = timezone.now()
-        assessment.answered_questions = len(responses)
-        assessment.ai_processing_status = 'pending'
-        assessment.save()
+        assessment = AssessmentService.complete_assessment(str(assessment.id), request.user, responses)
         task = dispatch_assessment_task(
             evaluate_assessment_answers_task,
             run_evaluate_assessment_answers,
             str(assessment.id),
         )
         assessment.ai_task_id = getattr(task, "id", "") or ""
-        assessment.save(update_fields=["ai_task_id", "updated_at"])
-
+        assessment.save(update_fields=['ai_task_id', 'updated_at'])
         return Response(
             {
                 'message': 'Assessment submitted successfully and queued for analysis',
@@ -288,204 +263,85 @@ class AssessmentViewSet(viewsets.ModelViewSet):
                 'result_id': None,
                 'submission_state': 'processing',
             },
-            status=status.HTTP_202_ACCEPTED
+            status=status.HTTP_202_ACCEPTED,
         )
 
     @action(detail=True, methods=['get'])
     def result(self, request, pk=None):
-        """
-        Get AI-processed assessment result.
-
-        GET /assessment/{id}/result/
-
-        SRS FR-8: Parse AI response into Skills, Levels, Notes, Recommendations
-
-        Returns:
-        - AssessmentResult object with skill scores, insights, recommendations
-        - 404 if result not yet processed
-        - 202 if processing is in progress
-        """
         assessment = self.get_object()
 
-        # Check if assessment is completed
-        if assessment.status != 'completed':
-            return Response(
-                {'error': 'Assessment not yet completed'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Check AI processing status
-        if assessment.ai_processing_status == 'pending':
-            return Response(
-                {
-                    'message': 'Assessment is queued for AI processing',
-                    'status': 'pending',
-                    'submission_state': 'processing',
-                    'status_message': 'Your answers are saved and waiting for analysis.',
-                    'next_actions': [
-                        {'label': 'Return to dashboard', 'route': '/dashboard', 'kind': 'assessment'}
-                    ],
-                },
-                status=status.HTTP_202_ACCEPTED
-            )
-        elif assessment.ai_processing_status == 'processing':
-            return Response(
-                {
-                    'message': 'AI is currently processing your assessment',
-                    'status': 'processing',
-                    'submission_state': 'processing',
-                    'status_message': 'We are building your strengths, gaps, and recommended next steps.',
-                    'next_actions': [
-                        {'label': 'Return to dashboard', 'route': '/dashboard', 'kind': 'assessment'}
-                    ],
-                },
-                status=status.HTTP_202_ACCEPTED
-            )
-        elif assessment.ai_processing_status == 'failed':
-            return Response(
-                {
-                    'error': 'AI processing failed. Please try resubmitting.',
-                    'status': 'failed'
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-        # Get result
-        try:
-            result = AssessmentResult.objects.get(
-                assessment=assessment,
-                is_deleted=False
-            )
-            serializer = AssessmentResultSerializer(result)
-            data = serializer.data
-            data['submission_state'] = 'completed'
-            data['status_message'] = 'Your assessment is ready. Review the outcome and continue to roadmap or jobs.'
-            data['next_actions'] = [
-                {'label': 'View roadmap', 'route': '/roadmap', 'kind': 'roadmap'},
-                {'label': 'Explore jobs', 'route': '/jobs', 'kind': 'jobs'},
-            ]
-            return Response(data)
-
-        except AssessmentResult.DoesNotExist:
-            return Response(
-                {'error': 'Assessment result not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-
-# ============================================================================
-# EXTRA VIEWS - NOT IN SRS APPENDIX B
-# Commented out to match SRS. Uncomment if needed in future.
-# ============================================================================
-
-"""
-# Uncomment these views if needed in future
-
-class AssessmentResultView(APIView):
-    # View assessment results.
-    # GET /assessment/results/ - List all user's assessment results
-    # GET /assessment/results/{id}/ - Get specific result
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, result_id=None):
-        # Get assessment result(s).
-        if result_id:
-            # Get specific result
-            try:
-                result = AssessmentResult.objects.get(
-                    id=result_id,
-                    assessment__user=request.user,
-                    is_deleted=False
-                )
-                serializer = AssessmentResultSerializer(result)
-                return Response(serializer.data)
-
-            except AssessmentResult.DoesNotExist:
+        if assessment.is_staged:
+            if assessment.ai_processing_status == 'failed':
                 return Response(
-                    {'error': 'Result not found'},
-                    status=status.HTTP_404_NOT_FOUND
+                    {'error': 'AI processing failed. Please try resubmitting.', 'status': 'failed'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
+
+            if assessment.stage != 'completed' or assessment.ai_processing_status in {'pending', 'processing'}:
+                submission_state = 'stage_1_analyzing'
+                status_message = 'We are analyzing your initial responses to create targeted questions for you.'
+                if assessment.stage == 'stage_2':
+                    submission_state = 'stage_2_analyzing'
+                    status_message = 'We are finalizing your staged assessment result.'
+
+                return Response(
+                    {
+                        'message': 'Assessment is still processing',
+                        'status': assessment.ai_processing_status,
+                        'submission_state': submission_state,
+                        'status_message': status_message,
+                        'next_actions': [
+                            {'label': 'Return to dashboard', 'route': '/dashboard', 'kind': 'assessment'}
+                        ],
+                    },
+                    status=status.HTTP_202_ACCEPTED,
+                )
+
         else:
-            # List all results
-            results = AssessmentResult.objects.filter(
-                assessment__user=request.user,
-                is_deleted=False
-            ).select_related('assessment').order_by('-created_at')
+            if assessment.status != 'completed':
+                return Response({'error': 'Assessment not yet completed'}, status=status.HTTP_400_BAD_REQUEST)
+            if assessment.ai_processing_status == 'pending':
+                return Response(
+                    {
+                        'message': 'Assessment is queued for AI processing',
+                        'status': 'pending',
+                        'submission_state': 'processing',
+                        'status_message': 'Your answers are saved and waiting for analysis.',
+                        'next_actions': [
+                            {'label': 'Return to dashboard', 'route': '/dashboard', 'kind': 'assessment'}
+                        ],
+                    },
+                    status=status.HTTP_202_ACCEPTED,
+                )
+            if assessment.ai_processing_status == 'processing':
+                return Response(
+                    {
+                        'message': 'AI is currently processing your assessment',
+                        'status': 'processing',
+                        'submission_state': 'processing',
+                        'status_message': 'We are building your strengths, gaps, and recommended next steps.',
+                        'next_actions': [
+                            {'label': 'Return to dashboard', 'route': '/dashboard', 'kind': 'assessment'}
+                        ],
+                    },
+                    status=status.HTTP_202_ACCEPTED,
+                )
+            if assessment.ai_processing_status == 'failed':
+                return Response(
+                    {'error': 'AI processing failed. Please try resubmitting.', 'status': 'failed'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
 
-            # Filter by assessment type
-            assessment_type = request.query_params.get('assessment_type')
-            if assessment_type:
-                results = results.filter(assessment__assessment_type=assessment_type)
+        try:
+            result = AssessmentResult.objects.get(assessment=assessment, is_deleted=False)
+        except AssessmentResult.DoesNotExist:
+            return Response({'error': 'Assessment result not found'}, status=status.HTTP_404_NOT_FOUND)
 
-            # Pagination
-            from rest_framework.pagination import PageNumberPagination
-            paginator = PageNumberPagination()
-            paginator.page_size = 20
-            page = paginator.paginate_queryset(results, request)
-
-            if page is not None:
-                serializer = AssessmentResultSerializer(page, many=True)
-                return paginator.get_paginated_response(serializer.data)
-
-            serializer = AssessmentResultSerializer(results, many=True)
-            return Response(serializer.data)
-
-
-class AssessmentStatsView(APIView):
-    # Get user's assessment statistics.
-    # GET /assessment/stats/
-    # Returns:
-    # - total_assessments: Total completed assessments
-    # - assessments_by_type: Count by assessment type
-    # - average_completion_time: Average time to complete
-    # - latest_result: Most recent assessment result summary
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request):
-        # Get assessment statistics for user.
-        user = request.user
-
-        # Get all user assessments
-        assessments = Assessment.objects.filter(
-            user=user,
-            is_deleted=False
-        )
-
-        total_assessments = assessments.count()
-        completed_assessments = assessments.filter(status='completed').count()
-
-        # Count by type
-        by_type = dict(
-            assessments.values('assessment_type')
-            .annotate(count=Count('id'))
-            .values_list('assessment_type', 'count')
-        )
-
-        # Average completion time
-        completed = assessments.filter(
-            status='completed',
-            time_spent_seconds__gt=0
-        )
-        avg_time = completed.aggregate(
-            avg=Avg('time_spent_seconds')
-        )['avg'] or 0
-
-        # Latest result
-        latest_result = AssessmentResult.objects.filter(
-            assessment__user=user,
-            is_deleted=False
-        ).select_related('assessment').order_by('-created_at').first()
-
-        stats = {
-            'total_assessments': total_assessments,
-            'completed_assessments': completed_assessments,
-            'in_progress_assessments': assessments.filter(status='in_progress').count(),
-            'assessments_by_type': by_type,
-            'average_completion_time_seconds': int(avg_time),
-            'latest_result': AssessmentResultSerializer(latest_result).data if latest_result else None
-        }
-
-        return Response(stats, status=status.HTTP_200_OK)
-"""
+        data = AssessmentResultSerializer(result).data
+        data['submission_state'] = 'completed'
+        data['status_message'] = 'Your assessment is ready. Review the outcome and continue to roadmap or jobs.'
+        data['next_actions'] = [
+            {'label': 'View roadmap', 'route': '/roadmap', 'kind': 'roadmap'},
+            {'label': 'Explore jobs', 'route': '/jobs', 'kind': 'jobs'},
+        ]
+        return Response(data)

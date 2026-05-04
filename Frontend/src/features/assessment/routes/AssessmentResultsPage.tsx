@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { ROUTES } from "@/app/routes";
-import { ApiError, assessmentApi, roadmapApi, type AssessmentResult, getApiErrorMessage } from "@/lib/api";
+import { assessmentApi, roadmapApi, type AssessmentResult, getApiErrorMessage } from "@/lib/api";
 import { AssessmentOutcomeCards } from "@/features/assessment/components/AssessmentOutcomeCards";
 import { AssessmentResultHero } from "@/features/assessment/components/AssessmentResultHero";
 import { PageShell } from "@/shared/components/PageShell";
@@ -33,19 +33,22 @@ export default function AssessmentResultsPage() {
       try {
         setLoading(true);
         const data = await assessmentApi.getResult(assessmentId);
-        if (!ignore) {
+        if (ignore) {
+          return;
+        }
+
+        if (data.submission_state && data.submission_state !== "completed") {
+          setProcessing(true);
+          setResult(null);
+          setError(null);
+          pollTimer = setTimeout(() => void loadResult(), 3000);
+        } else {
           setResult(data);
           setProcessing(false);
           setError(null);
         }
       } catch (err) {
-        if (err instanceof ApiError && err.status === 202) {
-          if (!ignore) {
-            setProcessing(true);
-            setError(null);
-            pollTimer = setTimeout(() => void loadResult(), 3000);
-          }
-        } else if (!ignore) {
+        if (!ignore) {
           setError(getApiErrorMessage(err, "Could not load assessment results."));
         }
       } finally {

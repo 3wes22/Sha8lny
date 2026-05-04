@@ -21,7 +21,7 @@ For this repository, that means:
 - keep the modular monolith in `Backend/`
 - keep the feature-first frontend in `Frontend/`
 - keep `ai-models/` for retrieval, seeding, experiments, and offline evaluation support
-- standardize runtime inference on `gemma4:e4b` through Ollama
+- standardize runtime inference on env-driven Gemma 4 through Ollama, with `gemma4:e2b` as the conservative local default and `gemma4:e4b` as the stronger override on larger hardware
 - remove dependency on cloud-first assumptions such as OpenAI, Anthropic, LangChain routing, and Pinecone-first architecture
 
 ## 2. What We Have Right Now
@@ -43,9 +43,9 @@ The current repo is a good base for this migration, but the AI layer is only par
 
 ### 3.1 Core runtime model
 
-Sha8alny should run one LLM model locally:
+Sha8alny should run one env-configurable LLM model locally:
 
-- **Model:** `gemma4:e4b`
+- **Model:** `OLLAMA_MODEL`, default `gemma4:e2b`, commonly overridden to `gemma4:e4b` on stronger hardware
 - **Runtime:** Ollama
 - **Concurrency model:** one active LLM inference at a time
 - **Primary AI features:** assessment generation/evaluation, roadmap personalization, advisory chat
@@ -195,6 +195,10 @@ This does not mean the product is weak. It means the architecture is being align
 - Add Celery tasks for:
   - question generation
   - response evaluation
+- Keep the staged `skills` assessment budget capped at 3 LLM calls per completed assessment:
+  - stage 1 generation
+  - stage 2 generation
+  - final evaluation
 - Extend persistence so stored results capture:
   - model metadata
   - validation failures

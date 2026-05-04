@@ -4,6 +4,7 @@ Assessments Service Layer
 Handles skill assessment creation, submission, and AI-powered analysis.
 """
 
+from dataclasses import asdict
 from time import monotonic
 from decimal import Decimal
 from typing import Optional, List, Dict, Any
@@ -12,108 +13,260 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 
 from .models import Assessment, AssessmentResult
+from .role_graph import load_role_graph, resolve_role_key
 from apps.users.models import User
 from apps.core.ai_contracts import (
     AIInvocationMetadata,
     AssessmentAnalysisInput,
     AssessmentAnalysisResult,
 )
+from apps.core.ai_validation import (
+    build_stage_choice_options,
+    normalize_choice_options,
+    normalize_interaction_mode,
+    normalize_stage_options,
+    normalize_stage_question_type,
+    stage_question_type_to_ui_type,
+)
 
 
 class BaselineAssessmentAnalyzer:
-    """Deterministic analyzer behind a model-safe contract."""
+    """Deterministic analyzer with dimension-weighted scoring.
 
-    MODEL_NAME = "baseline-assessment-v1"
+    Covers 6 assessment dimensions with configurable weights:
+      - technical_depth (25%), tooling (15%), problem_solving (20%),
+        experience (20%), goals (10%), commitment (10%)
+    """
+
+    MODEL_NAME = "baseline-assessment-v2"
     VERSION = "baseline-2026-04"
 
-    @staticmethod
-    def _score_responses(responses: List[Dict[str, Any]]) -> Decimal:
-        score_sum = 0.0
-        scored_responses = 0
+    DIMENSION_WEIGHTS: Dict[str, float] = {
+        "technical_depth": 0.25,
+        "tooling": 0.15,
+        "problem_solving": 0.20,
+        "experience": 0.20,
+        "goals": 0.10,
+        "commitment": 0.10,
+    }
 
-        for response in responses:
-            answer = response.get("answer", "")
+    # Dimension labels used in human-readable output
+    DIMENSION_LABELS: Dict[str, str] = {
+        "technical_depth": "Core technical skills",
+        "tooling": "Tooling & ecosystem knowledge",
+        "problem_solving": "Problem-solving & debugging",
+        "experience": "Hands-on project experience",
+        "goals": "Goal clarity",
+        "commitment": "Learning commitment",
+    }
+
+    @classmethod
+    def _score_by_dimension(
+        cls, responses: List[Dict[str, Any]], questions: List[Dict[str, Any]]
+    ) -> Dict[str, float]:
+        """Score each dimension on a 0-100 scale from response scores."""
+        dimension_scores: Dict[str, List[float]] = {}
+
+        # Build question lookup for dimension mapping
+        question_map: Dict[Any, Dict[str, Any]] = {}
+        for q in questions:
+            question_map[q.get("id")] = q
+            question_map[str(q.get("id"))] = q
+
+        for resp in responses:
+            qid = resp.get("question_id")
+            question = question_map.get(qid) or question_map.get(str(qid)) or {}
+            dimension = question.get("dimension", "technical_depth")
+
+            answer = resp.get("answer", "")
+            raw_score = 0.0
+
             if isinstance(answer, (int, float)):
-                score_sum += float(answer)
-                scored_responses += 1
-            elif isinstance(answer, str) and answer.strip().isdigit():
-                score_sum += float(answer.strip())
-                scored_responses += 1
+                raw_score = float(answer)
+            elif isinstance(answer, str):
+                # For text answers, give a moderate score (goal clarity)
+                stripped = answer.strip()
+                if stripped.isdigit():
+                    raw_score = float(stripped)
+                elif len(stripped) > 10:
+                    raw_score = 3.0  # meaningful text answer
+                else:
+                    raw_score = 2.0  # very short text
 
-        overall = (score_sum / scored_responses * 20) if scored_responses > 0 else 50
-        return Decimal(str(round(overall, 2)))
+                # Check if the answer has a score in options
+                options = question.get("options", [])
+                for opt in options:
+                    if isinstance(opt, dict) and opt.get("value") == stripped:
+                        raw_score = float(opt.get("score", raw_score))
+                        break
+
+            # Normalize to 0-100 (scores are on 1-5 scale)
+            normalized = min(100.0, max(0.0, (raw_score / 5.0) * 100.0))
+            dimension_scores.setdefault(dimension, []).append(normalized)
+
+        # Average scores per dimension, default to 50 if missing
+        result: Dict[str, float] = {}
+        for dim in cls.DIMENSION_WEIGHTS:
+            scores = dimension_scores.get(dim, [])
+            result[dim] = round(sum(scores) / len(scores), 1) if scores else 50.0
+
+        return result
+
+    @classmethod
+    def _weighted_overall(cls, dimension_scores: Dict[str, float]) -> Decimal:
+        """Compute weighted overall score from dimension scores."""
+        total = 0.0
+        for dim, weight in cls.DIMENSION_WEIGHTS.items():
+            total += dimension_scores.get(dim, 50.0) * weight
+        return Decimal(str(round(total, 2)))
+
+    @classmethod
+    def _derive_strengths(cls, dimension_scores: Dict[str, float]) -> List[str]:
+        """Identify top 2-3 strengths from highest-scoring dimensions."""
+        sorted_dims = sorted(dimension_scores.items(), key=lambda x: x[1], reverse=True)
+        strengths = []
+        for dim, score in sorted_dims[:3]:
+            if score >= 60:
+                strengths.append(cls.DIMENSION_LABELS.get(dim, dim))
+        if not strengths:
+            strengths = ["Commitment to a clear target path", "Willingness to self-assess"]
+        return strengths
+
+    @classmethod
+    def _derive_gaps(cls, dimension_scores: Dict[str, float]) -> List[str]:
+        """Identify top 2-3 weakness areas from lowest-scoring dimensions."""
+        sorted_dims = sorted(dimension_scores.items(), key=lambda x: x[1])
+        gaps = []
+        for dim, score in sorted_dims[:3]:
+            if score < 70:
+                gaps.append(cls.DIMENSION_LABELS.get(dim, dim))
+        if not gaps:
+            gaps = ["Advanced specialization", "Production-scale project experience"]
+        return gaps
 
     @staticmethod
     def _career_aliases(target_career: str) -> List[Dict[str, Any]]:
         normalized = target_career or "Software Engineer"
-        lowered = normalized.lower()
-        if "frontend" in lowered:
-            return [
-                {"title": normalized, "match_score": 88, "reasoning": "Your selected path remains the primary recommendation."},
-                {"title": "Software Engineer", "match_score": 73, "reasoning": "Broader engineering roles stay adjacent to frontend growth."},
-            ]
-        if "backend" in lowered:
-            return [
-                {"title": normalized, "match_score": 88, "reasoning": "Your selected path remains the primary recommendation."},
-                {"title": "Full Stack Developer", "match_score": 74, "reasoning": "Backend depth can expand toward full-stack execution later."},
-            ]
-        if "data" in lowered:
-            return [
-                {"title": normalized, "match_score": 86, "reasoning": "Your selected path remains the primary recommendation."},
-                {"title": "Machine Learning Engineer", "match_score": 71, "reasoning": "The path can extend into model delivery and production work."},
-            ]
+        role_key = resolve_role_key(normalized)
+
+        career_map = {
+            "frontend": ("UI/UX Designer", 72, "Frontend skills transfer directly to UI/UX design collaboration."),
+            "backend": ("Full Stack Developer", 74, "Backend depth expands naturally toward full-stack execution."),
+            "data_science": ("Machine Learning Engineer", 71, "Data science foundations extend into model delivery and MLOps."),
+            "fullstack": ("Backend Developer", 73, "Strong backend focus can deepen your full-stack expertise."),
+            "android": ("Frontend Developer", 70, "Android product thinking translates well to responsive interface work."),
+            "devops": ("Cloud Architect", 72, "DevOps experience is the natural path to cloud architecture roles."),
+            "machine_learning_engineer": ("Data Scientist", 73, "Production ML work stays adjacent to strong data science fundamentals."),
+            "ui_ux_designer": ("Frontend Developer", 74, "UI/UX design work pairs naturally with frontend implementation skills."),
+        }
+
+        adjacent_title = "Full Stack Developer"
+        adjacent_score = 72
+        adjacent_reason = "This role stays adjacent while you build broader execution skills."
+
+        if role_key in career_map:
+            adjacent_title, adjacent_score, adjacent_reason = career_map[role_key]
+
         return [
-            {"title": normalized, "match_score": 85, "reasoning": "Your selected path remains the primary recommendation."},
-            {"title": "Full Stack Developer", "match_score": 72, "reasoning": "This stays nearby while you build broader execution skills."},
+            {"title": normalized, "match_score": 87, "reasoning": "Your selected career path remains your primary recommendation."},
+            {"title": adjacent_title, "match_score": adjacent_score, "reasoning": adjacent_reason},
         ]
 
     @staticmethod
     def _learning_paths(target_career: str) -> List[Dict[str, Any]]:
-        lowered = (target_career or "").lower()
-        if "frontend" in lowered:
-            return [
-                {"skill": "React", "priority": "high", "resources": []},
+        role_key = resolve_role_key(target_career)
+
+        paths_map: Dict[str, List[Dict[str, Any]]] = {
+            "frontend": [
+                {"skill": "React & component architecture", "priority": "high", "resources": []},
                 {"skill": "TypeScript", "priority": "high", "resources": []},
-                {"skill": "Testing discipline", "priority": "medium", "resources": []},
-            ]
-        if "backend" in lowered:
-            return [
-                {"skill": "API design", "priority": "high", "resources": []},
-                {"skill": "Databases", "priority": "high", "resources": []},
-                {"skill": "Testing discipline", "priority": "medium", "resources": []},
-            ]
-        if "data" in lowered:
-            return [
-                {"skill": "Python", "priority": "high", "resources": []},
-                {"skill": "Statistics", "priority": "high", "resources": []},
-                {"skill": "Portfolio storytelling", "priority": "medium", "resources": []},
-            ]
+                {"skill": "Testing (Jest & React Testing Library)", "priority": "medium", "resources": []},
+            ],
+            "backend": [
+                {"skill": "REST API design & Django", "priority": "high", "resources": []},
+                {"skill": "Database design & SQL optimization", "priority": "high", "resources": []},
+                {"skill": "Testing (pytest & integration tests)", "priority": "medium", "resources": []},
+            ],
+            "data_science": [
+                {"skill": "Python data stack (Pandas, NumPy, Scikit-learn)", "priority": "high", "resources": []},
+                {"skill": "Statistics & probability", "priority": "high", "resources": []},
+                {"skill": "Data visualization & storytelling", "priority": "medium", "resources": []},
+            ],
+            "fullstack": [
+                {"skill": "Full-stack integration (React + Django)", "priority": "high", "resources": []},
+                {"skill": "Authentication & authorization flows", "priority": "high", "resources": []},
+                {"skill": "Deployment & DevOps basics (Docker)", "priority": "medium", "resources": []},
+            ],
+            "android": [
+                {"skill": "Kotlin and Android app architecture", "priority": "high", "resources": []},
+                {"skill": "Jetpack Compose or XML UI implementation", "priority": "high", "resources": []},
+                {"skill": "Play Store release and app performance tuning", "priority": "medium", "resources": []},
+            ],
+            "devops": [
+                {"skill": "Docker & containerization", "priority": "high", "resources": []},
+                {"skill": "CI/CD pipelines (GitHub Actions)", "priority": "high", "resources": []},
+                {"skill": "Cloud platform (AWS or GCP fundamentals)", "priority": "medium", "resources": []},
+            ],
+            "machine_learning_engineer": [
+                {"skill": "Production ML pipelines", "priority": "high", "resources": []},
+                {"skill": "Model deployment and serving", "priority": "high", "resources": []},
+                {"skill": "Experiment tracking and MLOps", "priority": "medium", "resources": []},
+            ],
+            "ui_ux_designer": [
+                {"skill": "User research and problem framing", "priority": "high", "resources": []},
+                {"skill": "Wireframing and prototyping in Figma", "priority": "high", "resources": []},
+                {"skill": "Usability testing and design critique", "priority": "medium", "resources": []},
+            ],
+        }
+
+        if role_key in paths_map:
+            return paths_map[role_key]
+
+        # Generic fallback
         return [
-            {"skill": "Problem solving", "priority": "high", "resources": []},
-            {"skill": "Project execution", "priority": "high", "resources": []},
+            {"skill": "Core technical depth in your chosen area", "priority": "high", "resources": []},
+            {"skill": "Project execution & portfolio building", "priority": "high", "resources": []},
             {"skill": "Testing discipline", "priority": "medium", "resources": []},
+        ]
+
+    @staticmethod
+    def staged_role_recommendations(role_graph) -> List[Dict[str, Any]]:
+        focus_areas = ", ".join(dimension.label.lower() for dimension in role_graph.dimensions[:2])
+        return [
+            {
+                "title": role_graph.role_label,
+                "match_score": 92,
+                "reasoning": (
+                    f"This staged result is calibrated against the curated {role_graph.role_label.lower()} "
+                    f"graph, with strong emphasis on {focus_areas}."
+                ),
+            }
         ]
 
     @classmethod
     def analyze(cls, payload: AssessmentAnalysisInput) -> AssessmentAnalysisResult:
         started_at = monotonic()
         target_career = (payload.target_career or "Software Engineer").strip() or "Software Engineer"
+
+        # Use questions from the contract — they carry dimension metadata.
+        questions = payload.questions or []
+        dimension_scores = cls._score_by_dimension(payload.responses, questions)
+        overall = cls._weighted_overall(dimension_scores)
+        strengths = cls._derive_strengths(dimension_scores)
+        gaps = cls._derive_gaps(dimension_scores)
+
         return AssessmentAnalysisResult(
-            overall_score=cls._score_responses(payload.responses),
-            skill_scores={},
-            strengths=[
-                "Commitment to a clear target path",
-                "Structured self-assessment follow-through",
-            ],
-            areas_for_improvement=[
-                "Project execution",
-                "Testing discipline",
-            ],
+            overall_score=overall,
+            skill_scores=dimension_scores,
+            strengths=strengths,
+            areas_for_improvement=gaps,
             recommended_careers=cls._career_aliases(target_career),
             recommended_learning_paths=cls._learning_paths(target_career),
             ai_insights=(
-                f"This baseline analysis keeps {target_career} as the anchor role and turns your "
-                "responses into immediate next-step guidance."
+                f"Based on your self-assessment for {target_career}, your strongest area is "
+                f"{strengths[0].lower() if strengths else 'your commitment'}, while "
+                f"{gaps[0].lower() if gaps else 'advanced specialization'} is the most impactful "
+                f"area to focus on next."
             ),
             ai_confidence_score=Decimal("78.00"),
             metadata=AIInvocationMetadata(
@@ -128,6 +281,111 @@ class BaselineAssessmentAnalyzer:
 
 class AssessmentService:
     """Service for assessment management"""
+
+    @staticmethod
+    def _normalize_staged_questions(questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        normalized_questions: List[Dict[str, Any]] = []
+        for question in questions or []:
+            if not isinstance(question, dict):
+                continue
+
+            normalized_question = {
+                key: value
+                for key, value in dict(question).items()
+                if key
+                not in {
+                    "answer_key",
+                    "explanation",
+                    "validation_flags",
+                    "scenario_context",
+                    "correct_answer_rationale",
+                    "option_rationales",
+                }
+            }
+            semantic_type = normalize_stage_question_type(
+                normalized_question.get("question_type") or normalized_question.get("type"),
+                raw_mode=normalized_question.get("interaction_mode"),
+                raw_options=normalized_question.get("options"),
+                default="single_choice",
+            )
+            normalized_question["question_type"] = semantic_type
+            ui_type, default_mode = stage_question_type_to_ui_type(semantic_type)
+            normalized_question["type"] = ui_type
+
+            if normalized_question.get("type") == "multiple_choice":
+                category = str(normalized_question.get("category") or "").strip()
+                normalized_question["interaction_mode"] = normalize_interaction_mode(
+                    normalized_question.get("interaction_mode"),
+                    question_type="multiple_choice",
+                    default_mode=default_mode,
+                )
+                raw_options = normalized_question.get("options")
+                if isinstance(raw_options, list) and raw_options and all(
+                    isinstance(option, dict) and str(option.get("label") or "").strip()
+                    for option in raw_options
+                ):
+                    normalized_question["options"] = normalize_stage_options(
+                        raw_options,
+                        question_type=semantic_type,
+                        default_options=[],
+                    )
+                elif category:
+                    normalized_question["options"] = normalize_choice_options(
+                        normalized_question.get("options"),
+                        default_options=build_stage_choice_options(category),
+                    )
+            elif normalized_question.get("type") == "scale":
+                normalized_question["interaction_mode"] = normalize_interaction_mode(
+                    normalized_question.get("interaction_mode"),
+                    question_type="scale",
+                    default_mode="scale",
+                )
+            elif normalized_question.get("type") == "text":
+                normalized_question["interaction_mode"] = normalize_interaction_mode(
+                    normalized_question.get("interaction_mode"),
+                    question_type="text",
+                    default_mode="text",
+                )
+                normalized_question["options"] = []
+
+            normalized_questions.append(normalized_question)
+
+        return normalized_questions
+
+    @staticmethod
+    def is_staged_assessment(assessment: Assessment) -> bool:
+        return assessment.is_staged
+
+    @staticmethod
+    def get_active_questions(assessment: Assessment) -> List[Dict[str, Any]]:
+        if not assessment.is_staged:
+            return assessment.questions or []
+        if assessment.stage == 'stage_2':
+            return AssessmentService._normalize_staged_questions(assessment.stage_two_questions or [])
+        if assessment.stage == 'completed':
+            return []
+        return AssessmentService._normalize_staged_questions(assessment.stage_one_questions or [])
+
+    @staticmethod
+    def get_active_responses(assessment: Assessment) -> List[Dict[str, Any]]:
+        if not assessment.is_staged:
+            return assessment.responses or []
+        if assessment.stage == 'stage_2':
+            return assessment.stage_two_responses or []
+        if assessment.stage == 'completed':
+            return []
+        return assessment.stage_one_responses or []
+
+    @staticmethod
+    def build_gap_profile_summary(assessment: Assessment) -> Optional[Dict[str, Any]]:
+        gap_profile = assessment.gap_profile or {}
+        if not isinstance(gap_profile, dict) or not gap_profile:
+            return None
+        return {
+            'high_priority_count': len(gap_profile.get('high_priority_gaps', [])),
+            'uncertain_count': len(gap_profile.get('uncertain_areas', [])),
+            'overall_calibration': gap_profile.get('overall_calibration', 0),
+        }
 
     @staticmethod
     def get_user_assessments(user: User, assessment_type: Optional[str] = None) -> List[Assessment]:
@@ -193,6 +451,31 @@ class AssessmentService:
         # TODO: Generate questions using AI if not provided
         if questions is None:
             questions = []
+
+        if assessment_type == 'skills':
+            assessment = Assessment.objects.create(
+                user=user,
+                assessment_type=assessment_type,
+                target_career=target_career,
+                questions=[],
+                responses=[],
+                stage='stage_1',
+                stage_one_questions=[],
+                stage_one_responses=[],
+                stage_two_questions=[],
+                stage_two_responses=[],
+                gap_profile={},
+                roadmap_signal={},
+                generation_metadata={
+                    'role_key': resolve_role_key(target_career),
+                    'graph_version': load_role_graph(resolve_role_key(target_career)).version,
+                },
+                total_questions=10,
+                answered_questions=0,
+                status='draft',
+                ai_processing_status='pending',
+            )
+            return assessment
 
         assessment = Assessment.objects.create(
             user=user,
@@ -330,6 +613,80 @@ class AssessmentService:
 
         return assessment
 
+    @staticmethod
+    @transaction.atomic
+    def submit_stage_one(
+        assessment_id: str,
+        user: User,
+        responses: List[Dict[str, Any]],
+    ) -> Assessment:
+        assessment = Assessment.objects.select_for_update().get(
+            id=assessment_id,
+            user=user,
+            is_deleted=False,
+        )
+
+        if not assessment.is_staged or assessment.stage != 'stage_1':
+            raise ValidationError("Assessment is not ready for stage one submission")
+
+        assessment.stage_one_responses = responses
+        assessment.responses = responses
+        assessment.answered_questions = len(responses)
+        assessment.status = 'in_progress'
+        assessment.started_at = assessment.started_at or timezone.now()
+        assessment.ai_processing_status = 'processing'
+        assessment.ai_processing_error = ''
+        assessment.save(
+            update_fields=[
+                'stage_one_responses',
+                'responses',
+                'answered_questions',
+                'status',
+                'started_at',
+                'ai_processing_status',
+                'ai_processing_error',
+                'updated_at',
+            ]
+        )
+        return assessment
+
+    @staticmethod
+    @transaction.atomic
+    def submit_stage_two(
+        assessment_id: str,
+        user: User,
+        responses: List[Dict[str, Any]],
+    ) -> Assessment:
+        assessment = Assessment.objects.select_for_update().get(
+            id=assessment_id,
+            user=user,
+            is_deleted=False,
+        )
+
+        if not assessment.is_staged or assessment.stage != 'stage_2':
+            raise ValidationError("Assessment is not ready for stage two submission")
+
+        assessment.stage_two_responses = responses
+        assessment.responses = responses
+        assessment.answered_questions = len(assessment.stage_one_responses or []) + len(responses)
+        assessment.status = 'completed'
+        assessment.completed_at = timezone.now()
+        assessment.ai_processing_status = 'processing'
+        assessment.ai_processing_error = ''
+        assessment.save(
+            update_fields=[
+                'stage_two_responses',
+                'responses',
+                'answered_questions',
+                'status',
+                'completed_at',
+                'ai_processing_status',
+                'ai_processing_error',
+                'updated_at',
+            ]
+        )
+        return assessment
+
 
 class AssessmentResultService:
     """Service for assessment result analysis"""
@@ -381,6 +738,7 @@ class AssessmentResultService:
         llm_completion_tokens: Optional[int] = None,
         processing_time_seconds: Optional[float] = None,
         version: str = "1.0",
+        roadmap_signal: Optional[Dict[str, Any]] = None,
     ) -> AssessmentResult:
         """
         Create AI-analyzed assessment result.
@@ -424,6 +782,7 @@ class AssessmentResultService:
             existing.llm_completion_tokens = llm_completion_tokens
             existing.processing_time_seconds = processing_time_seconds
             existing.version = version
+            existing.roadmap_signal = roadmap_signal or {}
             existing.save()
             return existing
 
@@ -443,6 +802,7 @@ class AssessmentResultService:
             llm_completion_tokens=llm_completion_tokens,
             processing_time_seconds=processing_time_seconds,
             version=version,
+            roadmap_signal=roadmap_signal or {},
         )
 
         # Update assessment AI processing status

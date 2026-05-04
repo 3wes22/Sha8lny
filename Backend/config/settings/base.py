@@ -175,6 +175,10 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',  # For API documentation
     'EXCEPTION_HANDLER': 'apps.core.exceptions.custom_exception_handler',
     'DATETIME_FORMAT': '%Y-%m-%d %H:%M:%S',
+    'DEFAULT_THROTTLE_RATES': {
+        'ai_burst': '3/min',
+        'ai_sustained': '20/hour',
+    },
 }
 
 
@@ -199,7 +203,7 @@ SIMPLE_JWT = {
 # CORS Configuration
 CORS_ALLOWED_ORIGINS = config(
     'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:3000,http://127.0.0.1:3000',
+    default='http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000',
     cast=lambda v: [s.strip() for s in v.split(',')]
 )
 
@@ -218,18 +222,30 @@ CORS_ALLOW_HEADERS = [
 ]
 
 
-# Cache Configuration (Redis)
+# Cache Configuration
+DJANGO_CACHE_BACKEND = config(
+    'DJANGO_CACHE_BACKEND',
+    default='django.core.cache.backends.locmem.LocMemCache',
+)
+DJANGO_CACHE_LOCATION = config('DJANGO_CACHE_LOCATION', default='sha8alny-cache')
+
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': config('REDIS_URL', default='redis://127.0.0.1:6379/1'),
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        },
+        'BACKEND': DJANGO_CACHE_BACKEND,
         'KEY_PREFIX': 'sha8alny',
-        'TIMEOUT': 300,  # 5 minutes default
+        'TIMEOUT': 300,
     }
 }
+
+if DJANGO_CACHE_BACKEND == 'django.core.cache.backends.redis.RedisCache':
+    CACHES['default']['LOCATION'] = config('REDIS_URL', default='redis://127.0.0.1:6379/1')
+    CACHES['default']['OPTIONS'] = {
+        'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+    }
+elif DJANGO_CACHE_BACKEND == 'django.core.cache.backends.locmem.LocMemCache':
+    CACHES['default']['LOCATION'] = DJANGO_CACHE_LOCATION
+elif DJANGO_CACHE_LOCATION:
+    CACHES['default']['LOCATION'] = DJANGO_CACHE_LOCATION
 
 
 # Celery Configuration
@@ -323,18 +339,12 @@ SESSION_COOKIE_HTTPONLY = True
 
 
 # ---------------------------------------------------------------------------
-# AI/LLM Configuration — ADR-001: Local Gemma Architecture
+# AI/LLM Configuration — Hosted Gemini default with provider abstraction
 # ---------------------------------------------------------------------------
-# All AI runtime settings (Ollama host, model, timeouts, queue config) live in:
+# All AI runtime settings (provider selection, Gemini models, retries, optional
+# Ollama fallback, queue config) live in:
 #   apps/core/ai_settings.py
 # Import from there in any module that needs AI configuration.
-#
-# The following cloud-provider keys are RETIRED (see ADR-001).
-# They are kept commented out so no one re-adds them thinking they're missing.
-# OPENAI_API_KEY = config('OPENAI_API_KEY', default='')      # RETIRED
-# ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='') # RETIRED
-# PINECONE_API_KEY = config('PINECONE_API_KEY', default='')   # RETIRED
-# PINECONE_ENVIRONMENT = config('PINECONE_ENVIRONMENT', default='') # RETIRED
 
 
 # External API Configuration

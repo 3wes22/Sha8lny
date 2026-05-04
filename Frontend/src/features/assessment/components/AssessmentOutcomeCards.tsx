@@ -5,7 +5,13 @@ interface AssessmentOutcomeCardsProps {
   result: AssessmentResult;
 }
 
+function humanizeSignalKey(value: string) {
+  return value.replaceAll("_", " ");
+}
+
 export function AssessmentOutcomeCards({ result }: AssessmentOutcomeCardsProps) {
+  const prioritySkills = result.roadmap_signal?.priority_order ?? [];
+
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       <div className="atlas-panel p-5">
@@ -31,13 +37,19 @@ export function AssessmentOutcomeCards({ result }: AssessmentOutcomeCardsProps) 
       </div>
 
       <div className="atlas-panel p-5">
-        <p className="type-kicker">Top skills</p>
+        <p className="type-kicker">Roadmap priorities</p>
         <div className="mt-4 flex flex-wrap gap-2">
-          {result.top_skills.map((skill) => (
-            <Badge key={`${skill.skill}-${skill.score}`} variant="outline">
-              {skill.skill} {skill.score}%
-            </Badge>
-          ))}
+          {prioritySkills.length > 0
+            ? prioritySkills.map((skill) => (
+                <Badge key={skill} variant="outline">
+                  {humanizeSignalKey(skill)}
+                </Badge>
+              ))
+            : result.top_skills.map((skill) => (
+                <Badge key={`${skill.skill}-${skill.score}`} variant="outline">
+                  {skill.skill} {skill.score}%
+                </Badge>
+              ))}
         </div>
       </div>
     </div>

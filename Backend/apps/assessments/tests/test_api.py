@@ -13,6 +13,7 @@ from datetime import date, timedelta
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
+from apps.core.ai_contracts import AIInvocationMetadata
 from apps.users.models import User
 from apps.assessments.models import Assessment, AssessmentResult
 
@@ -54,10 +55,12 @@ class TestAssessmentAPI:
         assert response.data['assessment_type'] == 'skills'
         assert response.data['target_career'] == 'Software Engineer'
         assert response.data['status'] == 'draft'
+        assert response.data['stage'] == 'stage_1'
+        assert response.data['generation_status'] == 'pending'
         assert response.data['ai_processing_status'] == 'pending'
-        assert response.data['total_questions'] == 0
+        assert response.data['total_questions'] == 10
         assert response.data['questions'] == []
-        assert response.data['presentation']['submission_state'] == 'generating'
+        assert response.data['presentation']['submission_state'] == 'stage_1_generating'
 
         assessment = Assessment.objects.get(id=response.data['id'])
         assert assessment.target_career == 'Software Engineer'
@@ -134,6 +137,133 @@ class TestAssessmentAPI:
         assert response.status_code == status.HTTP_200_OK
         assert response.data['id'] == str(assessment.id)
         assert len(response.data['questions']) == 1
+
+    def test_runtime_health_endpoint(self, monkeypatch):
+        monkeypatch.setattr(
+            "apps.assessments.views.get_ai_runtime_health",
+            lambda: {
+                "runtime": "gemini",
+                "provider_available": True,
+                "model_available": True,
+                "settings": {"default_model": "gemini-2.5-flash-lite"},
+            },
+        )
+
+        response = self.client.get(reverse("assessment-runtime-health"))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["runtime"] == "gemini"
+        assert response.data["provider_available"] is True
+        assert response.data["model_available"] is True
+        assert response.data["settings"]["default_model"] == "gemini-2.5-flash-lite"
+
+    def test_preview_questions_returns_generation_metadata(self, monkeypatch):
+        def fake_generate_stage_one(role_key, role_graph):
+            return (
+                [
+                    {
+                        "id": "s1_q1",
+                        "stage": 1,
+                        "subskill_key": "apis",
+                        "dimension_key": "backend_core",
+                        "question_text": "How comfortable are you with API design?",
+                        "question_type": "multiple_choice",
+                        "interaction_mode": "single_select",
+                        "options": [],
+                    }
+                ],
+                AIInvocationMetadata(
+                    source="llm",
+                    processing_time_ms=1200,
+                    model="gemini-2.5-flash-lite",
+                    provider="gemini",
+                    version=role_graph.version,
+                    trace_id="trace-preview-1",
+                    fallback_used=False,
+                ),
+            )
+
+        monkeypatch.setattr(
+            "apps.assessments.views.AssessmentAIService.generate_stage_one",
+            fake_generate_stage_one,
+        )
+        monkeypatch.setattr(
+            "apps.assessments.views.get_ai_runtime_health",
+            lambda: {
+                "runtime": "gemini",
+                "provider_available": True,
+                "model_available": True,
+                "settings": {"default_model": "gemini-2.5-flash-lite"},
+            },
+        )
+
+        response = self.client.post(
+            reverse("assessment-preview-questions"),
+            {"target_career": "Backend Developer"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["target_career"] == "Backend Developer"
+        assert response.data["role_key"] == "backend"
+        assert response.data["question_count"] == 1
+        assert response.data["metadata"]["model"] == "gemini-2.5-flash-lite"
+        assert response.data["metadata"]["provider"] == "gemini"
+        assert response.data["metadata"]["fallback_used"] is False
+        assert response.data["runtime_health"]["provider_available"] is True
+        assert response.data["questions"][0]["id"] == "s1_q1"
+
+    def test_preview_questions_can_require_live_llm(self, monkeypatch):
+        def fake_generate_stage_one(role_key, role_graph):
+            return (
+                [
+                    {
+                        "id": "s1_q1",
+                        "stage": 1,
+                        "subskill_key": "apis",
+                        "dimension_key": "backend_core",
+                        "question_text": "Fallback question",
+                        "question_type": "multiple_choice",
+                        "interaction_mode": "single_select",
+                        "options": [],
+                    }
+                ],
+                AIInvocationMetadata(
+                    source="fallback",
+                    processing_time_ms=12,
+                    model=None,
+                    provider="gemini",
+                    version=role_graph.version,
+                    trace_id="trace-preview-fallback",
+                    fallback_used=True,
+                    error_code="AIServiceError",
+                ),
+            )
+
+        monkeypatch.setattr(
+            "apps.assessments.views.AssessmentAIService.generate_stage_one",
+            fake_generate_stage_one,
+        )
+        monkeypatch.setattr(
+            "apps.assessments.views.get_ai_runtime_health",
+            lambda: {
+                "runtime": "gemini",
+                "provider_available": False,
+                "model_available": False,
+                "settings": {"default_model": "gemini-2.5-flash-lite"},
+            },
+        )
+
+        response = self.client.post(
+            reverse("assessment-preview-questions"),
+            {"target_career": "Backend Developer", "require_live_llm": True},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert response.data["error"] == "Live Gemini generation is unavailable"
+        assert response.data["metadata"]["fallback_used"] is True
+        assert response.data["runtime_health"]["provider_available"] is False
 
     def test_submit_assessment_responses(self):
         """Test submitting assessment responses queues async evaluation."""
@@ -369,7 +499,9 @@ class TestAssessmentQuestionGeneration:
         assert detail_response.status_code == status.HTTP_200_OK
         questions = detail_response.data['questions']
 
-        assert len(questions) > 0
+        assert detail_response.data['stage'] == 'stage_1'
+        assert detail_response.data['presentation']['submission_state'] == 'stage_1_ready'
+        assert len(questions) == 5
         assert all('id' in q for q in questions)
         assert all('question' in q for q in questions)
         assert all('type' in q for q in questions)
@@ -386,7 +518,4 @@ class TestAssessmentQuestionGeneration:
 
         question_types = {q['type'] for q in questions}
 
-        # Should have multiple question types
         assert 'multiple_choice' in question_types
-        assert 'scale' in question_types
-        assert 'text' in question_types

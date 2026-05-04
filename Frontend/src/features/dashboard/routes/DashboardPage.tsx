@@ -75,16 +75,18 @@ export default function DashboardPage() {
     .filter((milestone) => milestone.status === "not_started" || milestone.status === "in_progress")
     .slice(0, 4);
 
-  const activePhase = roadmap?.phases?.find((phase) => phase.status === "in_progress")
+  const activePhase = roadmap?.phases?.find((phase) => phase.id === stats?.current_phase?.id)
+    ?? roadmap?.phases?.find((phase) => phase.status === "in_progress")
     ?? roadmap?.phases?.find((phase) => phase.status === "not_started")
     ?? roadmap?.phases?.[0]
     ?? null;
 
   const completedMilestoneCount = stats?.completed_milestones ?? completedMilestones.length;
   const totalMilestoneCount = stats?.total_milestones ?? allMilestones.length;
+  const completedCourseCount = stats?.completed_courses ?? 0;
   const phaseProgress = getPhaseProgress(activePhase, roadmap);
-  const nextActionTitle = roadmap?.journey_summary?.next_action_title ?? "Create your first roadmap";
-  const nextActionSummary = roadmap?.journey_summary?.next_action_summary
+  const nextActionTitle = stats?.next_action?.title ?? roadmap?.journey_summary?.next_action_title ?? "Create your first roadmap";
+  const nextActionSummary = stats?.next_action?.summary ?? roadmap?.journey_summary?.next_action_summary
     ?? "Start with an assessment so Sha8alny can turn your goals into a concrete learning path.";
   const roadmapDescription = roadmap?.description
     ?? "The dashboard will become a living atlas once you generate a roadmap from assessment results or a template.";
@@ -92,6 +94,18 @@ export default function DashboardPage() {
   const progressNarrative = roadmap
     ? `${completedMilestoneCount} of ${totalMilestoneCount} milestones are already translated into visible forward motion.`
     : "The atlas is ready for your first route. Once a roadmap exists, progress starts reading like a story instead of a spreadsheet.";
+  const streakDays = stats?.pace?.current_streak_days ?? 0;
+  const loggedHours = stats?.pace?.total_learning_hours ?? 0;
+  const paceValue = streakDays > 0
+    ? `${streakDays} day streak`
+    : loggedHours > 0
+      ? `${loggedHours.toFixed(1)}h logged`
+      : `${roadmap?.weekly_hours_commitment ?? 0}h planned`;
+  const paceSupportingText = streakDays > 0
+    ? "Consecutive days of visible activity on the active roadmap."
+    : loggedHours > 0
+      ? "Time captured against the current roadmap."
+      : "Weekly commitment until activity starts showing up as completed work.";
 
   const routeLinks = roadmap
     ? [
@@ -254,13 +268,25 @@ export default function DashboardPage() {
 
             <div className="flex items-end justify-between gap-4 border-t border-border/50 pt-5">
               <div>
-                <p className="type-kicker">Study pace</p>
+                <p className="type-kicker">Completed courses</p>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Weekly commitment shaping the route.
+                  Proof that milestone work reached finished learning material.
                 </p>
               </div>
               <p className="text-3xl font-bold text-foreground">
-                {roadmap?.weekly_hours_commitment ?? 0}h
+                {completedCourseCount}
+              </p>
+            </div>
+
+            <div className="flex items-end justify-between gap-4 border-t border-border/50 pt-5">
+              <div>
+                <p className="type-kicker">Learning pace</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  {paceSupportingText}
+                </p>
+              </div>
+              <p className="text-3xl font-bold text-foreground">
+                {paceValue}
               </p>
             </div>
 
