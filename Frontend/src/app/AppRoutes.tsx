@@ -23,6 +23,9 @@ const JobDetailPage = lazy(() => import("@/features/jobs/routes/JobDetailPage"))
 const NotificationsPage = lazy(() => import("@/features/notifications/routes/NotificationsPage"));
 const ProfilePage = lazy(() => import("@/features/profile/routes/ProfilePage"));
 const SettingsPage = lazy(() => import("@/features/settings/routes/SettingsPage"));
+const ResumeListPage = lazy(() => import("@/features/career-tools/routes/ResumeListPage"));
+const ResumeEditorPage = lazy(() => import("@/features/career-tools/routes/ResumeEditorPage"));
+const ResumePreviewPage = lazy(() => import("@/features/career-tools/routes/ResumePreviewPage"));
 
 const withProtectedLayout = (element: ReactElement) => (
   <ProtectedRoute>
@@ -65,6 +68,10 @@ export const AppRoutes = () => {
           path={ROUTES.notifications}
           element={withProtectedLayout(<NotificationsPage />)}
         />
+        <Route path={ROUTES.resumeList} element={withProtectedLayout(<ResumeListPage />)} />
+        <Route path={ROUTES.resumeNew} element={withProtectedLayout(<ResumeEditorPage />)} />
+        <Route path={ROUTES.resumeEdit()} element={withProtectedLayout(<ResumeEditorPage />)} />
+        <Route path={ROUTES.resumePreview()} element={withProtectedLayout(<ResumePreviewPage />)} />
         <Route path={ROUTES.settings} element={withProtectedLayout(<SettingsPage />)} />
 
         <Route path="*" element={<NotFoundPage />} />

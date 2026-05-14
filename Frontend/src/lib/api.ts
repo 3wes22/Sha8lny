@@ -859,6 +859,78 @@ export interface AssessmentListItem {
 }
 
 // ============================================================================
+// Resume / Career Tools Types
+// ============================================================================
+
+export interface ResumeListItem {
+  id: string;
+  title: string;
+  template_name: string;
+  is_primary: boolean;
+  is_ats_optimized: boolean;
+  ats_score: number | null;
+  ats_grade: string;
+  completeness: number;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Resume {
+  id: string;
+  user: string;
+  title: string;
+  template_name: string;
+  personal_info: Record<string, unknown>;
+  work_experience: Record<string, unknown>;
+  education: Record<string, unknown>;
+  skills: Record<string, unknown>;
+  certifications: Record<string, unknown>;
+  projects: Record<string, unknown>;
+  languages: Record<string, unknown>;
+  is_ats_optimized: boolean;
+  ats_score: number | null;
+  ats_grade: string;
+  ats_suggestions: Record<string, unknown>;
+  pdf_file: string | null;
+  docx_file: string | null;
+  has_files: boolean;
+  available_formats: string;
+  is_primary: boolean;
+  version: number;
+  completeness: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResumeCreateRequest {
+  title: string;
+  template_name?: string;
+  personal_info?: Record<string, unknown>;
+  work_experience?: Record<string, unknown>;
+  education?: Record<string, unknown>;
+  skills?: Record<string, unknown>;
+  certifications?: Record<string, unknown>;
+  projects?: Record<string, unknown>;
+  languages?: Record<string, unknown>;
+  is_primary?: boolean;
+}
+
+export interface ATSResult {
+  message: string;
+  ats_score: number;
+  ats_grade: string;
+  suggestions: { improvements: string[] };
+}
+
+export interface GenerateResult {
+  message: string;
+  resume_id: string;
+  format: string;
+  file_url: string | null;
+}
+
+// ============================================================================
 // API Endpoints
 // ============================================================================
 
@@ -1035,6 +1107,32 @@ export const notificationApi = {
 
   markAllRead: () =>
     apiClient.post<{ message: string; count: number }>("/notifications/notifications/mark_all_read/", {}),
+};
+
+export const resumeApi = {
+  list: () =>
+    apiClient.get<ResumeListItem[]>('/career-tools/resumes/'),
+
+  get: (id: string) =>
+    apiClient.get<Resume>(`/career-tools/resumes/${id}/`),
+
+  create: (data: ResumeCreateRequest) =>
+    apiClient.post<Resume>('/career-tools/resumes/', data),
+
+  update: (id: string, data: Partial<ResumeCreateRequest>) =>
+    apiClient.patch<Resume>(`/career-tools/resumes/${id}/`, data),
+
+  delete: (id: string) =>
+    apiClient.delete<void>(`/career-tools/resumes/${id}/`),
+
+  generateFile: (id: string, format: 'pdf' | 'docx') =>
+    apiClient.post<GenerateResult>(
+      `/career-tools/resumes/${id}/generate/`,
+      { format }
+    ),
+
+  optimizeATS: (id: string) =>
+    apiClient.post<ATSResult>(`/career-tools/resumes/${id}/optimize_ats/`),
 };
 
 export const advisorApi = {

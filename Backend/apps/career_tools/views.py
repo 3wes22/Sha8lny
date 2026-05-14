@@ -54,22 +54,20 @@ class ResumeViewSet(viewsets.ModelViewSet):
             return ResumeListSerializer
         return ResumeSerializer
 
+    def perform_create(self, serializer):
+        """Assign current user when creating resume."""
+        serializer.save(user=self.request.user)
+
     @action(detail=True, methods=['post'])
     def generate(self, request, pk=None):
         """
         Generate resume as PDF or DOCX.
 
-        POST /resumes/{id}/generate/
-
-        Query Parameters:
-        - format: pdf or docx (default: pdf)
-
-        Returns: File download
-
-        TODO: Implement PDF/DOCX generation using ReportLab or python-docx
+        POST /resumes/{id}/generate/?format=pdf
         """
         resume = self.get_object()
-        format_type = request.query_params.get('format', 'pdf').lower()
+        format_type = request.query_params.get('format') or request.data.get('format', 'pdf')
+        format_type = format_type.lower()
 
         if format_type not in ['pdf', 'docx']:
             return Response(
@@ -77,13 +75,28 @@ class ResumeViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # TODO: Implement actual PDF/DOCX generation
-        # For now, return a placeholder response
-        return Response({
-            'message': f'{format_type.upper()} generation is pending implementation',
-            'resume_id': str(resume.id),
-            'format': format_type
-        }, status=status.HTTP_501_NOT_IMPLEMENTED)
+        from apps.career_tools.services import ResumeService
+
+        try:
+            if format_type == 'pdf':
+                resume = ResumeService.generate_pdf(resume)
+                file_url = request.build_absolute_uri(resume.pdf_file.url) if resume.pdf_file else None
+            else:
+                resume = ResumeService.generate_docx(resume)
+                file_url = request.build_absolute_uri(resume.docx_file.url) if resume.docx_file else None
+
+            return Response({
+                'message': f'{format_type.upper()} generated successfully',
+                'resume_id': str(resume.id),
+                'format': format_type,
+                'file_url': file_url,
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to generate {format_type.upper()}: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @action(detail=True, methods=['post'])
     def optimize_ats(self, request, pk=None):
@@ -91,31 +104,26 @@ class ResumeViewSet(viewsets.ModelViewSet):
         Optimize resume for ATS (Applicant Tracking Systems).
 
         POST /resumes/{id}/optimize_ats/
-
-        SRS FR-23: ATS-Optimized Resume Generation
-
-        Analyzes resume and provides ATS optimization suggestions.
-
-        TODO: Implement ATS optimization using AI
         """
         resume = self.get_object()
 
-        # TODO: Implement ATS optimization logic
-        # For now, return a placeholder score
-        resume.is_ats_optimized = True
-        resume.ats_score = 85.0
-        resume.save()
+        from apps.career_tools.services import ResumeService
 
-        return Response({
-            'message': 'ATS optimization analysis complete',
-            'ats_score': resume.ats_score,
-            'suggestions': [
-                'Add more keywords from job description',
-                'Use standard section headings',
-                'Avoid tables and complex formatting',
-                'Include measurable achievements'
-            ]
-        }, status=status.HTTP_200_OK)
+        try:
+            resume = ResumeService.optimize_for_ats(resume)
+
+            return Response({
+                'message': 'ATS optimization analysis complete',
+                'ats_score': float(resume.ats_score),
+                'ats_grade': resume.ats_grade_display,
+                'suggestions': resume.ats_suggestions,
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {'error': f'ATS optimization failed: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     def destroy(self, request, *args, **kwargs):
         """Soft delete resume."""
