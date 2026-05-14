@@ -487,7 +487,7 @@ class TimeLog(BaseModel):
         ]
         constraints = [
             models.CheckConstraint(
-                check=models.Q(ended_at__gt=models.F('started_at')),
+                condition=models.Q(ended_at__gt=models.F('started_at')),
                 name='chk_timelog_chronology'
             )
         ]

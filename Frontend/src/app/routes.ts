@@ -3,6 +3,7 @@ import {
   Bell,
   BookMarked,
   BriefcaseBusiness,
+  FileText,
   LayoutDashboard,
   MessageCircleMore,
   Settings,
@@ -28,6 +29,10 @@ export const ROUTES = {
   jobDetail: (jobId = ":jobId") => `/jobs/${jobId}`,
   settings: "/settings",
   notifications: "/notifications",
+  resumeList: "/career-tools/resumes",
+  resumeNew: "/career-tools/resumes/new",
+  resumeEdit: (resumeId = ":resumeId") => `/career-tools/resumes/${resumeId}/edit`,
+  resumePreview: (resumeId = ":resumeId") => `/career-tools/resumes/${resumeId}`,
 } as const;
 
 export interface AppRouteMeta {
@@ -146,6 +151,15 @@ export const APP_ROUTE_META: AppRouteMeta[] = [
     description: "Adjust delivery, privacy, and reminder preferences.",
     protected: true,
     icon: Settings,
+  },
+  {
+    key: "resumeList",
+    path: ROUTES.resumeList,
+    title: "Resume Builder",
+    description: "Build and optimize your professional resume.",
+    protected: true,
+    showInPrimaryNav: true,
+    icon: FileText,
   },
   {
     key: "jobDetail",
