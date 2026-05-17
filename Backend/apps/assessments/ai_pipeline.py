@@ -25,6 +25,8 @@ from apps.assessments.engine import (
 from apps.assessments.fallback_scenarios import get_curated_fallback_scenario
 from apps.assessments.models import Assessment
 from apps.assessments.role_graph import load_role_graph, resolve_role_key
+from apps.assessments.scenario_corpus.registry import SCENARIO_CORPUS_VERSION
+from apps.assessments.scenario_retriever import ScenarioRetriever
 from apps.assessments.services import BaselineAssessmentAnalyzer
 from apps.core.ai_contracts import (
     AIInvocationMetadata,
@@ -33,7 +35,12 @@ from apps.core.ai_contracts import (
     RoadmapSignal,
 )
 from apps.core.ai_logging import build_ai_metadata
-from apps.core.ai_settings import AI_PROVIDER, LLM_TIMEOUT_SECONDS
+from apps.core.ai_settings import (
+    AI_PROVIDER,
+    ASSESSMENT_SCENARIO_RAG_ENABLED,
+    LLM_TIMEOUT_SECONDS,
+    SCENARIO_RAG_MAX_EXAMPLES_PER_PROMPT,
+)
 from apps.core.ai_validation import (
     build_stage_validation_flags,
     build_stage_choice_options,
@@ -787,7 +794,71 @@ class AssessmentAIService:
             '- distractors like "Disable logging" or "Change an unrelated part of the system first."\n'
             f"{gap_lines}"
             f"{STAGE_QUESTION_FEW_SHOT_EXAMPLES}\n"
+            f"{cls._build_retrieved_examples_block(role_graph=role_graph, blueprints=blueprints, stage=stage)}"
             f"Blueprints:\n{json.dumps(blueprints, ensure_ascii=True)}"
+        )
+
+    @classmethod
+    def _build_retrieved_examples_block(
+        cls,
+        *,
+        role_graph,
+        blueprints: list[dict[str, Any]],
+        stage: int,
+    ) -> str:
+        """Return an additive retrieved-examples block for the prompt.
+
+        Returns the empty string when the feature flag is off, when the
+        corpus has nothing for the blueprint mix, or when retrieval fails.
+        That empty-string contract is what keeps the prompt byte-identical
+        to the pre-feature behaviour when ``ASSESSMENT_SCENARIO_RAG_ENABLED``
+        is ``False``.
+        """
+        if not ASSESSMENT_SCENARIO_RAG_ENABLED:
+            return ""
+
+        collected: list[dict[str, Any]] = []
+        seen_doc_ids: set[str] = set()
+        role_key = getattr(role_graph, "role_key", None) or ""
+
+        for blueprint in blueprints or []:
+            if len(collected) >= SCENARIO_RAG_MAX_EXAMPLES_PER_PROMPT:
+                break
+            scenarios = ScenarioRetriever.retrieve_for_blueprint(
+                role_key=role_key,
+                blueprint=blueprint,
+                stage=stage,
+            )
+            for scenario in scenarios:
+                doc_id = str(scenario.get("doc_id") or "")
+                if doc_id and doc_id in seen_doc_ids:
+                    continue
+                if doc_id:
+                    seen_doc_ids.add(doc_id)
+                collected.append(scenario)
+                if len(collected) >= SCENARIO_RAG_MAX_EXAMPLES_PER_PROMPT:
+                    break
+
+        if not collected:
+            return ""
+
+        slim_examples = [
+            {
+                "subskill_key": scenario.get("subskill_key"),
+                "competency": scenario.get("competency"),
+                "question_type": scenario.get("question_type"),
+                "scenario_context": scenario.get("scenario_context"),
+                "stem": scenario.get("stem"),
+                "options": scenario.get("options") or [],
+                "answer_key": scenario.get("answer_key") or {},
+                "explanation": scenario.get("explanation"),
+            }
+            for scenario in collected
+        ]
+        return (
+            "Additional on-topic examples retrieved from the curated corpus "
+            "(use as stylistic and scenario references, do not copy verbatim):\n"
+            f"{json.dumps(slim_examples, ensure_ascii=True)}\n"
         )
 
     @classmethod
@@ -1073,10 +1144,13 @@ class AssessmentAIService:
 
     @classmethod
     def _stage_one_cache_key(cls, role_key: str, graph_version: str) -> str:
-        return (
+        base_key = (
             f"assessment:stage1:{cls.stage_question_prompt_version}:"
             f"{role_key}:{graph_version}"
         )
+        if ASSESSMENT_SCENARIO_RAG_ENABLED:
+            return f"{base_key}:{SCENARIO_CORPUS_VERSION}"
+        return base_key
 
     @classmethod
     def generate_stage_one(
