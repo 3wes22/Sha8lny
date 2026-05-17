@@ -468,3 +468,125 @@ def test_deterministic_staged_analysis_uses_graph_driven_role_recommendations():
     )
 
     assert [item["title"] for item in analysis.recommended_careers] == [role_graph.role_label]
+
+
+
+# ---------------------------------------------------------------------------
+# Scenario RAG corpus tests (specs/005-scenario-rag-corpus)
+# ---------------------------------------------------------------------------
+
+from pathlib import Path
+from unittest.mock import MagicMock
+
+from apps.assessments.engine import StageAllocator
+from apps.assessments.scenario_corpus.registry import SCENARIO_CORPUS_VERSION
+from apps.assessments.scenario_retriever import ScenarioRetriever
+
+
+_PROMPT_FIXTURE = Path(__file__).parent / "fixtures" / "stage_one_prompt_backend.txt"
+
+
+def _enable_scenario_rag(monkeypatch, *, enabled: bool) -> None:
+    monkeypatch.setattr(
+        "apps.assessments.ai_pipeline.ASSESSMENT_SCENARIO_RAG_ENABLED", enabled
+    )
+    monkeypatch.setattr(
+        "apps.assessments.scenario_retriever.ASSESSMENT_SCENARIO_RAG_ENABLED", enabled
+    )
+    monkeypatch.setattr(
+        "apps.core.ai_settings.ASSESSMENT_SCENARIO_RAG_ENABLED", enabled
+    )
+
+
+def test_stage_one_prompt_matches_legacy_when_flag_off(monkeypatch):
+    """SC-003: with the flag off, the prompt content is byte-identical to the
+    pre-feature snapshot fixture."""
+    _enable_scenario_rag(monkeypatch, enabled=False)
+    ScenarioRetriever.reset()
+
+    graph = load_role_graph("backend")
+    targets = StageAllocator.allocate_stage_one(graph)
+    prompt = AssessmentAIService._build_stage_one_prompt(graph, targets)
+
+    assert _PROMPT_FIXTURE.exists(), (
+        "Missing prompt snapshot fixture. Re-capture with: python -c \"...\" "
+        f"and write to {_PROMPT_FIXTURE}"
+    )
+    expected = _PROMPT_FIXTURE.read_text(encoding="utf-8")
+    assert prompt == expected, (
+        "Stage-one prompt drifted from the pre-feature snapshot. If the change "
+        "is intentional, re-capture the fixture; otherwise the scenario RAG "
+        "splice is leaking content when the flag is off."
+    )
+
+
+def test_stage_one_prompt_omits_retrieved_block_when_flag_off(monkeypatch):
+    _enable_scenario_rag(monkeypatch, enabled=False)
+    ScenarioRetriever.reset()
+
+    graph = load_role_graph("backend")
+    targets = StageAllocator.allocate_stage_one(graph)
+    prompt = AssessmentAIService._build_stage_one_prompt(graph, targets)
+    assert "retrieved from the curated corpus" not in prompt
+
+
+def test_stage_one_prompt_includes_retrieved_block_when_flag_on(monkeypatch):
+    """With the flag on and the retriever returning a real seed payload,
+    _build_stage_prompt must splice an on-topic block into the prompt."""
+    _enable_scenario_rag(monkeypatch, enabled=True)
+    ScenarioRetriever.reset()
+
+    from apps.assessments.scenario_corpus.backend import SCENARIOS
+
+    backend_payloads = [
+        s for s in SCENARIOS
+        if s["question_type"] == "single_choice" and s["stage"] == 1
+    ]
+    assert backend_payloads, "Expected backend stage-1 single_choice seeds"
+
+    def fake_retrieve(*, role_key, blueprint, stage, top_k=1):
+        question_type = blueprint.get("question_type")
+        subskill = blueprint.get("subskill_key")
+        for scenario in backend_payloads:
+            if (
+                scenario["role_key"] == role_key
+                and scenario["question_type"] == question_type
+                and scenario["stage"] == stage
+                and scenario["subskill_key"] == subskill
+            ):
+                return [scenario]
+        return [backend_payloads[0]]
+
+    monkeypatch.setattr(
+        ScenarioRetriever,
+        "retrieve_for_blueprint",
+        classmethod(lambda cls, **kw: fake_retrieve(**kw)),
+    )
+
+    graph = load_role_graph("backend")
+    targets = StageAllocator.allocate_stage_one(graph)
+    prompt = AssessmentAIService._build_stage_one_prompt(graph, targets)
+
+    assert "retrieved from the curated corpus" in prompt
+    seed_context_snippet = backend_payloads[0]["scenario_context"][:40]
+    assert seed_context_snippet in prompt
+
+
+def test_generation_completes_when_corpus_returns_empty_with_flag_on(monkeypatch):
+    """T023: with the flag on but no retrievable scenarios, stage-one prompt
+    construction still works and contains the static few-shot block alone."""
+    _enable_scenario_rag(monkeypatch, enabled=True)
+    ScenarioRetriever.reset()
+
+    monkeypatch.setattr(
+        ScenarioRetriever,
+        "retrieve_for_blueprint",
+        classmethod(lambda cls, **kw: []),
+    )
+
+    graph = load_role_graph("backend")
+    targets = StageAllocator.allocate_stage_one(graph)
+    prompt = AssessmentAIService._build_stage_one_prompt(graph, targets)
+
+    assert "retrieved from the curated corpus" not in prompt
+    assert "Generate 5 calibration questions" in prompt

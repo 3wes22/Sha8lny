@@ -1,0 +1,107 @@
+Generate 5 calibration questions for Backend Developer.
+Return exactly 5 question objects in a top-level JSON field named "questions".
+Keep the same target order shown below.
+Across the 5 questions, progress from fundamentals to applied debugging and finish with tradeoff reasoning.
+Every stem MUST begin with a concrete scenario: a system, a failure, a code review finding, or a requirement conflict.
+Generate scenario-based questions, not generic philosophy questions.
+Vary question framing across the batch. No two questions may test the same concept from the same angle.
+Do not repeat stage-one wording or reuse the same stem template across questions.
+Each distractor must be something a junior developer might plausibly choose, but it must still be wrong.
+Avoid obvious joke or sabotage answers.
+For REST questions, include real semantics such as PUT vs PATCH or POST plus idempotency keys when relevant.
+For database questions, reference evidence such as execution plans, indexes, cardinality, and join strategy when relevant.
+For observability questions, prefer logs, metrics, traces, and failure boundaries over generic advice.
+For requirements questions, translate vague requests into measurable acceptance criteria or SLO-like targets.
+Use only "single_choice", "multi_select", or "open_ended" for "question_type".
+Each object must include: "subskill_key", "competency", "learning_objective", "scenario_context", "stem", "question_type", "difficulty", "estimated_seconds", "options", "answer_key", "explanation", "correct_answer_rationale", and "option_rationales".
+For "single_choice": write 4 parallel options and make exactly one best answer exist.
+For "multi_select": the stem must explicitly say "Select all that apply.", write 5 options, and include 2 or 3 correct answers.
+For "open_ended": options must be [], and answer_key must include expected_concepts plus required_concept_count.
+Do not ask generic self-rating questions.
+Do not use these banned low-signal patterns:
+- "Which option is the strongest engineering choice for X?"
+- "Choose the option that preserves correctness, clarity, and maintainability."
+- distractors like "Disable logging" or "Change an unrelated part of the system first."
+
+Use the few-shot examples below as the quality bar. Follow the same field names and realism level.
+
+Example single_choice:
+{
+  "subskill_key": "http_api_design",
+  "competency": "HTTP API Design",
+  "learning_objective": "Choose the safest payment retry design for a write endpoint.",
+  "scenario_context": "A payment API receives duplicate POST /payments requests after the client times out and retries.",
+  "stem": "Which design best prevents a double charge while keeping the API predictable?",
+  "question_type": "single_choice",
+  "difficulty": 3,
+  "estimated_seconds": 50,
+  "options": [
+    {"id": "a", "label": "Require an idempotency key and replay the first successful result."},
+    {"id": "b", "label": "Accept both requests and reconcile duplicate charges later."},
+    {"id": "c", "label": "Convert the endpoint to GET so retries are safe."},
+    {"id": "d", "label": "Delay each charge for a few seconds before processing."}
+  ],
+  "answer_key": {"correct_option_ids": ["a"], "scoring": "single_best"},
+  "explanation": "The API needs deterministic write deduplication at request time.",
+  "correct_answer_rationale": "Idempotency keys treat retries as the same logical operation without changing the write contract.",
+  "option_rationales": [
+    {"option_id": "a", "is_correct": true, "rationale": "It makes duplicate retries deterministic and observable."},
+    {"option_id": "b", "is_correct": false, "rationale": "It accepts corruption first and relies on cleanup later."},
+    {"option_id": "c", "is_correct": false, "rationale": "GET must not perform side effects."},
+    {"option_id": "d", "is_correct": false, "rationale": "Timing delays do not eliminate duplicates under concurrency."}
+  ]
+}
+
+Example multi_select:
+{
+  "subskill_key": "query_optimization",
+  "competency": "Query Optimization",
+  "learning_objective": "Choose the strongest evidence-first actions for a slow relational query.",
+  "scenario_context": "A products query takes four seconds on two million rows and the team has not checked the execution plan yet.",
+  "stem": "Which next actions are strongest? Select all that apply.",
+  "question_type": "multi_select",
+  "difficulty": 4,
+  "estimated_seconds": 70,
+  "options": [
+    {"id": "a", "label": "Capture EXPLAIN ANALYZE output to inspect row estimates and scan strategy."},
+    {"id": "b", "label": "Add an index that matches the hot predicate after the plan confirms it."},
+    {"id": "c", "label": "Refactor unrelated ORM code before collecting measurements."},
+    {"id": "d", "label": "Check cardinality and whether the predicate belongs in a dedicated indexed column."},
+    {"id": "e", "label": "Drop the JSONB column immediately because relational databases dislike flexible schemas."}
+  ],
+  "answer_key": {"correct_option_ids": ["a", "b", "d"], "scoring": "partial_credit"},
+  "explanation": "Strong tuning starts with measured plan evidence and a targeted index or schema change.",
+  "correct_answer_rationale": "The right sequence moves from evidence to a specific fix instead of guessing at causes.",
+  "option_rationales": [
+    {"option_id": "a", "is_correct": true, "rationale": "The plan shows where time and bad estimates come from."},
+    {"option_id": "b", "is_correct": true, "rationale": "Index design should match the confirmed access pattern."},
+    {"option_id": "c", "is_correct": false, "rationale": "It changes unrelated code before confirming the database bottleneck."},
+    {"option_id": "d", "is_correct": true, "rationale": "Cardinality and schema shape determine whether indexing can help."},
+    {"option_id": "e", "is_correct": false, "rationale": "It jumps to a destructive schema change without evidence."}
+  ]
+}
+
+Example open_ended:
+{
+  "subskill_key": "logging_monitoring",
+  "competency": "Logging and Monitoring",
+  "learning_objective": "Explain how to isolate a cross-service latency incident with correlated telemetry.",
+  "scenario_context": "A checkout request intermittently spikes to five seconds across three services during peak traffic.",
+  "stem": "Explain how you would narrow the failing boundary and what evidence you would collect first.",
+  "question_type": "open_ended",
+  "difficulty": 4,
+  "estimated_seconds": 90,
+  "options": [],
+  "answer_key": {
+    "expected_concepts": ["trace or correlation id", "structured logs", "latency or error-rate metrics by hop"],
+    "required_concept_count": 2,
+    "forbidden_concepts": ["disable logging"],
+    "scoring": "concept_coverage"
+  },
+  "explanation": "A strong answer correlates evidence across services instead of restarting blindly.",
+  "correct_answer_rationale": "The answer should connect request tracing with per-hop telemetry.",
+  "option_rationales": []
+}
+
+Blueprints:
+[{"slot": 1, "subskill_key": "http_api_design", "competency": "HTTP API Design", "dimension_key": "api_service_design", "question_type": "single_choice", "difficulty": 4, "estimated_seconds": 45, "learning_objective_hint": "Assess concrete judgment in http api design using one main competency only.", "progression_band": "fundamentals", "focus": "narrow one decision so exactly one best answer exists", "gap_priority": "normal"}, {"slot": 2, "subskill_key": "relational_modeling", "competency": "Relational Modeling", "dimension_key": "data_persistence", "question_type": "single_choice", "difficulty": 4, "estimated_seconds": 45, "learning_objective_hint": "Assess concrete judgment in relational modeling using one main competency only.", "progression_band": "fundamentals", "focus": "narrow one decision so exactly one best answer exists", "gap_priority": "normal"}, {"slot": 3, "subskill_key": "logging_monitoring", "competency": "Logging and Monitoring", "dimension_key": "reliability_operations", "question_type": "single_choice", "difficulty": 4, "estimated_seconds": 45, "learning_objective_hint": "Assess concrete judgment in logging and monitoring using one main competency only.", "progression_band": "applied_debugging", "focus": "narrow one decision so exactly one best answer exists", "gap_priority": "normal"}, {"slot": 4, "subskill_key": "requirement_translation", "competency": "Requirement Translation", "dimension_key": "delivery_collaboration", "question_type": "single_choice", "difficulty": 4, "estimated_seconds": 45, "learning_objective_hint": "Assess concrete judgment in requirement translation using one main competency only.", "progression_band": "applied_debugging", "focus": "narrow one decision so exactly one best answer exists", "gap_priority": "normal"}, {"slot": 5, "subskill_key": "service_decomposition", "competency": "Service Decomposition", "dimension_key": "api_service_design", "question_type": "single_choice", "difficulty": 4, "estimated_seconds": 45, "learning_objective_hint": "Assess concrete judgment in service decomposition using one main competency only.", "progression_band": "tradeoff_reasoning", "focus": "narrow one decision so exactly one best answer exists", "gap_priority": "normal"}]

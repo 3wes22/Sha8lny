@@ -1235,3 +1235,84 @@ def test_stage_one_generation_uses_extended_timeout_floor(monkeypatch):
     assert questions
     assert observed["timeout_seconds"] == 115
     assert observed["max_output_tokens"] == 3200
+
+
+
+# ---------------------------------------------------------------------------
+# Scenario corpus cache invalidation (specs/005-scenario-rag-corpus T022)
+# ---------------------------------------------------------------------------
+
+
+def test_stage_one_cache_key_excludes_scenario_corpus_version_when_flag_off(monkeypatch):
+    monkeypatch.setattr(
+        "apps.assessments.ai_pipeline.ASSESSMENT_SCENARIO_RAG_ENABLED", False
+    )
+    key = AssessmentAIService._stage_one_cache_key("backend", "curated-v1")
+    assert key.endswith(":curated-v1"), (
+        f"With the flag off, cache key should not append the corpus version. Got: {key}"
+    )
+
+
+def test_stage_one_cache_key_includes_scenario_corpus_version_when_flag_on(monkeypatch):
+    from apps.assessments.scenario_corpus.registry import SCENARIO_CORPUS_VERSION
+
+    monkeypatch.setattr(
+        "apps.assessments.ai_pipeline.ASSESSMENT_SCENARIO_RAG_ENABLED", True
+    )
+    key = AssessmentAIService._stage_one_cache_key("backend", "curated-v1")
+    assert key.endswith(f":curated-v1:{SCENARIO_CORPUS_VERSION}"), (
+        f"With the flag on, cache key should append SCENARIO_CORPUS_VERSION. Got: {key}"
+    )
+
+
+def test_stage_one_generation_invalidates_cache_on_scenario_corpus_version_bump(monkeypatch):
+    """Bumping SCENARIO_CORPUS_VERSION must produce a different cache key and
+    therefore a cache miss on the next stage-one generation."""
+    monkeypatch.setattr(
+        "apps.assessments.ai_pipeline.ASSESSMENT_SCENARIO_RAG_ENABLED", True
+    )
+    monkeypatch.setattr(
+        "apps.assessments.ai_pipeline.SCENARIO_CORPUS_VERSION", "scenario-v1"
+    )
+
+    graph = load_role_graph("backend")
+    cache.clear()
+    calls = {"count": 0}
+
+    def fake_generate_structured(
+        self,
+        *,
+        prompt,
+        system="",
+        required_keys=(),
+        response_json_schema=None,
+    ):  # noqa: ARG001
+        calls["count"] += 1
+        return GemmaResponse(
+            text="{}",
+            payload=_stage_one_payload(graph),
+            metadata=build_ai_metadata(
+                source="llm",
+                processing_time_ms=12,
+                model="mock-gemma",
+            ),
+            prompt_tokens=10,
+            completion_tokens=20,
+        )
+
+    monkeypatch.setattr(
+        "apps.core.gemma_client.GemmaClient.generate_structured",
+        fake_generate_structured,
+    )
+
+    AssessmentAIService.generate_stage_one("backend", graph)
+    # Same version: should hit the cache.
+    AssessmentAIService.generate_stage_one("backend", graph)
+    assert calls["count"] == 1
+
+    # Bump corpus version: should miss the cache and regenerate.
+    monkeypatch.setattr(
+        "apps.assessments.ai_pipeline.SCENARIO_CORPUS_VERSION", "scenario-v2"
+    )
+    AssessmentAIService.generate_stage_one("backend", graph)
+    assert calls["count"] == 2

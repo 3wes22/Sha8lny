@@ -13,6 +13,7 @@ This file provides backend-specific guidance for the Sha8lny Django application.
 ### Completed Modules
 - ✅ **Users** (Phase 1): Auth, profiles, skills - 51 tests passing
 - ✅ **Assessments** (Phase 2): CRUD, questions, submission, results - 16 tests passing
+- ✅ **Assessment Scenario RAG Corpus** (spec `005-scenario-rag-corpus`): role-aware, schema-validated few-shot examples retrieved per blueprint from a local Chroma collection. Layered after the existing static few-shot block in `apps/assessments/ai_pipeline.py:_build_stage_prompt`. Default-off (`ASSESSMENT_SCENARIO_RAG_ENABLED=false`); ships with a 10-scenario backend seed converted from `BACKEND_FALLBACK_SCENARIOS`. Authoring under `apps/assessments/scenario_corpus/`; rebuild via `manage.py rebuild_scenario_index`; audit via `manage.py scenario_corpus_audit`.
 
 ### Next Module
 - 🔄 **Roadmaps** (Phase 3): Templates, progress tracking
