@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sha8alny.local/schemas/005-scenario-rag-corpus/scenario_document.schema.json",
+  "title": "ScenarioDocument",
+  "description": "Authored scenario stored in scenario_corpus/<role>.py and ingested into the assessment_scenarios Chroma collection. Mirrors the LLM stage-question response schema where applicable so retrieved examples are drop-in few-shot blocks.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "doc_id",
+    "role_key",
+    "subskill_key",
+    "competency",
+    "dimension_key",
+    "stage",
+    "question_type",
+    "difficulty",
+    "estimated_seconds",
+    "learning_objective",
+    "scenario_context",
+    "stem",
+    "options",
+    "answer_key",
+    "explanation",
+    "correct_answer_rationale",
+    "option_rationales",
+    "author",
+    "license",
+    "review_status",
+    "created_at",
+    "corpus_version"
+  ],
+  "properties": {
+    "doc_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+\\.[a-z0-9_]+\\.s[12]\\.(single_choice|multi_select|open_ended)\\.[a-z0-9_-]+$",
+      "description": "Stable identifier. Example: backend.http_api_design.s1.single_choice.fallback-seed"
+    },
+    "role_key": {
+      "type": "string",
+      "enum": [
+        "backend",
+        "frontend",
+        "fullstack",
+        "data_science",
+        "devops",
+        "android",
+        "machine_learning_engineer",
+        "ui_ux_designer"
+      ]
+    },
+    "subskill_key": {
+      "type": "string",
+      "description": "Must exist within the role_key's curated RoleGraph in role_graph_data.py."
+    },
+    "competency": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Must equal the matching SubSkill.label exactly."
+    },
+    "dimension_key": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Must equal the dimension of the matching SubSkill in the role graph."
+    },
+    "stage": {
+      "type": "integer",
+      "enum": [1, 2]
+    },
+    "question_type": {
+      "type": "string",
+      "enum": ["single_choice", "multi_select", "open_ended"]
+    },
+    "difficulty": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "estimated_seconds": {
+      "type": "integer",
+      "minimum": 30,
+      "maximum": 120
+    },
+    "learning_objective": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scenario_context": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One or two sentences describing a concrete engineering scenario."
+    },
+    "stem": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Decision prompt. For multi_select, must end with 'Select all that apply.'"
+    },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "answer_key": {
+      "type": "object",
+      "description": "Shape depends on question_type. Validated programmatically by validate_scenario(), not in this JSON Schema.",
+      "properties": {
+        "correct_option_ids": { "type": "array", "items": { "type": "string" } },
+        "scoring": {
+          "type": "string",
+          "enum": ["single_best", "partial_credit", "concept_coverage"]
+        },
+        "expected_concepts": { "type": "array", "items": { "type": "string" } },
+        "required_concept_count": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "forbidden_concepts": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "explanation": { "type": "string", "minLength": 1 },
+    "correct_answer_rationale": { "type": "string", "minLength": 1 },
+    "option_rationales": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["option_id", "is_correct", "rationale"],
+        "properties": {
+          "option_id": { "type": "string", "minLength": 1 },
+          "is_correct": { "type": "boolean" },
+          "rationale": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "helper": { "type": "string", "minLength": 1 },
+    "author": { "type": "string", "minLength": 1 },
+    "license": { "type": "string", "minLength": 1 },
+    "review_status": {
+      "type": "string",
+      "enum": ["draft", "approved"]
+    },
+    "created_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "corpus_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Must equal apps.assessments.scenario_corpus.registry.SCENARIO_CORPUS_VERSION at validation time."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "question_type": { "const": "single_choice" } } },
+      "then": {
+        "properties": {
+          "options": { "minItems": 4, "maxItems": 4 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "question_type": { "const": "multi_select" } } },
+      "then": {
+        "properties": {
+          "options": { "minItems": 5, "maxItems": 5 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "question_type": { "const": "open_ended" } } },
+      "then": {
+        "properties": {
+          "options": { "maxItems": 0 },
+          "option_rationales": { "maxItems": 0 }
+        }
+      }
+    }
+  ]
+}
