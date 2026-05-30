@@ -76,7 +76,7 @@ def run_generate_stage_one(assessment_id: str, *, task_id: str = "") -> str:
 
     try:
         graph = load_role_graph(resolve_role_key(assessment.target_career))
-        questions, metadata = AssessmentAIService.generate_stage_one(graph.role_key, graph)
+        questions, metadata, retrieval_info = AssessmentAIService.generate_stage_one(graph.role_key, graph)
     except (SoftTimeLimitExceeded, Exception) as error:
         _mark_assessment_failed(assessment_id, error, task_id)
         raise
@@ -103,6 +103,7 @@ def run_generate_stage_one(assessment_id: str, *, task_id: str = "") -> str:
             "error_code": metadata.error_code,
             "version": graph.version,
             "ready_at": timezone.now().isoformat(),
+            **(retrieval_info or {}),
         },
     )
     assessment.save(
@@ -127,7 +128,7 @@ def run_process_stage_one_submission(assessment_id: str, *, task_id: str = "") -
     try:
         role_graph = load_role_graph(resolve_role_key(assessment.target_career))
         gap_profile = AssessmentAIService.build_gap_profile(assessment, role_graph)
-        questions, metadata = AssessmentAIService.generate_stage_two(gap_profile, role_graph)
+        questions, metadata, retrieval_info = AssessmentAIService.generate_stage_two(gap_profile, role_graph)
     except (SoftTimeLimitExceeded, Exception) as error:
         _mark_assessment_failed(assessment_id, error, task_id)
         raise
@@ -154,6 +155,7 @@ def run_process_stage_one_submission(assessment_id: str, *, task_id: str = "") -
             "processing_time_ms": metadata.processing_time_ms,
             "error_code": metadata.error_code,
             "ready_at": timezone.now().isoformat(),
+            **(retrieval_info or {}),
         },
     )
     assessment.save(

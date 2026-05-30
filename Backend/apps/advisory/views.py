@@ -10,21 +10,17 @@ SRS References:
 """
 
 from rest_framework import viewsets, status, permissions, serializers as drf_serializers
-from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema, OpenApiResponse
 
-from apps.advisory.models import Conversation, Message
+from apps.advisory.models import Conversation
 from apps.advisory.chat_service import AdvisoryConversationService
 from apps.advisory.serializers import (
     ConversationSerializer,
     ConversationListSerializer,
-    MessageSerializer,
     ChatMessageSerializer,
 )
-# TODO: Import advisory services when needed for AI integration
-# from apps.advisory.services import ConversationService, MessageService, RAGContextService
 
 
 # Response serializer for schema documentation

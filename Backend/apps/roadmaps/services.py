@@ -850,6 +850,7 @@ class RoadmapService:
 
         roadmap.phases.all().delete()
         RoadmapService._create_personalized_structure(roadmap, personalization.phases)
+        RoadmapService.match_courses_for_roadmap(roadmap)
 
         generation.update(
             {
@@ -904,6 +905,65 @@ class RoadmapService:
         return roadmap
 
     @staticmethod
+    def _milestone_search_query(milestone: RoadmapMilestone, roadmap: Roadmap) -> str:
+        """Build the embedding search query from milestone skills and roadmap context."""
+        skills = milestone.skills if isinstance(milestone.skills, list) else []
+        skill_text = ", ".join(str(item) for item in skills[:5])
+        return f"{roadmap.target_career} {milestone.title} {skill_text}".strip()
+
+    @staticmethod
+    def match_courses_for_milestone(
+        milestone: RoadmapMilestone,
+        roadmap: Roadmap,
+        *,
+        top_k: Optional[int] = None,
+    ) -> None:
+        """Link embedding-matched courses to a milestone (no LLM call)."""
+        from apps.core.ai_settings import COURSE_INDEX_TOP_K
+        from apps.courses.course_index import CourseIndex
+
+        if milestone.milestone_type != RoadmapMilestone.COURSE:
+            return
+
+        query = RoadmapService._milestone_search_query(milestone, roadmap)
+        matches = CourseIndex.search(query, top_k=top_k or COURSE_INDEX_TOP_K)
+        if not matches:
+            return
+
+        linked_course_ids = set(milestone.courses.values_list("course_id", flat=True))
+        order = milestone.courses.count()
+
+        for match in matches:
+            course_id = match.get("course_id")
+            if not course_id or course_id in linked_course_ids:
+                continue
+            try:
+                course = Course.objects.get(id=course_id, is_deleted=False)
+            except Course.DoesNotExist:
+                continue
+
+            order += 1
+            score = Decimal(str(round(float(match.get("score", 0)) * 100, 2)))
+            RoadmapService.add_course_to_milestone(
+                milestone=milestone,
+                course=course,
+                order=order,
+                is_primary=order == 1,
+                match_score=score,
+                recommendation_reason=(
+                    f"Embedding similarity match ({score}%) for {milestone.title}."
+                ),
+            )
+            linked_course_ids.add(course_id)
+
+    @staticmethod
+    def match_courses_for_roadmap(roadmap: Roadmap) -> None:
+        """Attach embedding-matched courses to all course-type milestones on a roadmap."""
+        for phase in roadmap.phases.filter(is_deleted=False).prefetch_related("milestones"):
+            for milestone in phase.milestones.filter(is_deleted=False):
+                RoadmapService.match_courses_for_milestone(milestone, roadmap)
+
+    @staticmethod
     def record_generation_failure(
         roadmap: Roadmap,
         *,
@@ -931,8 +991,8 @@ class RoadmapService:
         """
         Generate AI-powered personalized roadmap.
 
-        This method will be integrated with OpenAI/Claude API for roadmap generation.
-        For now, it creates a skeleton roadmap that can be populated.
+        Delegates to ``create_ai_roadmap_shell`` and ``populate_ai_roadmap`` which
+        use the shared Gemini runtime with deterministic fallbacks.
 
         Args:
             user: User instance

@@ -4,6 +4,7 @@ Structured AI logging and metadata helpers.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Optional
 from uuid import uuid4
@@ -37,6 +38,41 @@ def build_ai_metadata(
         trace_id=trace_id or uuid4().hex,
     )
     return metadata
+
+
+def log_ai_invocation(
+    *,
+    trace_id: str,
+    feature: str,
+    provider: str,
+    model: Optional[str],
+    latency_ms: int,
+    input_tokens: int,
+    output_tokens: int,
+    validation_success: bool,
+    fallback_used: bool = False,
+    task_type: Optional[str] = None,
+    extra: Optional[dict[str, Any]] = None,
+) -> None:
+    """Emit one structured JSON log line per LLM invocation."""
+    payload = {
+        "event": "ai_invocation",
+        "trace_id": trace_id,
+        "feature": feature,
+        "provider": provider,
+        "model": model,
+        "latency_ms": latency_ms,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "validation_success": validation_success,
+        "fallback_used": fallback_used,
+    }
+    if task_type:
+        payload["task_type"] = task_type
+    if extra:
+        payload.update(extra)
+
+    logger.info("ai_invocation %s", json.dumps(payload, default=str))
 
 
 def log_ai_failure(

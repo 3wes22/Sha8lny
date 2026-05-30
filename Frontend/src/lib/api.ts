@@ -512,6 +512,7 @@ export interface JobListItem {
   is_saved?: boolean;
   external_action_available?: boolean;
   skill_match_summary?: string;
+  match_score?: number | null;
 }
 
 // Job interface (detail view - full data)
@@ -984,6 +985,14 @@ export const jobApi = {
       }
     });
     return apiClient.get<PaginatedResponse<JobListItem>>(`/jobs/search/?${searchParams.toString()}`);
+  },
+
+  // Get jobs ranked by user skill overlap
+  match: (params?: { limit?: number }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.limit) searchParams.append('limit', String(params.limit));
+    const query = searchParams.toString();
+    return apiClient.get<JobListItem[]>(`/jobs/match/${query ? `?${query}` : ''}`);
   },
 
   // Get all jobs (paginated list)

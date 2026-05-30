@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from statistics import mean
 from time import monotonic
@@ -19,7 +19,6 @@ from apps.assessments.engine import (
     GapProfileBuilder,
     Stage2Allocator,
     StageAllocator,
-    evidence_to_dicts,
     merge_evidence,
 )
 from apps.assessments.fallback_scenarios import get_curated_fallback_scenario
@@ -48,20 +47,34 @@ from apps.core.ai_validation import (
     sanitize_stage_question_payload,
 )
 from apps.core.exceptions import AIServiceError
+
+
+@dataclass(frozen=True)
+class RetrievedExamplesResult:
+    """Captures both the prompt block and provenance from RAG retrieval."""
+
+    prompt_block: str
+    doc_ids: list[str] = field(default_factory=list)
+    doc_count: int = 0
+    rag_enabled: bool = False
+
+
 from apps.core.gemma_client import GemmaClient, GemmaResponse
 
 
 logger = logging.getLogger(__name__)
 
 
-QUESTION_SYSTEM_PROMPT = """You generate concise staged assessment questions.
-Return strict JSON with a top-level "questions" array only."""
+QUESTION_SYSTEM_PROMPT = """You generate concise, role-specific staged assessment questions for the {career} track at {difficulty} difficulty.
+The candidate already reports these skills: {existing_skills} — avoid trivial questions on mastered areas; probe depth and edges instead.
+Return STRICT JSON only with a top-level "questions" array. Each question: id, subskill_key (from provided blueprint), question_text, question_type (single_choice|multi_select|open_ended), options (for choice types), answer_key, difficulty (1-5).
+Never include explanations outside the JSON. Distractors must be plausible and mutually exclusive; no "all of the above"."""
 OPTION_REPAIR_SYSTEM_PROMPT = """You repair malformed staged assessment items.
 Return strict JSON with a top-level "questions" array only."""
 
-EVALUATION_SYSTEM_PROMPT = """You summarize staged assessment evidence for a career platform.
-Return strict JSON only with overall_score, strengths, areas_for_improvement,
-recommended_careers, recommended_learning_paths, ai_insights, and ai_confidence_score."""
+EVALUATION_SYSTEM_PROMPT = """You summarize staged assessment evidence for an Egyptian-market career platform. Be specific and encouraging, not generic.
+Return STRICT JSON only: overall_score (0-100), strengths[], areas_for_improvement[], recommended_careers[{title,match_score,reasoning}], recommended_learning_paths[{skill,priority,resources}], ai_insights (2-4 sentences), ai_confidence_score (0-100).
+Base every claim on the provided evidence; do not invent skills the candidate did not demonstrate."""
 
 STAGE_QUESTION_FEW_SHOT_EXAMPLES = """
 Use the few-shot examples below as the quality bar. Follow the same field names and realism level.
@@ -743,6 +756,8 @@ class AssessmentAIService:
             },
         }
 
+    _last_retrieval_info: dict[str, Any] = {}
+
     @classmethod
     def _build_stage_prompt(
         cls,
@@ -752,6 +767,9 @@ class AssessmentAIService:
         stage: int,
         gap_profile=None,
     ) -> str:
+        retrieved_result = cls._build_retrieved_examples_block(
+            role_graph=role_graph, blueprints=blueprints, stage=stage,
+        )
         stage_label = "calibration" if stage == 1 else "targeted follow-up"
         stage_focus = (
             "Across the 5 questions, progress from fundamentals to applied debugging and finish with tradeoff reasoning."
@@ -765,7 +783,7 @@ class AssessmentAIService:
                 f"Uncertain areas: {', '.join(gap_profile.uncertain_areas)}.\n"
             )
 
-        return (
+        prompt = (
             f"Generate 5 {stage_label} questions for {role_graph.role_label}.\n"
             'Return exactly 5 question objects in a top-level JSON field named "questions".\n'
             "Keep the same target order shown below.\n"
@@ -794,9 +812,15 @@ class AssessmentAIService:
             '- distractors like "Disable logging" or "Change an unrelated part of the system first."\n'
             f"{gap_lines}"
             f"{STAGE_QUESTION_FEW_SHOT_EXAMPLES}\n"
-            f"{cls._build_retrieved_examples_block(role_graph=role_graph, blueprints=blueprints, stage=stage)}"
+            f"{retrieved_result.prompt_block}"
             f"Blueprints:\n{json.dumps(blueprints, ensure_ascii=True)}"
         )
+        cls._last_retrieval_info = {
+            "retrieved_doc_ids": retrieved_result.doc_ids,
+            "retrieved_count": retrieved_result.doc_count,
+            "rag_enabled": retrieved_result.rag_enabled,
+        }
+        return prompt
 
     @classmethod
     def _build_retrieved_examples_block(
@@ -805,20 +829,25 @@ class AssessmentAIService:
         role_graph,
         blueprints: list[dict[str, Any]],
         stage: int,
-    ) -> str:
-        """Return an additive retrieved-examples block for the prompt.
+    ) -> RetrievedExamplesResult:
+        """Return a ``RetrievedExamplesResult`` with the prompt block and provenance.
 
-        Returns the empty string when the feature flag is off, when the
+        Returns an empty-block result when the feature flag is off, when the
         corpus has nothing for the blueprint mix, or when retrieval fails.
-        That empty-string contract is what keeps the prompt byte-identical
+        That empty-block contract is what keeps the prompt byte-identical
         to the pre-feature behaviour when ``ASSESSMENT_SCENARIO_RAG_ENABLED``
         is ``False``.
         """
+        _empty = RetrievedExamplesResult(
+            prompt_block="", doc_ids=[], doc_count=0,
+            rag_enabled=ASSESSMENT_SCENARIO_RAG_ENABLED,
+        )
         if not ASSESSMENT_SCENARIO_RAG_ENABLED:
-            return ""
+            return _empty
 
         collected: list[dict[str, Any]] = []
         seen_doc_ids: set[str] = set()
+        ordered_doc_ids: list[str] = []
         role_key = getattr(role_graph, "role_key", None) or ""
 
         for blueprint in blueprints or []:
@@ -835,12 +864,16 @@ class AssessmentAIService:
                     continue
                 if doc_id:
                     seen_doc_ids.add(doc_id)
+                    ordered_doc_ids.append(doc_id)
                 collected.append(scenario)
                 if len(collected) >= SCENARIO_RAG_MAX_EXAMPLES_PER_PROMPT:
                     break
 
         if not collected:
-            return ""
+            return RetrievedExamplesResult(
+                prompt_block="", doc_ids=ordered_doc_ids, doc_count=0,
+                rag_enabled=True,
+            )
 
         slim_examples = [
             {
@@ -855,10 +888,16 @@ class AssessmentAIService:
             }
             for scenario in collected
         ]
-        return (
+        prompt_block = (
             "Additional on-topic examples retrieved from the curated corpus "
             "(use as stylistic and scenario references, do not copy verbatim):\n"
             f"{json.dumps(slim_examples, ensure_ascii=True)}\n"
+        )
+        return RetrievedExamplesResult(
+            prompt_block=prompt_block,
+            doc_ids=ordered_doc_ids,
+            doc_count=len(collected),
+            rag_enabled=True,
         )
 
     @classmethod
@@ -1143,6 +1182,20 @@ class AssessmentAIService:
         ]
 
     @classmethod
+    def _question_system_prompt(
+        cls,
+        role_graph,
+        *,
+        difficulty: int = 3,
+        existing_skills: str = "none reported yet",
+    ) -> str:
+        return QUESTION_SYSTEM_PROMPT.format(
+            career=role_graph.role_label,
+            difficulty=difficulty,
+            existing_skills=existing_skills,
+        )
+
+    @classmethod
     def _stage_one_cache_key(cls, role_key: str, graph_version: str) -> str:
         base_key = (
             f"assessment:stage1:{cls.stage_question_prompt_version}:"
@@ -1157,10 +1210,11 @@ class AssessmentAIService:
         cls,
         role_key: str,
         role_graph,
-    ) -> tuple[list[dict[str, Any]], AIInvocationMetadata]:
+    ) -> tuple[list[dict[str, Any]], AIInvocationMetadata, dict[str, Any]]:
         cache_key = cls._stage_one_cache_key(role_key, role_graph.version)
         cached = cache.get(cache_key)
         if cached:
+            cached_retrieval = cached.get("retrieval_info", {}) if isinstance(cached, dict) else {}
             if isinstance(cached, dict) and isinstance(cached.get("metadata"), AIInvocationMetadata):
                 cached_metadata = cached["metadata"]
                 return cached["questions"], build_ai_metadata(
@@ -1171,14 +1225,14 @@ class AssessmentAIService:
                     version=cached_metadata.version,
                     fallback_used=cached_metadata.fallback_used,
                     error_code=cached_metadata.error_code,
-                )
+                ), cached_retrieval
             return cached, build_ai_metadata(
                 source="cache",
                 processing_time_ms=0,
                 model=None,
                 provider="django-cache",
                 version=role_graph.version,
-            )
+            ), cached_retrieval
 
         targets = StageAllocator.allocate_stage_one(role_graph)
         blueprints = _build_stage_blueprints(role_graph, targets, stage=1)
@@ -1189,7 +1243,7 @@ class AssessmentAIService:
         try:
             response = cls._get_stage_question_client().generate_structured(
                 prompt=cls._build_stage_one_prompt(role_graph, targets, blueprints=blueprints),
-                system=QUESTION_SYSTEM_PROMPT,
+                system=cls._question_system_prompt(role_graph),
                 required_keys=("questions",),
                 response_json_schema=response_json_schema,
             )
@@ -1241,6 +1295,7 @@ class AssessmentAIService:
                 "Stage one generation fell back to deterministic questions: %s",
                 error,
             )
+            cls._last_retrieval_info = {"rag_enabled": ASSESSMENT_SCENARIO_RAG_ENABLED, "retrieved_doc_ids": [], "retrieved_count": 0}
             questions = cls._deterministic_questions(role_graph, targets, stage=1)
             metadata = build_ai_metadata(
                 source="fallback",
@@ -1252,13 +1307,14 @@ class AssessmentAIService:
                 error_code=type(error).__name__,
             )
 
+        retrieval_info = dict(cls._last_retrieval_info) if cls._last_retrieval_info else {}
         if not metadata.fallback_used:
             cache.set(
                 cache_key,
-                {"questions": questions, "metadata": metadata},
+                {"questions": questions, "metadata": metadata, "retrieval_info": retrieval_info},
                 timeout=cls.stage_one_cache_ttl_seconds,
             )
-        return questions, metadata
+        return questions, metadata, retrieval_info
 
     @classmethod
     def build_gap_profile(cls, assessment: Assessment, role_graph):
@@ -1274,7 +1330,7 @@ class AssessmentAIService:
         cls,
         gap_profile,
         role_graph,
-    ) -> tuple[list[dict[str, Any]], AIInvocationMetadata]:
+    ) -> tuple[list[dict[str, Any]], AIInvocationMetadata, dict[str, Any]]:
         targets = Stage2Allocator.allocate_stage_two(role_graph, gap_profile)
         blueprints = _build_stage_blueprints(
             role_graph,
@@ -1285,6 +1341,11 @@ class AssessmentAIService:
         allowed_targets = _target_map(role_graph, targets, stage=2, gap_profile=gap_profile)
         response_json_schema = cls._build_stage_question_response_json_schema(blueprints)
         started_at = monotonic()
+        known_skills = ", ".join(
+            str(item.subskill_key).replace("_", " ")
+            for item in gap_profile.subskill_evidence
+            if getattr(item, "gap", 99) <= 1
+        ) or "baseline calibration complete"
 
         try:
             response = cls._get_stage_question_client().generate_structured(
@@ -1294,7 +1355,11 @@ class AssessmentAIService:
                     gap_profile,
                     blueprints=blueprints,
                 ),
-                system=QUESTION_SYSTEM_PROMPT,
+                system=cls._question_system_prompt(
+                    role_graph,
+                    difficulty=4,
+                    existing_skills=known_skills,
+                ),
                 required_keys=("questions",),
                 response_json_schema=response_json_schema,
             )
@@ -1346,6 +1411,7 @@ class AssessmentAIService:
                 "Stage two generation fell back to deterministic questions: %s",
                 error,
             )
+            cls._last_retrieval_info = {"rag_enabled": ASSESSMENT_SCENARIO_RAG_ENABLED, "retrieved_doc_ids": [], "retrieved_count": 0}
             questions = cls._deterministic_questions(
                 role_graph,
                 targets,
@@ -1362,7 +1428,8 @@ class AssessmentAIService:
                 error_code=type(error).__name__,
             )
 
-        return questions, metadata
+        retrieval_info = dict(cls._last_retrieval_info) if cls._last_retrieval_info else {}
+        return questions, metadata, retrieval_info
 
     @classmethod
     def _summarize_dimension_scores(cls, merged_evidence):
@@ -1552,7 +1619,7 @@ class AssessmentAIService:
     @classmethod
     def generate_questions(cls, assessment: Assessment) -> tuple[list[dict[str, Any]], GemmaResponse | None]:
         role_graph = load_role_graph(resolve_role_key(assessment.target_career))
-        questions, metadata = cls.generate_stage_one(role_graph.role_key, role_graph)
+        questions, metadata, _retrieval_info = cls.generate_stage_one(role_graph.role_key, role_graph)
         return questions, GemmaResponse(
             text="",
             payload={"questions": questions},

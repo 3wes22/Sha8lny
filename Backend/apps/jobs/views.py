@@ -13,19 +13,16 @@ SRS References:
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Q, Avg, Count
-from django.utils import timezone
-from datetime import timedelta
+from django.db.models import Q
 
-from apps.jobs.models import JobPlatform, Job, SavedJob, SkillDemand
+from apps.jobs.models import Job, SavedJob
+from apps.jobs.services import JobService
 from apps.jobs.serializers import (
-    JobPlatformSerializer,
     JobSerializer,
     JobListSerializer,
     JobSearchSerializer,
     SavedJobSerializer,
     SavedJobCreateSerializer,
-    SkillDemandSerializer,
 )
 
 
@@ -153,6 +150,24 @@ class JobViewSet(viewsets.ReadOnlyModelViewSet):
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def match(self, request):
+        """Return jobs ranked by skill overlap against the authenticated user."""
+        limit = int(request.query_params.get("limit", 20))
+        matches = JobService.match_jobs_for_user(request.user, limit=limit)
+        payload = []
+        for item in matches:
+            job = item["job"]
+            payload.append(
+                {
+                    **JobListSerializer(job, context={"request": request}).data,
+                    "match_score": item["match_score"],
+                    "matching_skills": item.get("matching_skills", []),
+                    "missing_skills": item.get("missing_skills", []),
+                }
+            )
+        return Response(payload)
 
     # ============================================================================
     # EXTRA ENDPOINTS - NOT IN SRS APPENDIX B

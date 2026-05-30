@@ -9,14 +9,12 @@ Usage:
 
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from django.utils.text import slugify
 from datetime import timedelta
 from decimal import Decimal
 import random
 
-from apps.jobs.models import JobPlatform, Job, JobSkill
+from apps.jobs.models import JobPlatform, Job
 from apps.jobs.services import JobService
-from apps.users.models import Skill
 
 
 class Command(BaseCommand):

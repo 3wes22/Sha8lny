@@ -13,24 +13,9 @@ from apps.core.ai_settings import AI_PROVIDER, GEMINI_FLASH_LITE_MODEL
 from apps.core.gemma_client import GemmaClient
 
 
-ROADMAP_PERSONALIZATION_PROMPT = """You personalize learning roadmaps for a career-development platform.
-Return strict JSON with:
-- roadmap_summary: string
-- coaching_notes: string[]
-- phases: array of exactly 3 phases
-
-Each phase must include:
-- title
-- description
-- objectives: string[]
-- milestones: array of milestone objects
-
-Each milestone must include:
-- title
-- description
-
-Do not change the number of phases or milestones. Personalize wording only.
-"""
+ROADMAP_PERSONALIZATION_PROMPT = """You rewrite a fixed 3-phase learning roadmap blueprint into motivating, personalized copy for a {career} learner currently at {current_level} aiming for {target_level}, with ~{weekly_hours} hrs/week.
+Prioritize their gaps: {gaps}. Build on strengths: {strengths}.
+Return STRICT JSON preserving the given phase/milestone structure and ids; only improve title, description, and next_action text. Do NOT add, remove, or reorder phases or milestones. Keep each description under 240 characters."""
 
 
 @dataclass(frozen=True)
@@ -118,6 +103,14 @@ class RoadmapAIService:
             f"Base phases: {phases_data}\n"
             "Personalize the roadmap copy while preserving the structure."
         )
+        system_prompt = ROADMAP_PERSONALIZATION_PROMPT.format(
+            career=target_career,
+            current_level=current_level,
+            target_level=target_level,
+            weekly_hours=weekly_hours,
+            gaps=", ".join(gaps[:5]) or "general skill building",
+            strengths=", ".join(strengths[:5]) or "foundational readiness",
+        )
 
         client = GemmaClient(
             task_type="roadmap_personalization",
@@ -126,7 +119,7 @@ class RoadmapAIService:
         try:
             result = client.generate_structured(
                 prompt=prompt,
-                system=ROADMAP_PERSONALIZATION_PROMPT,
+                system=system_prompt,
                 required_keys=("roadmap_summary", "phases"),
             )
             payload = result.payload or {}

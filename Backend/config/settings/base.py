@@ -280,7 +280,6 @@ from apps.core.ai_settings import (  # noqa: E402
 CELERY_TASK_ROUTES = {
     'apps.assessments.tasks.*': {'queue': AI_CELERY_QUEUE},
     'apps.roadmaps.tasks.*': {'queue': AI_CELERY_QUEUE},
-    'apps.advisory.tasks.*': {'queue': AI_CELERY_QUEUE},
 }
 
 CELERY_TASK_DEFAULT_QUEUE = 'default'

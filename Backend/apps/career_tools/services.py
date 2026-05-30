@@ -181,8 +181,7 @@ class ResumeService:
         """
         Optimize resume for ATS systems using AI.
 
-        This would call OpenAI/Claude API for analysis.
-        For now, it's a placeholder.
+        Placeholder for a future hosted-Gemini ATS review task.
         """
         # Set processing status
         resume.ats_processing_status = 'pending'

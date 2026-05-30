@@ -4,7 +4,7 @@ Courses Service Views
 Implements course aggregation, search, and recommendation APIs.
 """
 
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Q
@@ -89,9 +89,7 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=['get'])
     def recommended(self, request):
-        """Get recommended courses for user based on skills."""
-        # TODO: Implement AI-based recommendations
-        # For now, return popular courses
+        """Return popular published courses (roadmap course matching uses course_index)."""
         courses = self.get_queryset().order_by('-rating', '-number_of_students')[:10]
         serializer = CourseListSerializer(courses, many=True)
         return Response(serializer.data)

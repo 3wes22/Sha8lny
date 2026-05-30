@@ -174,13 +174,8 @@ class JobService:
             - match_score: Percentage match (0-100)
             - matching_skills: List of matched skill names
         """
-        # Get user's skills
-        user_skills = set(
-            UserSkill.objects.filter(
-                user=user,
-                is_deleted=False
-            ).values_list('skill__name', flat=True)
-        )
+        # Get user's skills (profile + latest assessment gaps)
+        user_skills = JobService._user_skill_names(user)
 
         if not user_skills:
             # No skills - return recent jobs with 0 match score
@@ -319,6 +314,135 @@ class JobService:
                 skill=skill,
                 defaults={'is_required': is_required}
             )
+
+    @staticmethod
+    def _keyword_extract_skills(job: Job) -> List[str]:
+        """Deterministic skill extraction by matching known skill names in job text."""
+        corpus = " ".join(
+            filter(
+                None,
+                [
+                    job.title,
+                    job.description,
+                    job.requirements,
+                    job.responsibilities,
+                ],
+            )
+        ).lower()
+        if not corpus.strip():
+            return []
+
+        matches: list[str] = []
+        for skill in Skill.objects.filter(is_deleted=False).only("name"):
+            name = str(skill.name or "").strip()
+            if len(name) >= 2 and name.lower() in corpus:
+                matches.append(name)
+        return matches[:12]
+
+    @staticmethod
+    def extract_skills_from_job(job: Job, *, replace_existing: bool = False) -> List[str]:
+        """Extract skills from a job posting using Gemini with keyword fallback."""
+        from apps.core.gemma_client import GemmaClient
+
+        if replace_existing:
+            job.job_skills.all().delete()
+
+        existing = list(job.job_skills.values_list("skill__name", flat=True))
+        if existing:
+            return existing
+
+        combined_text = "\n".join(
+            filter(
+                None,
+                [
+                    f"Title: {job.title}",
+                    f"Description: {job.description}",
+                    f"Requirements: {job.requirements}",
+                    f"Responsibilities: {job.responsibilities}",
+                ],
+            )
+        )[:4000]
+
+        extracted: list[str] = []
+        try:
+            client = GemmaClient(task_type="json_generation", max_output_tokens=256)
+            response = client.generate_structured(
+                prompt=(
+                    "Extract the most important technical skills from this job posting. "
+                    f"Posting:\n{combined_text}"
+                ),
+                system='Return strict JSON: {"skills": ["skill1", "skill2", ...]} with 3-8 items.',
+                required_keys=("skills",),
+            )
+            raw_skills = response.payload.get("skills") if response.payload else []
+            if isinstance(raw_skills, list):
+                extracted = [str(item).strip() for item in raw_skills if str(item).strip()]
+        except Exception:
+            extracted = []
+
+        if not extracted:
+            extracted = JobService._keyword_extract_skills(job)
+
+        if extracted:
+            JobService.add_skills_to_job(job, extracted, is_required=True)
+
+        return extracted
+
+    @staticmethod
+    def _user_skill_names(user: User) -> set[str]:
+        profile_skills = set(
+            UserSkill.objects.filter(user=user, is_deleted=False).values_list(
+                "skill__name", flat=True
+            )
+        )
+        if profile_skills:
+            return profile_skills
+
+        try:
+            from apps.assessments.models import AssessmentResult
+
+            latest = (
+                AssessmentResult.objects.select_related("assessment")
+                .filter(assessment__user=user, is_deleted=False)
+                .order_by("-created_at")
+                .first()
+            )
+            if latest and latest.roadmap_signal:
+                priority = latest.roadmap_signal.get("priority_order") or []
+                gaps = [
+                    item.get("subskill_key", "")
+                    for item in (latest.roadmap_signal.get("subskill_gaps") or [])
+                    if isinstance(item, dict)
+                ]
+                assessment_skills = {
+                    str(item).replace("_", " ").title()
+                    for item in [*priority, *gaps]
+                    if str(item).strip()
+                }
+                return assessment_skills
+        except Exception:
+            pass
+
+        return set()
+
+    @staticmethod
+    def compute_match_score(job: Job, user: User) -> Dict[str, Any]:
+        """Compute match score for one job against a user's skills/gaps."""
+        user_skills = JobService._user_skill_names(user)
+        job_required_skills = set(
+            job.job_skills.filter(is_required=True).values_list("skill__name", flat=True)
+        )
+        if not job_required_skills:
+            return {"match_score": 0, "matching_skills": [], "missing_skills": []}
+
+        matching_skills = sorted(user_skills & job_required_skills)
+        missing_skills = sorted(job_required_skills - user_skills)
+        match_score = int((len(matching_skills) / len(job_required_skills)) * 100)
+        return {
+            "match_score": match_score,
+            "matching_skills": matching_skills,
+            "missing_skills": missing_skills,
+        }
 
 
 class MarketInsightService:

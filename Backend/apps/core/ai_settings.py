@@ -57,31 +57,7 @@ LLM_MAX_OUTPUT_TOKENS = config("LLM_MAX_OUTPUT_TOKENS", default=1536, cast=int)
 OLLAMA_HOST = config("OLLAMA_HOST", default="http://127.0.0.1:11434")
 OLLAMA_MODEL = config("OLLAMA_MODEL", default="gemma4:e2b")
 
-# ---------------------------------------------------------------------------
-# Optional Ollama inference tuning
-# ---------------------------------------------------------------------------
-OLLAMA_TIMEOUT_SECONDS = config(
-    "OLLAMA_TIMEOUT_SECONDS",
-    default=LLM_TIMEOUT_SECONDS,
-    cast=int,
-)
-OLLAMA_RETRY_COUNT = config(
-    "OLLAMA_RETRY_COUNT",
-    default=LLM_RETRY_COUNT,
-    cast=int,
-)
-OLLAMA_RETRY_BACKOFF_SECONDS = config(
-    "OLLAMA_RETRY_BACKOFF_SECONDS",
-    default=LLM_RETRY_BACKOFF_SECONDS,
-    cast=float,
-)
-OLLAMA_TEMPERATURE = config(
-    "OLLAMA_TEMPERATURE",
-    default=LLM_TEMPERATURE,
-    cast=float,
-)
-
-# Maximum context window tokens to request.
+# Maximum context window tokens to request (Ollama emergency fallback only).
 OLLAMA_NUM_CTX = config("OLLAMA_NUM_CTX", default=4096, cast=int)
 
 # ---------------------------------------------------------------------------
@@ -108,7 +84,7 @@ EMBEDDING_MODEL = config("EMBEDDING_MODEL", default="all-MiniLM-L6-v2")
 # byte-identical output to the pre-feature behaviour.
 ASSESSMENT_SCENARIO_RAG_ENABLED = config(
     "ASSESSMENT_SCENARIO_RAG_ENABLED",
-    default=False,
+    default=True,
     cast=bool,
 )
 # Dedicated on-disk Chroma directory for the scenario corpus. Kept separate
@@ -131,6 +107,15 @@ SCENARIO_RAG_MAX_EXAMPLES_PER_PROMPT = config(
     default=5,
     cast=int,
 )
+
+# ---------------------------------------------------------------------------
+# Course embedding index (roadmap course matching)
+# ---------------------------------------------------------------------------
+COURSE_VECTOR_DB_PATH = config(
+    "COURSE_VECTOR_DB_PATH",
+    default=str(_BACKEND_BASE_DIR / "data" / "course_vector_db"),
+)
+COURSE_INDEX_TOP_K = config("COURSE_INDEX_TOP_K", default=2, cast=int)
 
 # ---------------------------------------------------------------------------
 # Convenience helpers

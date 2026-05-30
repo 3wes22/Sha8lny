@@ -130,7 +130,7 @@ class AssessmentViewSet(viewsets.ModelViewSet):
             require_live_llm = bool(require_live_llm)
 
         role_graph = load_role_graph(resolve_role_key(target_career))
-        questions, metadata = AssessmentAIService.generate_stage_one(role_graph.role_key, role_graph)
+        questions, metadata, retrieval_info = AssessmentAIService.generate_stage_one(role_graph.role_key, role_graph)
         client_questions = AssessmentService._normalize_staged_questions(questions)
         runtime_health = get_ai_runtime_health()
 

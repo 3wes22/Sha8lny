@@ -135,6 +135,9 @@ export default function JobsPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant="outline">{formatJobType(job.job_type)}</Badge>
                       {job.is_remote ? <Badge variant="secondary">Remote</Badge> : null}
+                      {typeof job.match_score === "number" ? (
+                        <Badge variant="secondary">{job.match_score}% match</Badge>
+                      ) : null}
                       {job.skill_match_summary ? <Badge variant="outline">{job.skill_match_summary}</Badge> : null}
                     </div>
                     <div>

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -162,17 +161,36 @@ class ScenarioRetriever:
                 else list(query_embedding)
             )
 
+            subskill_where = {
+                "$and": [
+                    {"role_key": role_key},
+                    {"question_type": question_type},
+                    {"stage": stage},
+                    {"subskill_key": subskill_key},
+                ]
+            }
+            broad_where = {
+                "$and": [
+                    {"role_key": role_key},
+                    {"question_type": question_type},
+                    {"stage": stage},
+                ]
+            }
+
+            # Try subskill-scoped query first; fall back to broad if empty.
             results = collection.query(
                 query_embeddings=embedding_list,
                 n_results=capped_top_k,
-                where={
-                    "$and": [
-                        {"role_key": role_key},
-                        {"question_type": question_type},
-                        {"stage": stage},
-                    ]
-                },
+                where=subskill_where if subskill_key else broad_where,
             )
+            subskill_scoped = bool(subskill_key)
+            if subskill_key and not (results.get("metadatas") or [[]])[0]:
+                results = collection.query(
+                    query_embeddings=embedding_list,
+                    n_results=capped_top_k,
+                    where=broad_where,
+                )
+                subskill_scoped = False
         except Exception as error:
             cls._emit_failure_log(role_key=role_key, stage=stage, error=error)
             return []
@@ -220,6 +238,8 @@ class ScenarioRetriever:
                 "results_count": len(documents),
                 "top_doc_id": top_doc_id,
                 "top_score": top_score,
+                "doc_ids": [str(d.get("doc_id") or "") for d in documents],
+                "subskill_scoped": subskill_scoped,
                 "corpus_version": SCENARIO_CORPUS_VERSION,
             },
         )

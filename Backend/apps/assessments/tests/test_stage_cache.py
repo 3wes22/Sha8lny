@@ -640,8 +640,8 @@ def test_stage_one_generation_uses_cache_for_same_role_and_version(monkeypatch):
         fake_generate_structured,
     )
 
-    first_questions, _ = AssessmentAIService.generate_stage_one("backend", graph)
-    second_questions, _ = AssessmentAIService.generate_stage_one("backend", graph)
+    first_questions, *_ = AssessmentAIService.generate_stage_one("backend", graph)
+    second_questions, *_ = AssessmentAIService.generate_stage_one("backend", graph)
 
     assert calls["count"] == 1
     assert first_questions == second_questions
@@ -734,8 +734,8 @@ def test_stage_one_generation_does_not_reuse_cached_questions_after_curated_repl
         fake_generate_structured,
     )
 
-    first_questions, _ = AssessmentAIService.generate_stage_one("backend", graph)
-    second_questions, _ = AssessmentAIService.generate_stage_one("backend", replacement_graph)
+    first_questions, *_ = AssessmentAIService.generate_stage_one("backend", graph)
+    second_questions, *_ = AssessmentAIService.generate_stage_one("backend", replacement_graph)
 
     assert calls["count"] == 2
     assert first_questions[0]["subskill_key"] == graph.dimensions[0].subskills[0].key
@@ -852,7 +852,7 @@ def test_stage_one_generation_normalizes_typed_question_contract(monkeypatch):
         fake_generate_structured,
     )
 
-    questions, metadata = AssessmentAIService.generate_stage_one("backend", graph)
+    questions, metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
 
     assert metadata.fallback_used is False
     assert questions[0]["question_type"] == "single_choice"
@@ -906,7 +906,7 @@ def test_stage_one_generation_repairs_partial_llm_payload_instead_of_falling_bac
         fake_generate_structured,
     )
 
-    questions, metadata = AssessmentAIService.generate_stage_one("backend", graph)
+    questions, metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
     targets = StageAllocator.allocate_stage_one(graph)
 
     assert metadata.fallback_used is False
@@ -968,7 +968,7 @@ def test_stage_one_generation_replaces_invalid_questions_after_failed_repair(mon
         fake_generate_structured,
     )
 
-    questions, metadata = AssessmentAIService.generate_stage_one("backend", graph)
+    questions, metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
 
     assert calls["count"] == 2
     assert metadata.fallback_used is True
@@ -1017,7 +1017,7 @@ def test_stage_one_generation_only_replaces_invalid_questions_after_repair(monke
         fake_generate_structured,
     )
 
-    questions, metadata = AssessmentAIService.generate_stage_one("backend", graph)
+    questions, metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
 
     assert calls["count"] == 2
     assert metadata.fallback_used is True
@@ -1062,8 +1062,8 @@ def test_stage_one_generation_does_not_cache_fallback_questions(monkeypatch):
         fake_generate_structured,
     )
 
-    first_questions, first_metadata = AssessmentAIService.generate_stage_one("backend", graph)
-    second_questions, second_metadata = AssessmentAIService.generate_stage_one("backend", graph)
+    first_questions, first_metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
+    second_questions, second_metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
 
     assert calls["count"] == 2
     assert first_metadata.fallback_used is True
@@ -1110,7 +1110,7 @@ def test_stage_one_generation_normalizes_live_like_string_options(monkeypatch):
         fake_generate_structured,
     )
 
-    questions, metadata = AssessmentAIService.generate_stage_one("backend", graph)
+    questions, metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
 
     assert metadata.fallback_used is False
     assert calls["count"] == 2
@@ -1170,7 +1170,7 @@ def test_stage_one_generation_repairs_observed_live_payload_before_accepting_it(
         fake_generate_structured,
     )
 
-    questions, metadata = AssessmentAIService.generate_stage_one("backend", graph)
+    questions, metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
 
     assert metadata.fallback_used is False
     assert calls["count"] == 2
@@ -1229,7 +1229,7 @@ def test_stage_one_generation_uses_extended_timeout_floor(monkeypatch):
 
     monkeypatch.setattr(AssessmentAIService, "client_class", FakeClient)
 
-    questions, metadata = AssessmentAIService.generate_stage_one("backend", graph)
+    questions, metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
 
     assert metadata.fallback_used is False
     assert questions

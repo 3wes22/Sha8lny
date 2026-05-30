@@ -181,6 +181,7 @@ class TestAssessmentAPI:
                     trace_id="trace-preview-1",
                     fallback_used=False,
                 ),
+                {},
             )
 
         monkeypatch.setattr(
@@ -238,6 +239,7 @@ class TestAssessmentAPI:
                     fallback_used=True,
                     error_code="AIServiceError",
                 ),
+                {},
             )
 
         monkeypatch.setattr(

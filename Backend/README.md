@@ -129,7 +129,23 @@ celery -A config worker --loglevel=info
 celery -A config beat --loglevel=info
 ```
 
-### 6. Run Tests
+### 6. Graduation Demo Prep
+
+After migrations, seed the demo environment in this exact order:
+
+```bash
+python3 manage.py seed_graduation_demo --reset
+python3 manage.py seed_courses
+python3 manage.py rebuild_course_index
+cd ../ai-models && python -m rag.seeder && cd ../Backend
+python3 manage.py seed_jobs --clear --count 24
+python3 manage.py extract_job_skills --limit 24
+python3 manage.py ai_smoke
+```
+
+Set `GEMINI_API_KEY` in `.env` before running `ai_smoke`. Always run all eight commands after any reset.
+
+### 7. Run Tests
 
 ```bash
 # Run all tests

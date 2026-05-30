@@ -18,6 +18,15 @@
 > Sections below that reference OpenAI, Anthropic, LangChain, or Pinecone
 > describe the **original plan, not the implementation**.
 
+## Current Implementation Status (May 2026)
+
+The graduation demo uses a **Gemini-first** AI stack with deterministic Django orchestration:
+
+- **Working end-to-end:** staged skills assessment, AI roadmap personalization, progress tracking, advisory chat with RAG, jobs skill extraction and user-gap matching
+- **Vector stores:** ChromaDB with two collections — `courses` (roadmap course matching) and `career_knowledge` (advisory RAG via `python -m rag.seeder`)
+- **Single inference gateway:** `GemmaClient` in `Backend/apps/core/gemma_client.py` routes all LLM calls to the hosted Gemini API
+- **Async AI work:** Celery queue `ai` handles assessment question generation, roadmap population, and final evaluation (development may run tasks eagerly)
+
 ## Overview
 Sha8alny follows a **modular monolithic architecture** designed for rapid development, maintainability, and future scalability. This document outlines the high-level system design, module boundaries, data flow, and integration patterns.
 
