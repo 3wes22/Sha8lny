@@ -1,27 +1,73 @@
 Generate 5 calibration questions for Backend Developer.
+Generate exactly 5 structured assessment questions for Backend Developer (stage 1).
+Return a top-level JSON object with a "questions" array containing exactly 5 items in the same slot order.
+Each slot below has its own isolated instructions — follow only the block for that slot.
+Do not add sub-instructions to stems. Stems must stand alone.
+Do not use debugging or evidence-gathering framing unless the slot says debugging.
+
+For slot 1 (mcq_single / decorators):
+You are generating a professional technical interview question. The question should test practical job-readiness, not trivia. One option must be unambiguously correct. The other three options must be plausible mistakes a working developer could make — not obviously wrong. Do not add any sub-instructions to the question text itself. If choosing between related correct techniques, the stem must specify the axis of comparison (prerequisite, performance, complexity, browser support, or specificity) — never ask 'which is best' without defining best. Write exactly 4 parallel options. question_type must be "single_choice". answer_key.correct_option_ids must contain exactly one option id.
+Competency: Decorators
+Learning objective hint: Assess concrete judgment in decorators using one main competency only.
+Seniority target: senior
+Stage: 1
+Focus: narrow one decision so exactly one best answer exists
+Skill area (dimension): python_fundamentals
+Do not embed sub-instructions in the stem; stem must stand alone.
+
+For slot 2 (mcq_single / select_related_prefetch):
+You are generating a professional technical interview question. The question should test practical job-readiness, not trivia. One option must be unambiguously correct. The other three options must be plausible mistakes a working developer could make — not obviously wrong. Do not add any sub-instructions to the question text itself. If choosing between related correct techniques, the stem must specify the axis of comparison (prerequisite, performance, complexity, browser support, or specificity) — never ask 'which is best' without defining best. Write exactly 4 parallel options. question_type must be "single_choice". answer_key.correct_option_ids must contain exactly one option id.
+Competency: select_related / prefetch_related
+Learning objective hint: Assess concrete judgment in select_related / prefetch_related using one main competency only.
+Seniority target: senior
+Stage: 1
+Focus: narrow one decision so exactly one best answer exists
+Skill area (dimension): django_orm
+Do not embed sub-instructions in the stem; stem must stand alone.
+
+For slot 3 (mcq_single / http_api_design):
+You are generating a professional technical interview question. The question should test practical job-readiness, not trivia. One option must be unambiguously correct. The other three options must be plausible mistakes a working developer could make — not obviously wrong. Do not add any sub-instructions to the question text itself. If choosing between related correct techniques, the stem must specify the axis of comparison (prerequisite, performance, complexity, browser support, or specificity) — never ask 'which is best' without defining best. Write exactly 4 parallel options. question_type must be "single_choice". answer_key.correct_option_ids must contain exactly one option id.
+Competency: HTTP API Design
+Learning objective hint: Assess concrete judgment in http api design using one main competency only.
+Seniority target: senior
+Stage: 1
+Focus: narrow one decision so exactly one best answer exists
+Skill area (dimension): rest_api_design
+Do not embed sub-instructions in the stem; stem must stand alone.
+
+For slot 4 (mcq_single / relational_modeling):
+You are generating a professional technical interview question. The question should test practical job-readiness, not trivia. One option must be unambiguously correct. The other three options must be plausible mistakes a working developer could make — not obviously wrong. Do not add any sub-instructions to the question text itself. If choosing between related correct techniques, the stem must specify the axis of comparison (prerequisite, performance, complexity, browser support, or specificity) — never ask 'which is best' without defining best. Write exactly 4 parallel options. question_type must be "single_choice". answer_key.correct_option_ids must contain exactly one option id.
+Competency: Relational Modeling
+Learning objective hint: Assess concrete judgment in relational modeling using one main competency only.
+Seniority target: senior
+Stage: 1
+Focus: narrow one decision so exactly one best answer exists
+Skill area (dimension): database_design
+Do not embed sub-instructions in the stem; stem must stand alone.
+
+For slot 5 (mcq_single / service_decomposition):
+You are generating a professional technical interview question. The question should test practical job-readiness, not trivia. One option must be unambiguously correct. The other three options must be plausible mistakes a working developer could make — not obviously wrong. Do not add any sub-instructions to the question text itself. If choosing between related correct techniques, the stem must specify the axis of comparison (prerequisite, performance, complexity, browser support, or specificity) — never ask 'which is best' without defining best. Write exactly 4 parallel options. question_type must be "single_choice". answer_key.correct_option_ids must contain exactly one option id.
+Competency: Service Decomposition
+Learning objective hint: Assess concrete judgment in service decomposition using one main competency only.
+Seniority target: senior
+Stage: 1
+Focus: narrow one decision so exactly one best answer exists
+Skill area (dimension): system_design_fundamentals
+Do not embed sub-instructions in the stem; stem must stand alone.
+
+
+Blueprints:
+[{"slot": 1, "subskill_key": "decorators", "competency": "Decorators", "dimension_key": "python_fundamentals", "question_type": "single_choice", "difficulty": 4, "estimated_seconds": 45, "learning_objective_hint": "Assess concrete judgment in decorators using one main competency only.", "progression_band": "fundamentals", "focus": "narrow one decision so exactly one best answer exists", "gap_priority": "normal", "stage": 1}, {"slot": 2, "subskill_key": "select_related_prefetch", "competency": "select_related / prefetch_related", "dimension_key": "django_orm", "question_type": "single_choice", "difficulty": 4, "estimated_seconds": 45, "learning_objective_hint": "Assess concrete judgment in select_related / prefetch_related using one main competency only.", "progression_band": "fundamentals", "focus": "narrow one decision so exactly one best answer exists", "gap_priority": "normal", "stage": 1}, {"slot": 3, "subskill_key": "http_api_design", "competency": "HTTP API Design", "dimension_key": "rest_api_design", "question_type": "single_choice", "difficulty": 4, "estimated_seconds": 45, "learning_objective_hint": "Assess concrete judgment in http api design using one main competency only.", "progression_band": "applied_debugging", "focus": "narrow one decision so exactly one best answer exists", "gap_priority": "normal", "stage": 1}, {"slot": 4, "subskill_key": "relational_modeling", "competency": "Relational Modeling", "dimension_key": "database_design", "question_type": "single_choice", "difficulty": 4, "estimated_seconds": 45, "learning_objective_hint": "Assess concrete judgment in relational modeling using one main competency only.", "progression_band": "applied_debugging", "focus": "narrow one decision so exactly one best answer exists", "gap_priority": "normal", "stage": 1}, {"slot": 5, "subskill_key": "service_decomposition", "competency": "Service Decomposition", "dimension_key": "system_design_fundamentals", "question_type": "single_choice", "difficulty": 4, "estimated_seconds": 45, "learning_objective_hint": "Assess concrete judgment in service decomposition using one main competency only.", "progression_band": "tradeoff_reasoning", "focus": "narrow one decision so exactly one best answer exists", "gap_priority": "normal", "stage": 1}]
+
 Return exactly 5 question objects in a top-level JSON field named "questions".
-Keep the same target order shown below.
-Across the 5 questions, progress from fundamentals to applied debugging and finish with tradeoff reasoning.
-Every stem MUST begin with a concrete scenario: a system, a failure, a code review finding, or a requirement conflict.
-Generate scenario-based questions, not generic philosophy questions.
-Vary question framing across the batch. No two questions may test the same concept from the same angle.
-Do not repeat stage-one wording or reuse the same stem template across questions.
-Each distractor must be something a junior developer might plausibly choose, but it must still be wrong.
-Avoid obvious joke or sabotage answers.
-For REST questions, include real semantics such as PUT vs PATCH or POST plus idempotency keys when relevant.
-For database questions, reference evidence such as execution plans, indexes, cardinality, and join strategy when relevant.
-For observability questions, prefer logs, metrics, traces, and failure boundaries over generic advice.
-For requirements questions, translate vague requests into measurable acceptance criteria or SLO-like targets.
-Use only "single_choice", "multi_select", or "open_ended" for "question_type".
+Every stem MUST begin with a concrete scenario.
+Do not embed sub-instructions in stems.
 Each object must include: "subskill_key", "competency", "learning_objective", "scenario_context", "stem", "question_type", "difficulty", "estimated_seconds", "options", "answer_key", "explanation", "correct_answer_rationale", and "option_rationales".
-For "single_choice": write 4 parallel options and make exactly one best answer exist.
-For "multi_select": the stem must explicitly say "Select all that apply.", write 5 options, and include 2 or 3 correct answers.
-For "open_ended": options must be [], and answer_key must include expected_concepts plus required_concept_count.
+For closed questions, "answer_key.correct_option_ids" MUST contain option ids from "options".
 Do not ask generic self-rating questions.
+Each distractor must be something a junior developer might plausibly choose, but it must still be wrong.
 Do not use these banned low-signal patterns:
 - "Which option is the strongest engineering choice for X?"
-- "Choose the option that preserves correctness, clarity, and maintainability."
-- distractors like "Disable logging" or "Change an unrelated part of the system first."
 
 Use the few-shot examples below as the quality bar. Follow the same field names and realism level.
 
@@ -103,5 +149,4 @@ Example open_ended:
   "option_rationales": []
 }
 
-Blueprints:
-[{"slot": 1, "subskill_key": "http_api_design", "competency": "HTTP API Design", "dimension_key": "api_service_design", "question_type": "single_choice", "difficulty": 4, "estimated_seconds": 45, "learning_objective_hint": "Assess concrete judgment in http api design using one main competency only.", "progression_band": "fundamentals", "focus": "narrow one decision so exactly one best answer exists", "gap_priority": "normal"}, {"slot": 2, "subskill_key": "relational_modeling", "competency": "Relational Modeling", "dimension_key": "data_persistence", "question_type": "single_choice", "difficulty": 4, "estimated_seconds": 45, "learning_objective_hint": "Assess concrete judgment in relational modeling using one main competency only.", "progression_band": "fundamentals", "focus": "narrow one decision so exactly one best answer exists", "gap_priority": "normal"}, {"slot": 3, "subskill_key": "logging_monitoring", "competency": "Logging and Monitoring", "dimension_key": "reliability_operations", "question_type": "single_choice", "difficulty": 4, "estimated_seconds": 45, "learning_objective_hint": "Assess concrete judgment in logging and monitoring using one main competency only.", "progression_band": "applied_debugging", "focus": "narrow one decision so exactly one best answer exists", "gap_priority": "normal"}, {"slot": 4, "subskill_key": "requirement_translation", "competency": "Requirement Translation", "dimension_key": "delivery_collaboration", "question_type": "single_choice", "difficulty": 4, "estimated_seconds": 45, "learning_objective_hint": "Assess concrete judgment in requirement translation using one main competency only.", "progression_band": "applied_debugging", "focus": "narrow one decision so exactly one best answer exists", "gap_priority": "normal"}, {"slot": 5, "subskill_key": "service_decomposition", "competency": "Service Decomposition", "dimension_key": "api_service_design", "question_type": "single_choice", "difficulty": 4, "estimated_seconds": 45, "learning_objective_hint": "Assess concrete judgment in service decomposition using one main competency only.", "progression_band": "tradeoff_reasoning", "focus": "narrow one decision so exactly one best answer exists", "gap_priority": "normal"}]
+Across the 5 questions, progress from fundamentals to applied work and finish with tradeoff reasoning.

@@ -77,6 +77,10 @@ REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] = [
 # Celery - Use eager mode in development so async-first endpoints can be exercised
 # without requiring a running Redis broker during local verification.
 CELERY_TASK_ALWAYS_EAGER = True
-CELERY_TASK_EAGER_PROPAGATES = True
+# Do not turn HTTP 201 assessment creation into 500 when background generation fails locally.
+CELERY_TASK_EAGER_PROPAGATES = False
+
+# Avoid loading SentenceTransformer on every /jobs/match/ request (slow; MPS needs disk).
+JOB_RANKER_SKIP_EMBEDDINGS = True
 
 print(">> Development settings loaded")

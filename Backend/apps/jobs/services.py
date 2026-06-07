@@ -18,6 +18,14 @@ from django.utils import timezone
 from datetime import timedelta
 
 from apps.jobs.models import JobPlatform, Job, JobSkill, MarketInsight, SkillDemand
+from apps.jobs.experience_matching import (
+    effective_job_level,
+    experience_fit_label,
+    filter_jobs_for_user_level,
+    job_matches_user_level,
+    resolve_user_career_level,
+)
+from apps.jobs.skill_matching import collect_user_match_skills, compare_skill_sets
 from apps.users.models import User, Skill, UserSkill
 
 
@@ -173,50 +181,101 @@ class JobService:
             - job: Job instance
             - match_score: Percentage match (0-100)
             - matching_skills: List of matched skill names
+            - missing_skills: Required skills the user lacks
+            - explanation: { matching_skills, missing_skills, top_factors }
         """
-        # Get user's skills (profile + latest assessment gaps)
         user_skills = JobService._user_skill_names(user)
+        user_career_level = resolve_user_career_level(user)
 
         if not user_skills:
-            # No skills - return recent jobs with 0 match score
-            jobs = JobService.get_recent_jobs(limit=limit)
-            return [{'job': job, 'match_score': 0, 'matching_skills': []} for job in jobs]
+            return []
 
-        # Get active jobs with their required skills
-        jobs = Job.objects.filter(
-            is_active=True,
-            is_deleted=False,
-            platform__is_active=True
-        ).select_related('platform').prefetch_related('job_skills__skill')
+        jobs = list(
+            Job.objects.filter(
+                is_active=True,
+                is_deleted=False,
+                platform__is_active=True,
+            )
+            .select_related("platform")
+            .prefetch_related("job_skills__skill")
+            .order_by("-posted_date")[:200]
+        )
+        jobs_with_requirements = [
+            job
+            for job in jobs
+            if job.job_skills.filter(is_required=True).exists()
+        ]
+        candidate_jobs = jobs_with_requirements or jobs
+        candidate_jobs = filter_jobs_for_user_level(candidate_jobs, user_career_level)
+
+        if not candidate_jobs:
+            return []
+
+        try:
+            from apps.jobs.job_ranking import JobRankingIntegration
+
+            ranked = JobRankingIntegration.rank_user_jobs(
+                user, candidate_jobs, limit=limit
+            )
+            positive = [
+                item
+                for item in ranked
+                if item.get("match_score", 0) > 0
+                and job_matches_user_level(item["job"], user_career_level)
+            ]
+            if positive:
+                return JobService._attach_level_context(positive, user_career_level)[:limit]
+        except Exception:
+            pass
 
         matches = []
-        for job in jobs[:200]:  # Limit to 200 for performance
-            # Get required skills for this job
-            job_required_skills = set(
-                job.job_skills.filter(
-                    is_required=True
-                ).values_list('skill__name', flat=True)
+        for job in candidate_jobs:
+            scores = JobService.compute_match_score(job, user)
+            if scores["match_score"] <= 0:
+                continue
+            explanation = {
+                "matching_skills": scores["matching_skills"],
+                "missing_skills": scores["missing_skills"],
+                "top_factors": [
+                    {
+                        "feature": "required_skill_overlap_ratio",
+                        "value": round(scores["match_score"] / 100.0, 4),
+                        "contribution": round(scores["match_score"] / 100.0, 4),
+                    }
+                ],
+                "experience_fit": experience_fit_label(job, user_career_level),
+                "user_career_level": user_career_level,
+                "job_experience_level": effective_job_level(job),
+            }
+            matches.append(
+                {
+                    "job": job,
+                    "match_score": scores["match_score"],
+                    "matching_skills": scores["matching_skills"],
+                    "missing_skills": scores["missing_skills"],
+                    "explanation": explanation,
+                    "user_career_level": user_career_level,
+                    "job_experience_level": effective_job_level(job),
+                }
             )
 
-            if not job_required_skills:
-                continue
+        matches.sort(key=lambda item: item["match_score"], reverse=True)
+        return JobService._attach_level_context(matches, user_career_level)[:limit]
 
-            # Calculate match
-            matching_skills = user_skills & job_required_skills
-            match_score = int((len(matching_skills) / len(job_required_skills)) * 100)
-
-            if match_score > 0:
-                matches.append({
-                    'job': job,
-                    'match_score': match_score,
-                    'matching_skills': list(matching_skills),
-                    'missing_skills': list(job_required_skills - user_skills)
-                })
-
-        # Sort by match score descending
-        matches.sort(key=lambda x: x['match_score'], reverse=True)
-
-        return matches[:limit]
+    @staticmethod
+    def _attach_level_context(
+        matches: List[Dict[str, Any]], user_career_level: str
+    ) -> List[Dict[str, Any]]:
+        for item in matches:
+            job = item["job"]
+            item.setdefault("user_career_level", user_career_level)
+            item.setdefault("job_experience_level", effective_job_level(job))
+            explanation = item.get("explanation") or {}
+            explanation.setdefault("experience_fit", experience_fit_label(job, user_career_level))
+            explanation.setdefault("user_career_level", user_career_level)
+            explanation.setdefault("job_experience_level", effective_job_level(job))
+            item["explanation"] = explanation
+        return matches
 
     @staticmethod
     @transaction.atomic
@@ -390,40 +449,7 @@ class JobService:
 
     @staticmethod
     def _user_skill_names(user: User) -> set[str]:
-        profile_skills = set(
-            UserSkill.objects.filter(user=user, is_deleted=False).values_list(
-                "skill__name", flat=True
-            )
-        )
-        if profile_skills:
-            return profile_skills
-
-        try:
-            from apps.assessments.models import AssessmentResult
-
-            latest = (
-                AssessmentResult.objects.select_related("assessment")
-                .filter(assessment__user=user, is_deleted=False)
-                .order_by("-created_at")
-                .first()
-            )
-            if latest and latest.roadmap_signal:
-                priority = latest.roadmap_signal.get("priority_order") or []
-                gaps = [
-                    item.get("subskill_key", "")
-                    for item in (latest.roadmap_signal.get("subskill_gaps") or [])
-                    if isinstance(item, dict)
-                ]
-                assessment_skills = {
-                    str(item).replace("_", " ").title()
-                    for item in [*priority, *gaps]
-                    if str(item).strip()
-                }
-                return assessment_skills
-        except Exception:
-            pass
-
-        return set()
+        return collect_user_match_skills(user)
 
     @staticmethod
     def compute_match_score(job: Job, user: User) -> Dict[str, Any]:
@@ -435,9 +461,9 @@ class JobService:
         if not job_required_skills:
             return {"match_score": 0, "matching_skills": [], "missing_skills": []}
 
-        matching_skills = sorted(user_skills & job_required_skills)
-        missing_skills = sorted(job_required_skills - user_skills)
-        match_score = int((len(matching_skills) / len(job_required_skills)) * 100)
+        matching_skills, missing_skills, match_score = compare_skill_sets(
+            user_skills, job_required_skills
+        )
         return {
             "match_score": match_score,
             "matching_skills": matching_skills,

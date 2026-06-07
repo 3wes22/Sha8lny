@@ -108,6 +108,32 @@ SCENARIO_RAG_MAX_EXAMPLES_PER_PROMPT = config(
     cast=int,
 )
 
+# Assessment question generation: "batched" (one Gemini call) or "per_question".
+ASSESSMENT_GENERATION_MODE = config(
+    "ASSESSMENT_GENERATION_MODE",
+    default="batched",
+).strip().lower()
+
+# When True, CoverageTracker.assert_complete() raises if dimension mins are not met.
+ASSESSMENT_COVERAGE_STRICT = config(
+    "ASSESSMENT_COVERAGE_STRICT",
+    default=False,
+    cast=bool,
+)
+
+# Second-pass LLM calls (quota-sensitive; off by default in dev/free tier).
+ASSESSMENT_AMBIGUITY_VALIDATION_ENABLED = config(
+    "ASSESSMENT_AMBIGUITY_VALIDATION_ENABLED",
+    default=False,
+    cast=bool,
+)
+
+ASSESSMENT_RUBRIC_LLM_ENABLED = config(
+    "ASSESSMENT_RUBRIC_LLM_ENABLED",
+    default=False,
+    cast=bool,
+)
+
 # ---------------------------------------------------------------------------
 # Course embedding index (roadmap course matching)
 # ---------------------------------------------------------------------------

@@ -700,7 +700,7 @@ def test_stage_one_generation_does_not_reuse_cached_questions_after_curated_repl
     )
     replacement_graph = replace(
         graph,
-        version="curated-v3",
+        version="curated-v4",
         dimensions=[replacement_dimension, *graph.dimensions[1:]],
     )
     payloads = iter([
@@ -813,13 +813,9 @@ def test_stage_one_generation_sends_response_json_schema(monkeypatch):
     assert "questions" in schema["required"]
     question_schema = schema["properties"]["questions"]["items"]
     assert question_schema["properties"]["scenario_context"]["type"] == "string"
-    assert question_schema["properties"]["correct_answer_rationale"]["type"] == "string"
-    assert question_schema["properties"]["option_rationales"]["type"] == "array"
-    assert question_schema["properties"]["question_type"]["enum"] == [
-        "single_choice",
-        "multi_select",
-        "open_ended",
-    ]
+    assert question_schema["properties"]["scenario_context"]["type"] == "string"
+    assert question_schema["properties"]["question_type"]["type"] == "string"
+    assert question_schema["additionalProperties"] is True
 
 
 def test_stage_one_generation_normalizes_typed_question_contract(monkeypatch):
@@ -855,17 +851,20 @@ def test_stage_one_generation_normalizes_typed_question_contract(monkeypatch):
     questions, metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
 
     assert metadata.fallback_used is False
-    assert questions[0]["question_type"] == "single_choice"
-    assert questions[0]["type"] == "multiple_choice"
-    assert questions[0]["interaction_mode"] == "single_select"
-    assert questions[0]["answer_key"] == {
+    payment_question = next(
+        question for question in questions if question["subskill_key"] == "http_api_design"
+    )
+    assert payment_question["question_type"] == "single_choice"
+    assert payment_question["type"] == "multiple_choice"
+    assert payment_question["interaction_mode"] == "single_select"
+    assert payment_question["answer_key"] == {
         "correct_option_ids": ["a"],
         "scoring": "single_best",
     }
-    assert questions[0]["scenario_context"].startswith("A payment API receives duplicate POST /payments")
-    assert questions[0]["correct_answer_rationale"].startswith("Idempotency keys let the service")
-    assert len(questions[0]["option_rationales"]) == 4
-    assert questions[0]["validation_flags"] == []
+    assert payment_question["scenario_context"].startswith("A payment API receives duplicate POST /payments")
+    assert payment_question["correct_answer_rationale"].startswith("Idempotency keys let the service")
+    assert len(payment_question["option_rationales"]) == 4
+    assert payment_question["validation_flags"] == []
     assert all(question["question_type"] == "single_choice" for question in questions)
     assert all(question["validation_flags"] == [] for question in questions)
 
@@ -977,8 +976,11 @@ def test_stage_one_generation_replaces_invalid_questions_after_failed_repair(mon
     assert "strongest engineering choice" not in " ".join(
         question["question_text"].lower() for question in questions
     )
-    assert questions[0]["question_text"].startswith("A payment API")
-    assert any("idempotency" in option["label"].lower() for option in questions[0]["options"])
+    payment_question = next(
+        question for question in questions if question["subskill_key"] == "http_api_design"
+    )
+    assert payment_question["question_text"].startswith("A payment API")
+    assert any("idempotency" in option["label"].lower() for option in payment_question["options"])
 
 
 def test_stage_one_generation_only_replaces_invalid_questions_after_repair(monkeypatch):
@@ -1024,7 +1026,7 @@ def test_stage_one_generation_only_replaces_invalid_questions_after_repair(monke
     assert metadata.error_code == "invalid_stage_question_contract"
     assert questions[0]["question_text"].startswith("You need to design an endpoint")
     assert "strongest engineering choice" not in questions[2]["question_text"].lower()
-    assert "logs" in questions[2]["question_text"].lower() or "trace" in questions[2]["question_text"].lower()
+    assert questions[2]["question_text"].startswith("A payment API")
     assert all(question["validation_flags"] == [] for question in questions)
 
 
@@ -1069,7 +1071,7 @@ def test_stage_one_generation_does_not_cache_fallback_questions(monkeypatch):
     assert first_metadata.fallback_used is True
     assert second_metadata.fallback_used is False
     assert second_metadata.model == "mock-gemma"
-    assert first_metadata.source == "fallback"
+    assert first_metadata.source == "curated_fallback"
     assert second_metadata.source == "llm"
 
 

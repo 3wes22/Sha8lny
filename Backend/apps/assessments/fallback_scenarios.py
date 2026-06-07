@@ -78,6 +78,140 @@ BACKEND_FALLBACK_SCENARIOS: dict[tuple[int, str, str], dict[str, Any]] = {
     },
     (
         1,
+        "decorators",
+        "single_choice",
+    ): {
+        "scenario_context": (
+            "Several backend functions call a flaky payment gateway, and the team wants to add the same retry-with-backoff behavior to each one without copying the logic."
+        ),
+        "stem": "Which approach best adds reusable retry behavior while preserving each function's name, signature, and docstring?",
+        "question_text": (
+            "Several backend functions call a flaky payment gateway, and the team wants to add the same retry-with-backoff behavior to each one without copying the logic. "
+            "Which approach best adds reusable retry behavior while preserving each function's name, signature, and docstring?"
+        ),
+        "type": "multiple_choice",
+        "interaction_mode": "single_select",
+        "options": [
+            {
+                "id": "a",
+                "value": "a",
+                "label": "Write a decorator that wraps the call, retries on transient errors, and uses functools.wraps to keep the original metadata.",
+            },
+            {
+                "id": "b",
+                "value": "b",
+                "label": "Paste the retry loop into the body of every function so the behavior stays explicit at each call site.",
+            },
+            {
+                "id": "c",
+                "value": "c",
+                "label": "Wrap the whole web request in one try/except and retry the entire request on any failure.",
+            },
+            {
+                "id": "d",
+                "value": "d",
+                "label": "Add a global flag that other modules read to decide whether to retry before each call.",
+            },
+        ],
+        "answer_key": {"correct_option_ids": ["a"], "scoring": "single_best"},
+        "learning_objective": "Assess whether decorators are used to factor cross-cutting behavior while preserving function identity.",
+        "explanation": "A decorator centralizes the retry policy in one place, and functools.wraps keeps the wrapped function introspectable.",
+        "correct_answer_rationale": (
+            "A decorator applies one retry policy to many functions from a single definition, and functools.wraps preserves the name, signature, and docstring."
+        ),
+        "option_rationales": [
+            {
+                "option_id": "a",
+                "is_correct": True,
+                "rationale": "It reuses one retry policy across functions and keeps metadata intact with functools.wraps.",
+            },
+            {
+                "option_id": "b",
+                "is_correct": False,
+                "rationale": "Copying the loop into every function duplicates logic and drifts as the policy changes.",
+            },
+            {
+                "option_id": "c",
+                "is_correct": False,
+                "rationale": "Retrying the entire request re-runs unrelated work and can repeat side effects.",
+            },
+            {
+                "option_id": "d",
+                "is_correct": False,
+                "rationale": "A shared global flag adds hidden coupling and still leaves the retry logic duplicated.",
+            },
+        ],
+        "helper": "Pick the option that factors the shared behavior into one reusable wrapper.",
+    },
+    (
+        1,
+        "select_related_prefetch",
+        "single_choice",
+    ): {
+        "scenario_context": (
+            "A Django page lists 50 orders and shows each order's customer and its line items, but profiling reveals hundreds of repeated queries (an N+1 pattern)."
+        ),
+        "stem": "Which ORM change best removes the N+1 queries for this page?",
+        "question_text": (
+            "A Django page lists 50 orders and shows each order's customer and its line items, but profiling reveals hundreds of repeated queries (an N+1 pattern). "
+            "Which ORM change best removes the N+1 queries for this page?"
+        ),
+        "type": "multiple_choice",
+        "interaction_mode": "single_select",
+        "options": [
+            {
+                "id": "a",
+                "value": "a",
+                "label": "Use select_related for the customer foreign key and prefetch_related for the line items.",
+            },
+            {
+                "id": "b",
+                "value": "b",
+                "label": "Use select_related for both the customer and the line items.",
+            },
+            {
+                "id": "c",
+                "value": "c",
+                "label": "Loop over the orders and call refresh_from_db() on each related object.",
+            },
+            {
+                "id": "d",
+                "value": "d",
+                "label": "Raise the database connection pool size so the extra queries run faster.",
+            },
+        ],
+        "answer_key": {"correct_option_ids": ["a"], "scoring": "single_best"},
+        "learning_objective": "Assess correct use of select_related versus prefetch_related to eliminate N+1 queries.",
+        "explanation": "select_related joins single-valued foreign keys in one query, while prefetch_related batches a many-valued relation in a second query.",
+        "correct_answer_rationale": (
+            "The customer is a single-valued foreign key best joined with select_related, while line items are many-valued and need prefetch_related's batched second query."
+        ),
+        "option_rationales": [
+            {
+                "option_id": "a",
+                "is_correct": True,
+                "rationale": "It matches each access pattern: a join for the foreign key and a batched query for the collection.",
+            },
+            {
+                "option_id": "b",
+                "is_correct": False,
+                "rationale": "select_related cannot span a many-valued relation like line items, so the N+1 on items remains.",
+            },
+            {
+                "option_id": "c",
+                "is_correct": False,
+                "rationale": "refresh_from_db() issues another query per object, which makes the N+1 worse.",
+            },
+            {
+                "option_id": "d",
+                "is_correct": False,
+                "rationale": "A bigger pool runs the same excessive queries; it does not remove the N+1.",
+            },
+        ],
+        "helper": "Match select_related to single-valued relations and prefetch_related to collections.",
+    },
+    (
+        1,
         "relational_modeling",
         "single_choice",
     ): {

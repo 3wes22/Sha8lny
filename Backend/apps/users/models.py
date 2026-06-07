@@ -364,6 +364,7 @@ class UserSkill(BaseModel):
     SOURCE_CHOICES = [
         ('user_input', _('User Input')),
         ('assessment', _('Assessment')),
+        ('roadmap_milestone', _('Roadmap Milestone')),
         ('verified', _('Verified')),
     ]
 

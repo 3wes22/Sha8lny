@@ -513,6 +513,29 @@ export interface JobListItem {
   external_action_available?: boolean;
   skill_match_summary?: string;
   match_score?: number | null;
+  matching_skills?: string[];
+  missing_skills?: string[];
+  explanation?: JobMatchExplanation;
+  user_career_level?: string;
+  job_experience_level?: string;
+}
+
+export interface JobMatchResponse {
+  user_career_level?: string | null;
+  results: JobListItem[];
+}
+
+export interface JobMatchExplanation {
+  matching_skills: string[];
+  missing_skills: string[];
+  top_factors: Array<{
+    feature: string;
+    value: number;
+    contribution?: number;
+  }>;
+  experience_fit?: string;
+  user_career_level?: string;
+  job_experience_level?: string;
 }
 
 // Job interface (detail view - full data)
@@ -540,6 +563,8 @@ export interface Job {
   salary_period?: string;
   salary_disclosed: boolean;
   external_url: string;
+  external_apply_url?: string;
+  external_apply_label?: string;
   application_deadline?: string;
   posted_date: string;
   skills: JobSkill[];
@@ -718,6 +743,21 @@ export interface AssessmentQuestion {
   competency?: string;
   learning_objective?: string;
   helper?: string;
+  /** Server-side scoring rubric for open-ended questions (optional in API responses). */
+  rubric?: {
+    question_id?: string;
+    scoring_dimensions?: Array<{
+      dimension: string;
+      weight: number;
+      score_1_descriptor: string;
+      score_3_descriptor: string;
+      score_5_descriptor: string;
+    }>;
+    required_concepts?: string[];
+    bonus_concepts?: string[];
+    auto_fail_if?: string[];
+  };
+  generation_metadata?: Record<string, unknown>;
   options?: Array<{
     id?: string;
     value: string;
@@ -992,7 +1032,8 @@ export const jobApi = {
     const searchParams = new URLSearchParams();
     if (params?.limit) searchParams.append('limit', String(params.limit));
     const query = searchParams.toString();
-    return apiClient.get<JobListItem[]>(`/jobs/match/${query ? `?${query}` : ''}`);
+    const suffix = query ? `?${query}` : '';
+    return apiClient.get<JobMatchResponse>(`/jobs/match/${suffix}`);
   },
 
   // Get all jobs (paginated list)

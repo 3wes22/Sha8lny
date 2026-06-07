@@ -61,6 +61,10 @@ class Command(BaseCommand):
                 platform=platform,
                 external_id=f"{platform.slug}_{job_data['title']}_{created_count}",
                 external_url=f"{platform.website_url}/jobs/{created_count}",
+                platform_metadata={
+                    "source": "fabricated",
+                    "ingest_method": "seed_jobs",
+                },
                 **job_data
             )
 

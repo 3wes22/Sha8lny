@@ -3,7 +3,7 @@ from __future__ import annotations
 from apps.assessments.role_graph import CoreDimension, RoleGraph, SubSkill
 
 
-CURATED_VERSION = "curated-v2"
+CURATED_VERSION = "curated-v3"
 
 
 def skill(
@@ -12,6 +12,8 @@ def skill(
     dimension: str,
     target_proficiency: int,
     prerequisites: list[str] | None = None,
+    *,
+    frame: str | None = None,
 ) -> SubSkill:
     return SubSkill(
         key=key,
@@ -19,6 +21,7 @@ def skill(
         dimension=dimension,
         target_proficiency=target_proficiency,
         prerequisites=prerequisites or [],
+        frame=frame,
     )
 
 
@@ -27,12 +30,17 @@ def dimension(
     label: str,
     weight: float,
     subskills: list[SubSkill],
+    *,
+    assessment_weight: float | None = None,
+    min_questions_per_stage: int = 1,
 ) -> CoreDimension:
     return CoreDimension(
         key=key,
         label=label,
         weight=weight,
         subskills=subskills,
+        assessment_weight=assessment_weight,
+        min_questions_per_stage=min_questions_per_stage,
     )
 
 
@@ -119,6 +127,7 @@ ROLE_GRAPHS = {
                         "reliability_operations",
                         4,
                         ["logging_monitoring"],
+                        frame="debugging",
                     ),
                     skill(
                         "deployment_readiness",
@@ -186,6 +195,8 @@ ROLE_GRAPHS = {
                     ),
                     skill("ui_state_basics", "UI State Basics", "interface_foundations", 4),
                 ],
+                assessment_weight=0.30,
+                min_questions_per_stage=2,
             ),
             dimension(
                 "component_architecture",
@@ -221,13 +232,21 @@ ROLE_GRAPHS = {
                         ["component_composition"],
                     ),
                 ],
+                assessment_weight=0.25,
+                min_questions_per_stage=2,
             ),
             dimension(
                 "quality_performance",
                 "Quality and Performance",
                 0.25,
                 [
-                    skill("browser_debugging", "Browser Debugging", "quality_performance", 4),
+                    skill(
+                        "browser_debugging",
+                        "Browser Debugging",
+                        "quality_performance",
+                        4,
+                        frame="debugging",
+                    ),
                     skill(
                         "frontend_testing",
                         "Frontend Testing",
@@ -250,6 +269,8 @@ ROLE_GRAPHS = {
                         ["ui_state_basics"],
                     ),
                 ],
+                assessment_weight=0.25,
+                min_questions_per_stage=2,
             ),
             dimension(
                 "product_delivery",
@@ -279,6 +300,8 @@ ROLE_GRAPHS = {
                         ["design_translation"],
                     ),
                 ],
+                assessment_weight=0.20,
+                min_questions_per_stage=1,
             ),
         ],
     ),
@@ -1095,3 +1118,30 @@ ROLE_GRAPHS = {
         ],
     ),
 }
+
+# Taxonomy-backed role graphs (curated-v3) override legacy 4-dimension graphs.
+from apps.assessments.role_graph_taxonomy import (  # noqa: E402
+    build_role_graph_from_taxonomy,
+    get_taxonomy,
+)
+
+_TAXONOMY_ROLE_LABELS: dict[str, str] = {
+    "frontend": "Frontend Developer",
+    "backend": "Backend Developer",
+    "devops": "DevOps Engineer",
+    "data_science": "Data Scientist",
+    "machine_learning_engineer": "Machine Learning Engineer",
+    "android": "Android Developer",
+    "fullstack": "Full Stack Developer",
+}
+
+for _role_key, _label in _TAXONOMY_ROLE_LABELS.items():
+    _taxonomy = get_taxonomy(_role_key)
+    if _taxonomy is None:
+        continue
+    ROLE_GRAPHS[_role_key] = build_role_graph_from_taxonomy(
+        role_key=_role_key,
+        role_label=_label,
+        taxonomy=_taxonomy,
+        version=CURATED_VERSION,
+    )

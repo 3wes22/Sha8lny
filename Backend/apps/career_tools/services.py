@@ -4,7 +4,8 @@ Career Tools Service Layer
 Handles resume building, ATS optimization, and portfolio management.
 """
 
-from typing import Optional, List, Dict, Any
+import json
+from typing import Optional, List, Dict, Any, Tuple
 from decimal import Decimal
 from django.db import transaction
 from django.core.files.base import ContentFile
@@ -176,30 +177,103 @@ class ResumeService:
         return resume
 
     @staticmethod
-    @transaction.atomic
-    def optimize_for_ats(resume: Resume) -> Resume:
+    def _section_items(value: Any) -> List[Any]:
+        """Normalize a JSONField section (dict-with-items, list, or dict) to a list."""
+        if isinstance(value, list):
+            return value
+        if isinstance(value, dict):
+            items = value.get('items')
+            if isinstance(items, list):
+                return items
+            return [value] if value else []
+        return []
+
+    @classmethod
+    def compute_ats_score(cls, resume: Resume) -> Tuple[Decimal, List[str]]:
+        """Deterministically score a resume for ATS-friendliness from its content.
+
+        Returns a (score 0-100, suggestions) tuple. The score rewards complete
+        contact details, a summary, core sections, quantified achievements, and
+        supporting projects/certifications. No external service is required, so
+        the result is stable and works offline.
         """
-        Optimize resume for ATS systems using AI.
+        score = 0
+        suggestions: List[str] = []
 
-        Placeholder for a future hosted-Gemini ATS review task.
+        personal = resume.personal_info if isinstance(resume.personal_info, dict) else {}
+        contact_fields = [
+            personal.get('name') or personal.get('full_name'),
+            personal.get('email'),
+            personal.get('phone'),
+        ]
+        present = sum(1 for field in contact_fields if str(field or '').strip())
+        score += round(20 * present / 3)
+        if present < 3:
+            suggestions.append('Add complete contact details (name, email, phone).')
+
+        if str(personal.get('summary') or personal.get('objective') or '').strip():
+            score += 10
+        else:
+            suggestions.append('Add a concise professional summary near the top.')
+
+        work = cls._section_items(resume.work_experience)
+        if work:
+            score += 20
+        else:
+            suggestions.append('Add work experience entries with role, company, and dates.')
+
+        if cls._section_items(resume.education):
+            score += 15
+        else:
+            suggestions.append('Add your education background.')
+
+        if cls._section_items(resume.skills):
+            score += 15
+        else:
+            suggestions.append('List relevant skills, including keywords from target job posts.')
+
+        if work and any(char.isdigit() for char in json.dumps(work)):
+            score += 10
+        elif work:
+            suggestions.append('Quantify achievements with concrete numbers and percentages.')
+
+        if cls._section_items(resume.projects) or cls._section_items(resume.certifications):
+            score += 10
+        else:
+            suggestions.append('Add projects or certifications to strengthen your profile.')
+
+        return Decimal(str(min(100, score))), suggestions
+
+    @classmethod
+    def build_resume_document(cls, resume: Resume) -> Dict[str, Any]:
+        """Assemble a structured, ordered resume document from stored sections.
+
+        Returns the rendered content the frontend/exporter consumes. Binary file
+        export (PDF/DOCX) is a v2 feature; this provides the structured payload.
         """
-        # Set processing status
-        resume.ats_processing_status = 'pending'
-        resume.save(update_fields=['ats_processing_status', 'updated_at'])
-
-        # TODO: Trigger async Celery task for AI analysis
-        # tasks.optimize_resume_ats.delay(resume.id)
-
-        # Placeholder: Set dummy score
-        resume.ats_score = Decimal('75.00')
-        resume.is_ats_optimized = True
-        resume.ats_suggestions = {
-            'improvements': [
-                'Add more action verbs',
-                'Quantify achievements',
-                'Include relevant keywords'
-            ]
+        return {
+            'title': resume.title,
+            'template': resume.template_name or 'modern',
+            'completeness_percentage': resume.completeness_percentage,
+            'sections': [
+                {'key': 'personal_info', 'label': 'Personal Information', 'content': resume.personal_info or {}},
+                {'key': 'work_experience', 'label': 'Work Experience', 'items': cls._section_items(resume.work_experience)},
+                {'key': 'education', 'label': 'Education', 'items': cls._section_items(resume.education)},
+                {'key': 'skills', 'label': 'Skills', 'items': cls._section_items(resume.skills)},
+                {'key': 'projects', 'label': 'Projects', 'items': cls._section_items(resume.projects)},
+                {'key': 'certifications', 'label': 'Certifications', 'items': cls._section_items(resume.certifications)},
+                {'key': 'languages', 'label': 'Languages', 'items': cls._section_items(resume.languages)},
+            ],
         }
+
+    @classmethod
+    @transaction.atomic
+    def optimize_for_ats(cls, resume: Resume) -> Resume:
+        """Score the resume for ATS-friendliness deterministically from its content."""
+        score, suggestions = cls.compute_ats_score(resume)
+        resume.ats_score = score
+        resume.is_ats_optimized = True
+        resume.ats_suggestions = {'improvements': suggestions}
         resume.ats_processing_status = 'completed'
         resume.save()
 

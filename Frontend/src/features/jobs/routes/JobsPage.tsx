@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Bookmark, Loader2, MapPin, Search } from "lucide-react";
+import { Bookmark, Loader2, MapPin, Search, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { ROUTES } from "@/app/routes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { JobMatchExplanation } from "@/features/jobs/components/JobMatchExplanation";
 import { jobApi, type JobListItem, type JobSearchParams, getApiErrorMessage } from "@/lib/api";
 import { PageShell } from "@/shared/components/PageShell";
 import { SectionHeader } from "@/shared/components/SectionHeader";
@@ -15,6 +16,10 @@ import { toast } from "sonner";
 const formatJobType = (value: string) =>
   value.split("_").map((segment) => `${segment[0].toUpperCase()}${segment.slice(1)}`).join(" ");
 
+const formatCareerLevel = (value: string) => formatJobType(value);
+
+type JobsView = "recommended" | "search";
+
 export default function JobsPage() {
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<JobListItem[]>([]);
@@ -23,6 +28,9 @@ export default function JobsPage() {
   const [searching, setSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [location, setLocation] = useState("");
+  const [view, setView] = useState<JobsView>("recommended");
+  const [matchHint, setMatchHint] = useState<string | null>(null);
+  const [userCareerLevel, setUserCareerLevel] = useState<string | null>(null);
 
   const loadSavedJobs = async () => {
     try {
@@ -33,11 +41,33 @@ export default function JobsPage() {
     }
   };
 
+  const fetchRecommended = async () => {
+    try {
+      setSearching(true);
+      const response = await jobApi.match({ limit: 30 });
+      setJobs(response.results);
+      setUserCareerLevel(response.user_career_level ?? null);
+      setView("recommended");
+      const hasPositiveMatch = response.results.some((job) => (job.match_score ?? 0) > 0);
+      setMatchHint(
+        hasPositiveMatch
+          ? null
+          : "No skill overlap yet. Complete your assessment or add skills in Profile, then return here.",
+      );
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to load recommended jobs"));
+    } finally {
+      setLoading(false);
+      setSearching(false);
+    }
+  };
+
   const fetchJobs = async (params: JobSearchParams = {}) => {
     try {
       setSearching(true);
       const response = await jobApi.search(params);
       setJobs(response.results);
+      setView("search");
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Failed to load jobs"));
     } finally {
@@ -48,7 +78,7 @@ export default function JobsPage() {
 
   useEffect(() => {
     void loadSavedJobs();
-    void fetchJobs();
+    void fetchRecommended();
   }, []);
 
   const handleSearch = () => {
@@ -89,10 +119,23 @@ export default function JobsPage() {
           Saved jobs ({savedJobIds.size})
         </Button>
       }
-      description="Explore roles with enough signal to compare them against your current direction."
+      description="Explore roles ranked for your skills, with clear reasons behind each match."
       eyebrow="Jobs"
       title="Job discovery"
     >
+      <div className="flex flex-wrap gap-2">
+        <Button
+          onClick={() => void fetchRecommended()}
+          variant={view === "recommended" ? "default" : "outline"}
+        >
+          <Sparkles className="mr-2 h-4 w-4" />
+          Recommended for you
+        </Button>
+        <Button onClick={() => void fetchJobs()} variant={view === "search" ? "default" : "outline"}>
+          Browse all
+        </Button>
+      </div>
+
       <div className="atlas-panel p-5">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]">
           <div className="relative">
@@ -120,10 +163,24 @@ export default function JobsPage() {
         </div>
       </div>
 
+      {matchHint && view === "recommended" ? (
+        <StatePanel description={matchHint} state="empty" title="No personalized matches yet" />
+      ) : null}
+
       <section className="space-y-4">
         <SectionHeader
-          description="These results should feel like navigable opportunities, not a generic card grid."
-          title={`${jobs.length} roles in view`}
+          description={
+            view === "recommended"
+              ? userCareerLevel
+                ? `Roles at or below your level (${formatCareerLevel(userCareerLevel)}). Senior and lead postings are hidden.`
+                : "Ranked by skill overlap, freshness, and career level fit."
+              : "Filter the catalog by title, company, or location."
+          }
+          title={
+            view === "recommended"
+              ? `${jobs.length} recommended roles`
+              : `${jobs.length} roles in view`
+          }
         />
 
         {jobs.length > 0 ? (
@@ -149,6 +206,18 @@ export default function JobsPage() {
                     <p className="text-sm text-muted-foreground">
                       Experience: {job.experience_level} • Posted {new Date(job.posted_date).toLocaleDateString()}
                     </p>
+                    {view === "recommended" ? (
+                      <JobMatchExplanation
+                        explanation={{
+                          ...job.explanation,
+                          user_career_level: job.explanation?.user_career_level ?? userCareerLevel ?? undefined,
+                          job_experience_level:
+                            job.explanation?.job_experience_level ?? job.job_experience_level,
+                        }}
+                        matchingSkills={job.matching_skills}
+                        missingSkills={job.missing_skills}
+                      />
+                    ) : null}
                   </div>
 
                   <div className="flex flex-wrap gap-3">

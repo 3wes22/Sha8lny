@@ -409,6 +409,7 @@ class RoadmapSerializer(serializers.ModelSerializer):
 
     def get_ai_metadata(self, obj):
         generation = obj.metadata.get('generation', {}) if isinstance(obj.metadata, dict) else {}
+        provenance = generation.get('provenance', {}) if isinstance(generation.get('provenance'), dict) else {}
         return {
             'source': generation.get('source', 'baseline'),
             'processing_time_ms': int(float(obj.processing_time_seconds or 0) * 1000),
@@ -418,6 +419,7 @@ class RoadmapSerializer(serializers.ModelSerializer):
             'trace_id': generation.get('trace_id') or str(obj.id),
             'fallback_used': bool(generation.get('fallback_used')),
             'error_code': generation.get('error_code') or obj.ai_processing_error or None,
+            'provenance': provenance,
         }
 
     def get_next_action_for_phase(self, phase):

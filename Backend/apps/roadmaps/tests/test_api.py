@@ -16,6 +16,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.assessments.models import Assessment, AssessmentResult
+from apps.core import ai_settings as core_ai_settings
 from apps.core.ai_settings import GEMINI_FLASH_LITE_MODEL
 from apps.users.models import User
 from apps.roadmaps.models import (
@@ -190,8 +191,13 @@ class TestRoadmapCreationAPI:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_create_ai_roadmap_from_assessment_defaults(self, api_client, test_user):
-        """Test creating an AI roadmap from an assessment result without extra manual fields."""
+    def test_create_ai_roadmap_from_assessment_defaults(self, api_client, test_user, monkeypatch):
+        """Test creating an AI roadmap from an assessment result without extra manual fields.
+
+        Forces the deterministic roadmap blueprint (LLM unavailable) so the assertions on
+        assessment-derived structure are hermetic instead of depending on live Gemini output.
+        """
+        monkeypatch.setattr(core_ai_settings, "GEMINI_API_KEY", "")
         api_client.force_authenticate(user=test_user)
 
         assessment = Assessment.objects.create(

@@ -4,6 +4,7 @@ import { StatePanel } from "@/shared/components/StatePanel";
 import { getApiErrorMessage, roadmapApi, type Roadmap, type RoadmapMilestone } from "@/lib/api";
 import { RoadmapAtlas } from "@/features/roadmap/components/RoadmapAtlas";
 import { RoadmapRail } from "@/features/roadmap/components/RoadmapRail";
+import { RoadmapSourcesPanel } from "@/features/roadmap/components/RoadmapSourcesPanel";
 import { toast } from "sonner";
 
 interface RoadmapProgressViewProps {
@@ -52,11 +53,14 @@ export const RoadmapProgressView: React.FC<RoadmapProgressViewProps> = ({
       <div className={updating ? "opacity-75 transition-smooth" : ""}>
         <RoadmapAtlas onMilestoneToggle={handleMilestoneToggle} roadmap={roadmap} />
       </div>
-      <RoadmapRail
-        currentFocusNodeId={roadmap.current_focus_node_id}
-        phases={roadmap.phases}
-        summary={roadmap.journey_summary}
-      />
+      <div className="space-y-6">
+        <RoadmapRail
+          currentFocusNodeId={roadmap.current_focus_node_id}
+          phases={roadmap.phases}
+          summary={roadmap.journey_summary}
+        />
+        <RoadmapSourcesPanel roadmap={roadmap} />
+      </div>
     </div>
   );
 };

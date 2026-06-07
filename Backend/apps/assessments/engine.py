@@ -5,7 +5,7 @@ import re
 from statistics import mean
 from typing import Any
 
-from apps.assessments.role_graph import RoleGraph, SubSkill
+from apps.assessments.role_graph import CoreDimension, RoleGraph, SubSkill
 from apps.core.ai_contracts import GapProfile, SubSkillEvidence
 
 
@@ -27,40 +27,189 @@ def _coerce_evidence(value: SubSkillEvidence | dict[str, Any]) -> SubSkillEviden
     return SubSkillEvidence(**value)
 
 
+def _assessment_weight(dimension: CoreDimension) -> float:
+    return float(dimension.assessment_weight or dimension.weight)
+
+
+def _dimension_counts_from_questions(questions: list[dict[str, Any]] | None) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for question in questions or []:
+        if not isinstance(question, dict):
+            continue
+        dimension_key = str(question.get("dimension_key") or "").strip()
+        if dimension_key:
+            counts[dimension_key] = counts.get(dimension_key, 0) + 1
+    return counts
+
+
+def _pick_subskill(
+    role_graph: RoleGraph,
+    dimension_key: str,
+    *,
+    exclude_subskill_keys: set[str],
+) -> SubSkill | None:
+    for dimension in role_graph.dimensions:
+        if dimension.key != dimension_key:
+            continue
+        for subskill in sorted(dimension.subskills, key=lambda item: item.target_proficiency, reverse=True):
+            if subskill.key not in exclude_subskill_keys:
+                return subskill
+    return None
+
+
 class StageAllocator:
-    """Pick the stage-one calibration targets from the role graph."""
+    """Select stage targets using assessment weights and cross-stage coverage."""
 
     @staticmethod
     def allocate_stage_one(role_graph: RoleGraph, limit: int = 5) -> list[SubSkill]:
+        return StageAllocator.get_stage_targets(role_graph, stage=1, limit=limit)
+
+    @staticmethod
+    def get_stage_targets(
+        role_graph: RoleGraph,
+        *,
+        stage: int,
+        limit: int = 5,
+        prior_questions: list[dict[str, Any]] | None = None,
+        stage_one_dimension_keys: set[str] | None = None,
+    ) -> list[SubSkill]:
+        global_counts = _dimension_counts_from_questions(prior_questions)
+        used_dimensions: set[str] = set()
+        used_subskills: set[str] = set()
         selected: list[SubSkill] = []
-        seen: set[str] = set()
 
-        for dimension in role_graph.dimensions:
-            for subskill in dimension.subskills:
-                if subskill.key in seen:
-                    continue
-                selected.append(subskill)
-                seen.add(subskill.key)
+        def coverage_gap(dimension: CoreDimension) -> int:
+            minimum = max(1, int(dimension.min_questions_per_stage))
+            return minimum - global_counts.get(dimension.key, 0)
+
+        def dimension_allowed(dimension: CoreDimension) -> bool:
+            if dimension.key in used_dimensions:
+                return False
+            if stage == 2 and stage_one_dimension_keys and dimension.key in stage_one_dimension_keys:
+                return False
+            return True
+
+        ranked = sorted(role_graph.dimensions, key=_assessment_weight, reverse=True)
+        top_half_count = max(1, len(ranked) // 2)
+        top_half_keys = {dimension.key for dimension in ranked[:top_half_count]}
+
+        mandatory = [
+            dimension
+            for dimension in ranked
+            if coverage_gap(dimension) > 0 and dimension_allowed(dimension)
+        ]
+        mandatory.sort(key=lambda dimension: (coverage_gap(dimension), _assessment_weight(dimension)), reverse=True)
+
+        def try_add_dimension(dimension: CoreDimension) -> bool:
+            if not dimension_allowed(dimension):
+                return False
+            if stage == 1 and role_graph.role_key != "fullstack" and dimension.key not in top_half_keys:
+                if not mandatory or dimension not in mandatory[:limit]:
+                    if coverage_gap(dimension) <= 0:
+                        return False
+            subskill = _pick_subskill(role_graph, dimension.key, exclude_subskill_keys=used_subskills)
+            if subskill is None:
+                return False
+            selected.append(subskill)
+            used_dimensions.add(dimension.key)
+            used_subskills.add(subskill.key)
+            return True
+
+        for dimension in mandatory:
+            if len(selected) >= limit:
                 break
-            if len(selected) == limit:
-                return selected
+            try_add_dimension(dimension)
 
-        ranked_dimensions = sorted(role_graph.dimensions, key=lambda dimension: dimension.weight, reverse=True)
-        while len(selected) < limit:
-            added_this_round = False
-            for dimension in ranked_dimensions:
-                for subskill in dimension.subskills:
-                    if subskill.key in seen:
-                        continue
-                    selected.append(subskill)
-                    seen.add(subskill.key)
-                    added_this_round = True
+        if role_graph.role_key == "fullstack" and stage == 1:
+            origins_needed = {"frontend": 2, "backend": 2}
+            for origin, needed in origins_needed.items():
+                have = sum(
+                    1
+                    for subskill in selected
+                    for dimension in role_graph.dimensions
+                    if dimension.key == subskill.dimension and (dimension.origin or "") == origin
+                )
+                while have < needed and len(selected) < limit:
+                    candidate = next(
+                        (
+                            dimension
+                            for dimension in ranked
+                            if (dimension.origin or "") == origin
+                            and dimension_allowed(dimension)
+                        ),
+                        None,
+                    )
+                    if candidate is None:
+                        break
+                    if try_add_dimension(candidate):
+                        have += 1
+                    else:
+                        break
+
+        for dimension in ranked:
+            if len(selected) >= limit:
+                break
+            if coverage_gap(dimension) > 0 or stage == 2:
+                try_add_dimension(dimension)
+
+        for dimension in ranked:
+            if len(selected) >= limit:
+                break
+            try_add_dimension(dimension)
+
+        if role_graph.role_key == "fullstack":
+            selected = StageAllocator._balance_fullstack_origins(
+                role_graph,
+                selected,
+                limit=limit,
+                ranked=ranked,
+                used_subskills=used_subskills,
+                stage_one_dimension_keys=stage_one_dimension_keys,
+            )
+
+        return selected[:limit]
+
+    @staticmethod
+    def _balance_fullstack_origins(
+        role_graph: RoleGraph,
+        selected: list[SubSkill],
+        *,
+        limit: int,
+        ranked: list[CoreDimension],
+        used_subskills: set[str],
+        stage_one_dimension_keys: set[str] | None,
+    ) -> list[SubSkill]:
+        def origin_for(subskill: SubSkill) -> str:
+            for dimension in role_graph.dimensions:
+                if dimension.key == subskill.dimension:
+                    return dimension.origin or ""
+            return ""
+
+        def count_origin(origin: str) -> int:
+            return sum(1 for subskill in selected if origin_for(subskill) == origin)
+
+        for origin in ("frontend", "backend"):
+            while count_origin(origin) < 2 and len(selected) < limit:
+                replacement = next(
+                    (
+                        dimension
+                        for dimension in ranked
+                        if (dimension.origin or "") == origin
+                        and dimension.key not in {item.dimension for item in selected}
+                        and (not stage_one_dimension_keys or dimension.key not in stage_one_dimension_keys)
+                    ),
+                    None,
+                )
+                if replacement is None:
                     break
-                if len(selected) == limit:
-                    return selected
-            if not added_this_round:
-                break
-
+                subskill = _pick_subskill(role_graph, replacement.key, exclude_subskill_keys=used_subskills)
+                if subskill is None:
+                    break
+                if selected:
+                    selected[-1] = subskill
+                else:
+                    selected.append(subskill)
+                used_subskills.add(subskill.key)
         return selected
 
 
@@ -144,6 +293,10 @@ class AnswerScorer:
                 f1_score = (2 * precision * recall) / (precision + recall)
             return round(1.0 + (4.0 * f1_score), 2), 0.84
 
+        rubric = question.get("rubric")
+        if question_type == "open_ended" and isinstance(rubric, dict) and rubric.get("scoring_dimensions"):
+            return cls._score_open_ended_with_rubric(question, answer, rubric)
+
         if question_type == "open_ended" and answer_key.get("expected_concepts"):
             normalized_answer = cls._normalize_text(answer)
             if not normalized_answer:
@@ -166,6 +319,74 @@ class AnswerScorer:
             return round(1.0 + (4.0 * coverage), 2), confidence
 
         return cls._legacy_score_answer(question, answer)
+
+    @classmethod
+    def _score_open_ended_with_rubric(
+        cls,
+        question: dict[str, Any],
+        answer: Any,
+        rubric: dict[str, Any],
+    ) -> tuple[float, float]:
+        normalized_answer = cls._normalize_text(answer)
+        if not normalized_answer:
+            return 0.0, 0.45
+
+        for fail_phrase in rubric.get("auto_fail_if") or []:
+            if cls._normalize_text(fail_phrase) in normalized_answer:
+                return 1.0, 0.9
+
+        required = [
+            cls._normalize_text(concept)
+            for concept in rubric.get("required_concepts") or []
+            if cls._normalize_text(concept)
+        ]
+        if required:
+            required_hits = sum(1 for concept in required if concept in normalized_answer)
+            if required_hits < len(required):
+                partial = required_hits / len(required)
+                return round(1.0 + (2.0 * partial), 2), 0.7
+
+        dimensions = rubric.get("scoring_dimensions") or []
+        concept_pool = [
+            cls._normalize_text(concept)
+            for concept in (rubric.get("required_concepts") or [])
+            + (rubric.get("bonus_concepts") or [])
+            + (question.get("answer_key") or {}).get("expected_concepts", [])
+            if cls._normalize_text(concept)
+        ]
+        if concept_pool:
+            concept_hits = sum(1 for concept in concept_pool if concept in normalized_answer)
+            coverage = concept_hits / len(concept_pool)
+        else:
+            weighted_score = 0.0
+            total_weight = 0.0
+            for dimension in dimensions:
+                if not isinstance(dimension, dict):
+                    continue
+                weight = float(dimension.get("weight") or 0)
+                label = cls._normalize_text(dimension.get("dimension") or "")
+                if not weight or not label:
+                    continue
+                total_weight += weight
+                if label in normalized_answer:
+                    weighted_score += weight
+                else:
+                    tokens = [token for token in label.split() if len(token) > 4]
+                    if tokens and any(token in normalized_answer for token in tokens):
+                        weighted_score += weight * 0.6
+            coverage = weighted_score / total_weight if total_weight > 0 else 0.5
+
+        bonus = rubric.get("bonus_concepts") or []
+        bonus_hits = sum(
+            1
+            for concept in bonus
+            if cls._normalize_text(concept) in normalized_answer
+        )
+        if bonus_hits:
+            coverage = min(1.0, coverage + (0.05 * bonus_hits))
+
+        confidence = 0.78 if len(normalized_answer) >= 80 else 0.7
+        return round(1.0 + (4.0 * coverage), 2), confidence
 
     @staticmethod
     def score_stage(
@@ -248,37 +469,42 @@ class Stage2Allocator:
     """Choose the targeted follow-up areas for stage two."""
 
     @staticmethod
-    def allocate_stage_two(role_graph: RoleGraph, gap_profile: GapProfile, limit: int = 5) -> list[SubSkill]:
+    def allocate_stage_two(
+        role_graph: RoleGraph,
+        gap_profile: GapProfile,
+        limit: int = 5,
+        *,
+        stage_one_questions: list[dict[str, Any]] | None = None,
+    ) -> list[SubSkill]:
+        stage_one_dimension_keys = {
+            str(question.get("dimension_key") or "").strip()
+            for question in stage_one_questions or []
+            if isinstance(question, dict) and question.get("dimension_key")
+        }
         subskills = _subskill_lookup(role_graph)
-        dimension_weights = _dimension_weight_map(role_graph)
-        ordered_keys: list[str] = []
+        priority_keys: list[str] = []
 
         def add(key: str) -> None:
-            if key in subskills and key not in ordered_keys:
-                ordered_keys.append(key)
+            if key in subskills and key not in priority_keys:
+                priority_keys.append(key)
 
         for key in gap_profile.high_priority_gaps:
             add(key)
         for key in gap_profile.uncertain_areas:
             add(key)
-        for key in gap_profile.high_priority_gaps:
-            for prerequisite in subskills[key].prerequisites:
-                add(prerequisite)
 
-        remaining = sorted(
-            subskills.values(),
-            key=lambda subskill: (
-                dimension_weights.get(subskill.dimension, 0.0),
-                subskill.target_proficiency,
-            ),
-            reverse=True,
+        coverage_targets = StageAllocator.get_stage_targets(
+            role_graph,
+            stage=2,
+            limit=limit,
+            prior_questions=stage_one_questions,
+            stage_one_dimension_keys=stage_one_dimension_keys,
         )
-        for subskill in remaining:
-            add(subskill.key)
-            if len(ordered_keys) == limit:
-                break
-
-        return [subskills[key] for key in ordered_keys[:limit]]
+        ordered_keys = [target.key for target in coverage_targets]
+        for key in priority_keys:
+            if key not in ordered_keys:
+                ordered_keys.append(key)
+        return [subskills[key] for key in ordered_keys[:limit] if key in subskills]
 
 
 def merge_evidence(

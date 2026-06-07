@@ -21,6 +21,8 @@ from apps.assessments.engine import (
     StageAllocator,
     merge_evidence,
 )
+from apps.assessments.chains.post_process import enrich_questions
+from apps.assessments.chains.router import build_default_router
 from apps.assessments.fallback_scenarios import get_curated_fallback_scenario
 from apps.assessments.models import Assessment
 from apps.assessments.role_graph import load_role_graph, resolve_role_key
@@ -34,6 +36,7 @@ from apps.core.ai_contracts import (
     RoadmapSignal,
 )
 from apps.core.ai_logging import build_ai_metadata
+from apps.core import ai_settings as core_ai_settings
 from apps.core.ai_settings import (
     AI_PROVIDER,
     ASSESSMENT_SCENARIO_RAG_ENABLED,
@@ -175,7 +178,11 @@ def _stage_question_type_sequence(*, stage: int, count: int) -> list[str]:
 
 
 def _build_stage_blueprints(role_graph, targets, *, stage: int, gap_profile=None) -> list[dict[str, Any]]:
+    from apps.assessments.chains.enums import QuestionType
+    from apps.assessments.role_graph_taxonomy import is_debugging_dimension
+
     question_types = _stage_question_type_sequence(stage=stage, count=len(targets))
+    debugging_slots_seen = 0
     if stage == 2 and gap_profile and gap_profile.uncertain_areas:
         uncertain_lookup = {
             key: index
@@ -208,13 +215,21 @@ def _build_stage_blueprints(role_graph, targets, *, stage: int, gap_profile=None
                 if question_type == "multi_select"
                 else "written_tradeoff_reasoning"
             )
+        chain_question_type = None
+        if is_debugging_dimension(target.dimension):
+            if debugging_slots_seen == 0:
+                chain_question_type = QuestionType.DEBUGGING_SINGLE.value
+                question_type = "single_choice"
+            else:
+                chain_question_type = QuestionType.DEBUGGING_MULTI.value
+                question_type = "multi_select"
+            debugging_slots_seen += 1
         intent = {
             "single_choice": "narrow one decision so exactly one best answer exists",
             "multi_select": "ask for multiple concrete practices that are all required",
             "open_ended": "ask for a concise written explanation of strategy and tradeoffs",
         }[question_type]
-        blueprints.append(
-            {
+        blueprint: dict[str, Any] = {
                 "slot": index,
                 "subskill_key": target.key,
                 "competency": target.label,
@@ -237,7 +252,9 @@ def _build_stage_blueprints(role_graph, targets, *, stage: int, gap_profile=None
                     else "normal"
                 ),
             }
-        )
+        if chain_question_type:
+            blueprint["chain_question_type"] = chain_question_type
+        blueprints.append(blueprint)
     return blueprints
 
 
@@ -259,6 +276,28 @@ def _default_question_text(*, stage: int, subskill, role_label: str) -> str:
     )
 
 
+def _is_debugging_subskill(subskill) -> bool:
+    return getattr(subskill, "frame", None) == "debugging"
+
+
+def _apply_chain_helper_to_template(
+    template: dict[str, Any],
+    *,
+    subskill,
+    question_type: str,
+) -> dict[str, Any]:
+    """Set helper from the type-scoped chain — never from shared fallback bleed."""
+    router = build_default_router()
+    probe = {"question_type": question_type, "subskill_key": subskill.key}
+    router.assign_helper(probe, subskill=subskill)
+    helper = probe.get("helper")
+    if helper:
+        template["helper"] = helper
+    else:
+        template.pop("helper", None)
+    return template
+
+
 def _contract_safe_stage_template(
     *,
     stage: int,
@@ -274,178 +313,145 @@ def _contract_safe_stage_template(
         question_type=question_type,
     )
     if curated is not None:
-        return curated
+        return _apply_chain_helper_to_template(
+            dict(curated),
+            subskill=subskill,
+            question_type=question_type,
+        )
 
     skill = subskill.label.lower()
     role = role_label.lower()
+    debugging = _is_debugging_subskill(subskill)
 
     if question_type == "multi_select":
         scenario_context = (
-            f"A {role} team is reviewing a risky {skill} change before it reaches production."
+            f"A {role} team is reviewing a {skill} change before it reaches production."
         )
-        stem = "Which next actions are strongest? Select all that apply."
-        return {
+        stem = "Which practices are strongest for this scenario? Select all that apply."
+        template = {
             "scenario_context": scenario_context,
             "stem": stem,
-            "question_text": f"{scenario_context} {stem}",
+            "question_text": f"{scenario_context}\n\n{stem}",
             "type": "multiple_choice",
             "interaction_mode": "multi_select",
             "options": [
-                {"id": "a", "value": "a", "label": "Collect the logs, traces, tests, or request evidence that isolate the risky path."},
-                {"id": "b", "value": "b", "label": "Confirm assumptions, inputs, and edge cases before changing multiple components."},
-                {"id": "c", "value": "c", "label": "Refactor adjacent modules first so the final change can be bundled into one deploy."},
-                {"id": "d", "value": "d", "label": "Add targeted guards, validation, or rollback protection around the risky behavior."},
-                {"id": "e", "value": "e", "label": "Expand the scope to nearby services before confirming the primary failure boundary."},
+                {"id": "a", "value": "a", "label": "Define acceptance criteria and validate inputs before merging."},
+                {"id": "b", "value": "b", "label": "Add automated tests that cover the changed behavior and edge cases."},
+                {"id": "c", "value": "c", "label": "Defer testing until after release to preserve velocity."},
+                {"id": "d", "value": "d", "label": "Document the change and add monitoring for the affected path."},
+                {"id": "e", "value": "e", "label": "Rewrite unrelated modules in the same pull request."},
             ],
             "answer_key": {
                 "correct_option_ids": ["a", "b", "d"],
                 "scoring": "partial_credit",
             },
-            "learning_objective": f"Identify the strongest diagnostic or review actions for {skill}.",
-            "explanation": "Strong answers focus on evidence, constraints, and safe changes.",
-            "correct_answer_rationale": (
-                "The strongest actions gather evidence, validate assumptions, and narrow the risky path before broadening the change."
-            ),
+            "learning_objective": f"Identify the strongest practices for {skill}.",
+            "explanation": "Strong answers combine validation, testing, and observability.",
+            "correct_answer_rationale": "The best combination reduces risk while keeping delivery predictable.",
             "option_rationales": [
-                {
-                    "option_id": "a",
-                    "is_correct": True,
-                    "rationale": "It gathers direct evidence about the path that is actually risky.",
-                },
-                {
-                    "option_id": "b",
-                    "is_correct": True,
-                    "rationale": "It reduces avoidable mistakes before code changes compound the incident.",
-                },
-                {
-                    "option_id": "c",
-                    "is_correct": False,
-                    "rationale": "Bundling adjacent refactors increases scope before the core issue is understood.",
-                },
-                {
-                    "option_id": "d",
-                    "is_correct": True,
-                    "rationale": "Risk-limiting safeguards are useful once the boundary is understood.",
-                },
-                {
-                    "option_id": "e",
-                    "is_correct": False,
-                    "rationale": "Broadening scope too early makes the diagnosis slower and noisier.",
-                },
+                {"option_id": "a", "is_correct": True, "rationale": "Clear criteria prevent ambiguous requirements."},
+                {"option_id": "b", "is_correct": True, "rationale": "Tests catch regressions in the changed behavior."},
+                {"option_id": "c", "is_correct": False, "rationale": "Deferring tests increases production risk."},
+                {"option_id": "d", "is_correct": True, "rationale": "Monitoring supports safe rollout."},
+                {"option_id": "e", "is_correct": False, "rationale": "Unrelated rewrites increase review cost and risk."},
             ],
-            "helper": "Select the actions that gather evidence first and keep the change set controlled.",
         }
+        return _apply_chain_helper_to_template(template, subskill=subskill, question_type=question_type)
 
     if question_type == "open_ended":
         scenario_context = (
-            f"A production issue related to {skill} has mixed signals across a {role} system."
+            f"A {role} team must improve how they handle {skill} in an upcoming release."
         )
-        stem = "Explain how you would narrow the failure boundary and what evidence you would collect first."
-        return {
+        stem = (
+            "What would you implement, what would you explicitly not do, and what tradeoffs "
+            "would you accept?"
+        )
+        template = {
             "scenario_context": scenario_context,
             "stem": stem,
-            "question_text": f"{scenario_context} {stem}",
+            "question_text": f"{scenario_context}\n\n{stem}",
             "type": "text",
             "interaction_mode": "text",
             "options": [],
             "answer_key": {
-                "expected_concepts": ["evidence", "failure boundary", "tradeoffs"],
+                "expected_concepts": ["approach", "tradeoffs", "constraints"],
                 "required_concept_count": 2,
-                "forbidden_concepts": ["guess without evidence"],
+                "forbidden_concepts": ["no plan"],
                 "scoring": "concept_coverage",
             },
-            "learning_objective": f"Explain how to reason through the key risks in {skill}.",
-            "explanation": "A strong answer names evidence, tradeoffs, and likely failure points before proposing changes.",
-            "correct_answer_rationale": (
-                "The answer should connect evidence gathering with the tradeoffs that drive the next engineering step."
-            ),
+            "learning_objective": f"Explain strategy and tradeoffs for {skill}.",
+            "explanation": "A strong answer names concrete techniques and explicit tradeoffs.",
+            "correct_answer_rationale": "The answer should balance delivery speed, quality, and maintainability.",
             "option_rationales": [],
-            "helper": "Name the evidence you would inspect, the likely boundary, and the tradeoffs you would weigh.",
         }
+        return _apply_chain_helper_to_template(template, subskill=subskill, question_type=question_type)
 
-    if stage == 1:
+    if debugging and stage >= 2:
         scenario_context = (
-            f"A {role} team is preparing a {skill} change that could affect correctness, rollback safety, and support load."
+            f"A production issue tied to {skill} has mixed signals and the {role} team must choose "
+            "the next diagnostic step carefully."
         )
-        stem = "Which option best reduces risk while preserving the intended behavior?"
+        stem = "What should the team do first to isolate the issue without widening impact?"
         options = [
-            {"id": "a", "value": "a", "label": "Clarify the highest-risk assumption and make the smallest safe change that preserves observability."},
-            {"id": "b", "value": "b", "label": "Bundle several adjacent refactors into the same release so the team only deploys once."},
-            {"id": "c", "value": "c", "label": "Ship the change first and plan to handle edge cases after users report them."},
-            {"id": "d", "value": "d", "label": "Move the logic to a less familiar subsystem to keep the original code untouched."},
+            {"id": "a", "value": "a", "label": "Collect logs, traces, and reproduction steps for the failing path first."},
+            {"id": "b", "value": "b", "label": "Change timeout and retry settings globally before confirming the failing component."},
+            {"id": "c", "value": "c", "label": "Refactor adjacent modules before confirming the root cause."},
+            {"id": "d", "value": "d", "label": "Wait for more incidents before investigating."},
         ]
-        helper = "Choose the option that narrows risk without hiding future diagnosis."
-        learning_objective = f"Choose the safest first engineering move for {skill}."
+        learning_objective = f"Choose the strongest first diagnostic step for {skill}."
         correct_option_ids = ["a"]
-        correct_answer_rationale = (
-            "The strongest move reduces risk and preserves evidence before the team broadens scope."
-        )
+        correct_answer_rationale = "Evidence-first diagnosis limits blast radius."
         option_rationales = [
-            {
-                "option_id": "a",
-                "is_correct": True,
-                "rationale": "It reduces risk while keeping the change narrow and observable.",
-            },
-            {
-                "option_id": "b",
-                "is_correct": False,
-                "rationale": "Bundling refactors increases blast radius and makes failures harder to isolate.",
-            },
-            {
-                "option_id": "c",
-                "is_correct": False,
-                "rationale": "It treats production feedback as the requirements process.",
-            },
-            {
-                "option_id": "d",
-                "is_correct": False,
-                "rationale": "It moves risk to a less understood area instead of managing it directly.",
-            },
+            {"option_id": "a", "is_correct": True, "rationale": "Targeted evidence narrows the failure boundary."},
+            {"option_id": "b", "is_correct": False, "rationale": "Global changes can mask the real failure."},
+            {"option_id": "c", "is_correct": False, "rationale": "Refactors before diagnosis increase scope."},
+            {"option_id": "d", "is_correct": False, "rationale": "Waiting delays resolution without new evidence."},
+        ]
+    elif stage == 1:
+        scenario_context = (
+            f"A {role} team is preparing a {skill} change that could affect users and release timing."
+        )
+        stem = "Which option best balances quality and delivery for this change?"
+        options = [
+            {"id": "a", "value": "a", "label": "Clarify requirements and ship the smallest change that meets them with tests."},
+            {"id": "b", "value": "b", "label": "Bundle several adjacent refactors into the same release to deploy once."},
+            {"id": "c", "value": "c", "label": "Ship without tests and fix issues reported in production."},
+            {"id": "d", "value": "d", "label": "Postpone the change until a full rewrite is possible."},
+        ]
+        learning_objective = f"Choose the strongest engineering approach for {skill}."
+        correct_option_ids = ["a"]
+        correct_answer_rationale = "A narrow, tested change reduces risk while preserving delivery."
+        option_rationales = [
+            {"option_id": "a", "is_correct": True, "rationale": "Clear scope and tests support safe delivery."},
+            {"option_id": "b", "is_correct": False, "rationale": "Bundling unrelated work increases review and release risk."},
+            {"option_id": "c", "is_correct": False, "rationale": "Production-driven QA is costly and unreliable."},
+            {"option_id": "d", "is_correct": False, "rationale": "Indefinite deferral does not address the requirement."},
         ]
     else:
         scenario_context = (
-            f"A production issue tied to {skill} has mixed signals and the {role} team must choose the next diagnostic step carefully."
+            f"A {role} team is deciding how to improve {skill} in the next sprint."
         )
-        stem = "Which next step is most likely to isolate the failure boundary without hiding evidence?"
+        stem = "Which option is the strongest next step for this team?"
         options = [
-            {"id": "a", "value": "a", "label": "Change timeout and retry settings globally before confirming which boundary is failing."},
-            {"id": "b", "value": "b", "label": "Use the current evidence to isolate the boundary and validate the highest-risk assumption first."},
-            {"id": "c", "value": "c", "label": "Broaden the investigation to nearby components before the core failure mode is confirmed."},
-            {"id": "d", "value": "d", "label": "Wait for another incident so the team has more volume before diagnosing."},
+            {"id": "a", "value": "a", "label": "Define a measurable goal, implement incrementally, and validate with tests."},
+            {"id": "b", "value": "b", "label": "Rewrite the entire module before shipping any improvement."},
+            {"id": "c", "value": "c", "label": "Copy a pattern from another team without adapting it to context."},
+            {"id": "d", "value": "d", "label": "Skip documentation because the code is self-explanatory."},
         ]
-        helper = "Choose the next step that narrows the failing boundary with the least extra blast radius."
-        learning_objective = f"Choose the strongest diagnostic or review decision for {skill}."
-        correct_option_ids = ["b"]
-        correct_answer_rationale = (
-            "The best next step narrows the boundary with evidence before applying global mitigations or broadening the change."
-        )
+        learning_objective = f"Choose the strongest next step for {skill}."
+        correct_option_ids = ["a"]
+        correct_answer_rationale = "Incremental, measurable improvement is the most reliable path."
         option_rationales = [
-            {
-                "option_id": "a",
-                "is_correct": False,
-                "rationale": "Global mitigations can mask the symptom without identifying the actual failing boundary.",
-            },
-            {
-                "option_id": "b",
-                "is_correct": True,
-                "rationale": "It focuses diagnosis on the highest-value evidence already available.",
-            },
-            {
-                "option_id": "c",
-                "is_correct": False,
-                "rationale": "It increases scope before the core failure path is verified.",
-            },
-            {
-                "option_id": "d",
-                "is_correct": False,
-                "rationale": "Deferring diagnosis adds delay without improving the evidence quality.",
-            },
+            {"option_id": "a", "is_correct": True, "rationale": "Measurable goals and tests keep progress verifiable."},
+            {"option_id": "b", "is_correct": False, "rationale": "Big-bang rewrites delay value and increase risk."},
+            {"option_id": "c", "is_correct": False, "rationale": "Context-free copying often misses constraints."},
+            {"option_id": "d", "is_correct": False, "rationale": "Undocumented systems are harder to maintain."},
         ]
 
-    return {
+    template = {
         "scenario_context": scenario_context,
         "stem": stem,
-        "question_text": f"{scenario_context} {stem}",
+        "question_text": f"{scenario_context}\n\n{stem}",
         "type": "multiple_choice",
         "interaction_mode": "single_select",
         "options": options,
@@ -454,11 +460,11 @@ def _contract_safe_stage_template(
             "scoring": "single_best",
         },
         "learning_objective": learning_objective,
-        "explanation": "The strongest answer preserves evidence, manages risk, and keeps the system diagnosable.",
+        "explanation": "The strongest answer matches the scenario constraints and team goals.",
         "correct_answer_rationale": correct_answer_rationale,
         "option_rationales": option_rationales,
-        "helper": helper,
     }
+    return _apply_chain_helper_to_template(template, subskill=subskill, question_type=question_type)
 
 
 def _target_map(role_graph, targets, *, stage: int, gap_profile=None):
@@ -470,7 +476,7 @@ def _target_map(role_graph, targets, *, stage: int, gap_profile=None):
                     "type": template["type"],
                     "interaction_mode": template["interaction_mode"],
                     "options": template["options"],
-                    "helper": template["helper"],
+                    "helper": template.get("helper", ""),
                     "fallback_question_text": template["question_text"],
                     "fallback_scenario_context": template.get("scenario_context", ""),
                     "fallback_answer_key": template["answer_key"],
@@ -555,7 +561,7 @@ def get_default_questions(target_career: str = "") -> list[dict[str, Any]]:
 class AssessmentAIService:
     client_class = GemmaClient
     stage_one_cache_ttl_seconds = 7 * 24 * 60 * 60
-    stage_question_prompt_version = "v6"
+    stage_question_prompt_version = "v8"
     # Leave headroom under the 120s task soft limit while avoiding cold-start fallbacks.
     stage_question_timeout_floor_seconds = 115
 
@@ -609,7 +615,9 @@ class AssessmentAIService:
         cls,
         blueprints: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        allowed_subskill_keys = [blueprint["subskill_key"] for blueprint in blueprints]
+        # Gemini rejects deeply constrained schemas for this prompt with
+        # "too many states for serving". Keep the provider schema shallow and
+        # enforce the full contract in sanitize/validation immediately after.
         return {
             "type": "object",
             "additionalProperties": False,
@@ -617,89 +625,27 @@ class AssessmentAIService:
             "properties": {
                 "questions": {
                     "type": "array",
-                    "minItems": len(blueprints),
-                    "maxItems": len(blueprints),
                     "items": {
                         "type": "object",
-                        "additionalProperties": False,
-                        "required": [
-                            "subskill_key",
-                            "competency",
-                            "learning_objective",
-                            "scenario_context",
-                            "stem",
-                            "question_type",
-                            "difficulty",
-                            "estimated_seconds",
-                            "options",
-                            "answer_key",
-                            "explanation",
-                            "correct_answer_rationale",
-                            "option_rationales",
-                        ],
+                        "additionalProperties": True,
                         "properties": {
-                            "subskill_key": {
-                                "type": "string",
-                                "enum": allowed_subskill_keys,
-                                "description": "Target backend subskill key for this slot.",
-                            },
-                            "competency": {
-                                "type": "string",
-                                "description": "Human-readable skill label.",
-                            },
-                            "learning_objective": {
-                                "type": "string",
-                                "description": "One sentence describing what the question measures.",
-                            },
-                            "scenario_context": {
-                                "type": "string",
-                                "description": "One or two sentences describing the concrete engineering scenario.",
-                            },
-                            "stem": {
-                                "type": "string",
-                                "description": "The decision prompt that follows the scenario.",
-                            },
-                            "question_type": {
-                                "type": "string",
-                                "enum": ["single_choice", "multi_select", "open_ended"],
-                                "description": "Semantic question type.",
-                            },
-                            "difficulty": {
-                                "type": "integer",
-                                "minimum": 1,
-                                "maximum": 5,
-                                "description": "Difficulty from 1 (basic) to 5 (advanced).",
-                            },
-                            "estimated_seconds": {
-                                "type": "integer",
-                                "minimum": 30,
-                                "maximum": 120,
-                                "description": "Estimated answer time in seconds.",
-                            },
+                            "subskill_key": {"type": "string"},
+                            "question_type": {"type": "string"},
+                            "question_text": {"type": "string"},
+                            "scenario_context": {"type": "string"},
+                            "stem": {"type": "string"},
                             "options": {
                                 "type": "array",
-                                "minItems": 0,
-                                "maxItems": 6,
-                                "description": "Closed-question answer options. Use an empty array for open-ended questions.",
                                 "items": {
                                     "type": "object",
-                                    "additionalProperties": False,
-                                    "required": ["id", "label"],
                                     "properties": {
-                                        "id": {
-                                            "type": "string",
-                                            "description": "Stable option identifier such as a, b, c, d.",
-                                        },
-                                        "label": {
-                                            "type": "string",
-                                            "description": "User-facing option text.",
-                                        },
+                                        "id": {"type": "string"},
+                                        "label": {"type": "string"},
                                     },
                                 },
                             },
                             "answer_key": {
                                 "type": "object",
-                                "description": "Scoring metadata for the question type.",
                                 "properties": {
                                     "correct_option_ids": {
                                         "type": "array",
@@ -709,46 +655,9 @@ class AssessmentAIService:
                                         "type": "array",
                                         "items": {"type": "string"},
                                     },
-                                    "required_concept_count": {
-                                        "type": "integer",
-                                        "minimum": 1,
-                                        "maximum": 5,
-                                    },
-                                    "forbidden_concepts": {
-                                        "type": "array",
-                                        "items": {"type": "string"},
-                                    },
-                                    "scoring": {
-                                        "type": "string",
-                                        "description": "Scoring mode such as single_best, partial_credit, or concept_coverage.",
-                                    },
+                                    "required_concept_count": {"type": "integer"},
+                                    "scoring": {"type": "string"},
                                 },
-                            },
-                            "explanation": {
-                                "type": "string",
-                                "description": "Short explanation of the intended answer.",
-                            },
-                            "correct_answer_rationale": {
-                                "type": "string",
-                                "description": "Why the correct answer is best.",
-                            },
-                            "option_rationales": {
-                                "type": "array",
-                                "description": "One rationale entry per option. Mark the correct option with is_correct=true.",
-                                "items": {
-                                    "type": "object",
-                                    "additionalProperties": False,
-                                    "required": ["option_id", "is_correct", "rationale"],
-                                    "properties": {
-                                        "option_id": {"type": "string"},
-                                        "is_correct": {"type": "boolean"},
-                                        "rationale": {"type": "string"},
-                                    },
-                                },
-                            },
-                            "helper": {
-                                "type": "string",
-                                "description": "Optional concise hint shown under the question.",
                             },
                         },
                     },
@@ -757,6 +666,14 @@ class AssessmentAIService:
         }
 
     _last_retrieval_info: dict[str, Any] = {}
+
+    @classmethod
+    def _subskill_lookup(cls, role_graph) -> dict[str, Any]:
+        return {
+            subskill.key: subskill
+            for dimension in role_graph.dimensions
+            for subskill in dimension.subskills
+        }
 
     @classmethod
     def _build_stage_prompt(
@@ -770,12 +687,6 @@ class AssessmentAIService:
         retrieved_result = cls._build_retrieved_examples_block(
             role_graph=role_graph, blueprints=blueprints, stage=stage,
         )
-        stage_label = "calibration" if stage == 1 else "targeted follow-up"
-        stage_focus = (
-            "Across the 5 questions, progress from fundamentals to applied debugging and finish with tradeoff reasoning."
-            if stage == 1
-            else "Across the 5 questions, focus on deeper diagnosis, evidence-backed tradeoffs, and failure analysis."
-        )
         gap_lines = ""
         if gap_profile is not None:
             gap_lines = (
@@ -783,38 +694,65 @@ class AssessmentAIService:
                 f"Uncertain areas: {', '.join(gap_profile.uncertain_areas)}.\n"
             )
 
-        prompt = (
-            f"Generate 5 {stage_label} questions for {role_graph.role_label}.\n"
-            'Return exactly 5 question objects in a top-level JSON field named "questions".\n'
-            "Keep the same target order shown below.\n"
-            f"{stage_focus}\n"
-            "Every stem MUST begin with a concrete scenario: a system, a failure, a code review finding, or a requirement conflict.\n"
-            "Generate scenario-based questions, not generic philosophy questions.\n"
-            "Vary question framing across the batch. No two questions may test the same concept from the same angle.\n"
-            "Do not repeat stage-one wording or reuse the same stem template across questions.\n"
-            "Each distractor must be something a junior developer might plausibly choose, but it must still be wrong.\n"
-            "Avoid obvious joke or sabotage answers.\n"
-            "For REST questions, include real semantics such as PUT vs PATCH or POST plus idempotency keys when relevant.\n"
-            "For database questions, reference evidence such as execution plans, indexes, cardinality, and join strategy when relevant.\n"
-            "For observability questions, prefer logs, metrics, traces, and failure boundaries over generic advice.\n"
-            "For requirements questions, translate vague requests into measurable acceptance criteria or SLO-like targets.\n"
-            'Use only "single_choice", "multi_select", or "open_ended" for "question_type".\n'
-            'Each object must include: "subskill_key", "competency", "learning_objective", "scenario_context", '
-            '"stem", "question_type", "difficulty", "estimated_seconds", "options", "answer_key", '
-            '"explanation", "correct_answer_rationale", and "option_rationales".\n'
-            'For "single_choice": write 4 parallel options and make exactly one best answer exist.\n'
-            'For "multi_select": the stem must explicitly say "Select all that apply.", write 5 options, and include 2 or 3 correct answers.\n'
-            'For "open_ended": options must be [], and answer_key must include expected_concepts plus required_concept_count.\n'
-            "Do not ask generic self-rating questions.\n"
-            "Do not use these banned low-signal patterns:\n"
-            '- "Which option is the strongest engineering choice for X?"\n'
-            '- "Choose the option that preserves correctness, clarity, and maintainability."\n'
-            '- distractors like "Disable logging" or "Change an unrelated part of the system first."\n'
-            f"{gap_lines}"
-            f"{STAGE_QUESTION_FEW_SHOT_EXAMPLES}\n"
-            f"{retrieved_result.prompt_block}"
-            f"Blueprints:\n{json.dumps(blueprints, ensure_ascii=True)}"
-        )
+        router = build_default_router()
+        lookup = cls._subskill_lookup(role_graph)
+        slots = [{**bp, "stage": stage} for bp in blueprints]
+
+        if core_ai_settings.ASSESSMENT_GENERATION_MODE == "per_question":
+            typed_block = "\n\n".join(
+                router.chain_for_slot(
+                    slot,
+                    subskill=lookup.get(str(slot.get("subskill_key") or "")),
+                ).build_prompt(slot)
+                for slot in slots
+            )
+            prompt = (
+                f"Generate {len(slots)} questions for {role_graph.role_label} (stage {stage}).\n"
+                f"{typed_block}\n"
+                f"{gap_lines}"
+                f"{STAGE_QUESTION_FEW_SHOT_EXAMPLES}\n"
+                f"{retrieved_result.prompt_block}"
+            )
+        else:
+            typed_block = router.build_batch_prompt(
+                role_label=role_graph.role_label,
+                stage=stage,
+                slots=slots,
+                subskill_lookup=lookup,
+            )
+            stage_label = "calibration" if stage == 1 else "targeted follow-up"
+            prompt = (
+                f"Generate 5 {stage_label} questions for {role_graph.role_label}.\n"
+                f"{typed_block}\n"
+                f"{gap_lines}"
+                'Return exactly 5 question objects in a top-level JSON field named "questions".\n'
+                "Every stem MUST begin with a concrete scenario.\n"
+                "Do not embed sub-instructions in stems.\n"
+                'Each object must include: "subskill_key", "competency", "learning_objective", '
+                '"scenario_context", "stem", "question_type", "difficulty", "estimated_seconds", '
+                '"options", "answer_key", "explanation", "correct_answer_rationale", '
+                'and "option_rationales".\n'
+                'For closed questions, "answer_key.correct_option_ids" MUST contain option ids from "options".\n'
+                "Do not ask generic self-rating questions.\n"
+                "Each distractor must be something a junior developer might plausibly choose, "
+                "but it must still be wrong.\n"
+                "Do not use these banned low-signal patterns:\n"
+                '- "Which option is the strongest engineering choice for X?"\n'
+                f"{STAGE_QUESTION_FEW_SHOT_EXAMPLES}\n"
+                f"{retrieved_result.prompt_block}"
+            )
+        if stage == 2:
+            prompt += "Do not repeat stage-one wording or reuse the same stem template across questions.\n"
+        if stage == 1:
+            prompt += (
+                "Across the 5 questions, progress from fundamentals to applied work and "
+                "finish with tradeoff reasoning.\n"
+            )
+        else:
+            prompt += (
+                "Across the 5 questions, focus on deeper diagnosis, evidence-backed tradeoffs, "
+                "and failure analysis.\n"
+            )
         cls._last_retrieval_info = {
             "retrieved_doc_ids": retrieved_result.doc_ids,
             "retrieved_count": retrieved_result.doc_count,
@@ -982,6 +920,27 @@ class AssessmentAIService:
         )
 
     @classmethod
+    def _finalize_stage_questions(
+        cls,
+        questions: list[dict[str, Any]],
+        *,
+        role_graph,
+        blueprints: list[dict[str, Any]],
+        client: GemmaClient | None = None,
+    ) -> list[dict[str, Any]]:
+        if not questions:
+            return questions
+        llm_passes = cls._gemini_configured()
+        return enrich_questions(
+            questions,
+            role_graph=role_graph,
+            blueprints=blueprints,
+            client=client if llm_passes else None,
+            run_ambiguity=llm_passes,
+            run_rubric=True,
+        )
+
+    @classmethod
     def _raise_if_question_contract_invalid(cls, questions, *, stage: int) -> None:
         invalid_questions = [
             {
@@ -1044,8 +1003,9 @@ class AssessmentAIService:
             "correct_answer_rationale": template.get("correct_answer_rationale", ""),
             "option_rationales": template.get("option_rationales", []),
             "validation_flags": [],
-            "helper": template["helper"],
+            "helper": template.get("helper"),
         }
+        build_default_router().assign_helper(question, subskill=subskill)
         validation_flags = build_stage_validation_flags(question)
         if validation_flags:
             raise AIServiceError(
@@ -1196,6 +1156,56 @@ class AssessmentAIService:
         )
 
     @classmethod
+    def _gemini_configured(cls) -> bool:
+        return bool(str(core_ai_settings.GEMINI_API_KEY or "").strip())
+
+    @classmethod
+    def _curated_stage_questions(
+        cls,
+        role_graph,
+        targets,
+        *,
+        stage: int,
+        gap_profile=None,
+        error_code: str = "curated_fallback",
+        processing_time_ms: int = 0,
+    ) -> tuple[list[dict[str, Any]], AIInvocationMetadata]:
+        """Scenario-based questions with scored answer keys (no live LLM)."""
+        cls._last_retrieval_info = {
+            "rag_enabled": False,
+            "retrieved_doc_ids": [],
+            "retrieved_count": 0,
+        }
+        blueprints = _build_stage_blueprints(
+            role_graph,
+            targets,
+            stage=stage,
+            gap_profile=gap_profile,
+        )
+        questions = cls._deterministic_questions(
+            role_graph,
+            targets,
+            stage=stage,
+            gap_profile=gap_profile,
+        )
+        questions = cls._finalize_stage_questions(
+            questions,
+            role_graph=role_graph,
+            blueprints=blueprints,
+            client=None,
+        )
+        metadata = build_ai_metadata(
+            source="curated_fallback",
+            processing_time_ms=processing_time_ms,
+            model=None,
+            provider="curated",
+            version=role_graph.version,
+            fallback_used=True,
+            error_code=error_code,
+        )
+        return questions, metadata
+
+    @classmethod
     def _stage_one_cache_key(cls, role_key: str, graph_version: str) -> str:
         base_key = (
             f"assessment:stage1:{cls.stage_question_prompt_version}:"
@@ -1235,14 +1245,30 @@ class AssessmentAIService:
             ), cached_retrieval
 
         targets = StageAllocator.allocate_stage_one(role_graph)
+        gemini_configured = cls._gemini_configured()
+        if not gemini_configured:
+            logger.info(
+                "GEMINI_API_KEY is not configured; serving curated scenario questions for stage one."
+            )
+            questions, metadata = cls._curated_stage_questions(
+                role_graph,
+                targets,
+                stage=1,
+                error_code="gemini_api_key_missing",
+            )
+            retrieval_info = dict(cls._last_retrieval_info)
+            return questions, metadata, retrieval_info
+
         blueprints = _build_stage_blueprints(role_graph, targets, stage=1)
         allowed_targets = _target_map(role_graph, targets, stage=1)
         response_json_schema = cls._build_stage_question_response_json_schema(blueprints)
         started_at = monotonic()
 
         try:
-            response = cls._get_stage_question_client().generate_structured(
-                prompt=cls._build_stage_one_prompt(role_graph, targets, blueprints=blueprints),
+            client = cls._get_stage_question_client()
+            prompt = cls._build_stage_one_prompt(role_graph, targets, blueprints=blueprints)
+            response = client.generate_structured(
+                prompt=prompt,
                 system=cls._question_system_prompt(role_graph),
                 required_keys=("questions",),
                 response_json_schema=response_json_schema,
@@ -1272,6 +1298,12 @@ class AssessmentAIService:
                 targets=targets,
                 allowed_targets=allowed_targets,
             )
+            questions = cls._finalize_stage_questions(
+                questions,
+                role_graph=role_graph,
+                blueprints=blueprints,
+                client=client,
+            )
             cls._raise_if_question_contract_invalid(questions, stage=1)
             if invalid_questions:
                 logger.warning(
@@ -1295,16 +1327,12 @@ class AssessmentAIService:
                 "Stage one generation fell back to deterministic questions: %s",
                 error,
             )
-            cls._last_retrieval_info = {"rag_enabled": ASSESSMENT_SCENARIO_RAG_ENABLED, "retrieved_doc_ids": [], "retrieved_count": 0}
-            questions = cls._deterministic_questions(role_graph, targets, stage=1)
-            metadata = build_ai_metadata(
-                source="fallback",
-                processing_time_ms=int((monotonic() - started_at) * 1000),
-                model=None,
-                provider=AI_PROVIDER,
-                version=role_graph.version,
-                fallback_used=True,
+            questions, metadata = cls._curated_stage_questions(
+                role_graph,
+                targets,
+                stage=1,
                 error_code=type(error).__name__,
+                processing_time_ms=int((monotonic() - started_at) * 1000),
             )
 
         retrieval_info = dict(cls._last_retrieval_info) if cls._last_retrieval_info else {}
@@ -1330,8 +1358,14 @@ class AssessmentAIService:
         cls,
         gap_profile,
         role_graph,
+        *,
+        stage_one_questions: list[dict[str, Any]] | None = None,
     ) -> tuple[list[dict[str, Any]], AIInvocationMetadata, dict[str, Any]]:
-        targets = Stage2Allocator.allocate_stage_two(role_graph, gap_profile)
+        targets = Stage2Allocator.allocate_stage_two(
+            role_graph,
+            gap_profile,
+            stage_one_questions=stage_one_questions,
+        )
         blueprints = _build_stage_blueprints(
             role_graph,
             targets,
@@ -1346,6 +1380,20 @@ class AssessmentAIService:
             for item in gap_profile.subskill_evidence
             if getattr(item, "gap", 99) <= 1
         ) or "baseline calibration complete"
+
+        if not cls._gemini_configured():
+            logger.info(
+                "GEMINI_API_KEY is not configured; serving curated scenario questions for stage two."
+            )
+            questions, metadata = cls._curated_stage_questions(
+                role_graph,
+                targets,
+                stage=2,
+                gap_profile=gap_profile,
+                error_code="gemini_api_key_missing",
+            )
+            retrieval_info = dict(cls._last_retrieval_info)
+            return questions, metadata, retrieval_info
 
         try:
             response = cls._get_stage_question_client().generate_structured(
@@ -1388,6 +1436,12 @@ class AssessmentAIService:
                 targets=targets,
                 allowed_targets=allowed_targets,
             )
+            questions = cls._finalize_stage_questions(
+                questions,
+                role_graph=role_graph,
+                blueprints=blueprints,
+                client=cls._get_stage_question_client(),
+            )
             cls._raise_if_question_contract_invalid(questions, stage=2)
             if invalid_questions:
                 logger.warning(
@@ -1411,21 +1465,13 @@ class AssessmentAIService:
                 "Stage two generation fell back to deterministic questions: %s",
                 error,
             )
-            cls._last_retrieval_info = {"rag_enabled": ASSESSMENT_SCENARIO_RAG_ENABLED, "retrieved_doc_ids": [], "retrieved_count": 0}
-            questions = cls._deterministic_questions(
+            questions, metadata = cls._curated_stage_questions(
                 role_graph,
                 targets,
                 stage=2,
                 gap_profile=gap_profile,
-            )
-            metadata = build_ai_metadata(
-                source="fallback",
-                processing_time_ms=int((monotonic() - started_at) * 1000),
-                model=None,
-                provider=AI_PROVIDER,
-                version=role_graph.version,
-                fallback_used=True,
                 error_code=type(error).__name__,
+                processing_time_ms=int((monotonic() - started_at) * 1000),
             )
 
         retrieval_info = dict(cls._last_retrieval_info) if cls._last_retrieval_info else {}

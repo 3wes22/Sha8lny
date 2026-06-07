@@ -683,7 +683,7 @@ class RoadmapService:
                     status='not_started',
                     is_required=True,
                     skills=milestone_data.get('skills', []),
-                    resources=[],
+                    resources=milestone_data.get('resources', []),
                 )
 
     @staticmethod
@@ -821,14 +821,37 @@ class RoadmapService:
             roadmap.template = template
         roadmap.save(update_fields=['ai_processing_status', 'ai_processing_error', 'metadata', 'template', 'updated_at'])
 
-        phases_data = RoadmapService._build_personalized_phase_blueprint(
+        from apps.core.ai_logging import log_ai_invocation
+        from apps.roadmaps.assembler import RoadmapAssembler
+
+        phases_data, provenance = RoadmapAssembler.assemble(
+            user=roadmap.user,
             target_career=roadmap.target_career,
+            assessment_result=assessment,
             current_level=roadmap.current_level,
-            strengths=strengths,
-            gaps=gaps,
-            priority_skills=priority_skills,
-            top_skills=top_skills,
             weekly_hours=roadmap.weekly_hours_commitment,
+            priority_skills=priority_skills,
+            gaps=gaps,
+            strengths=strengths,
+            top_skills=top_skills,
+        )
+        generation['provenance'] = provenance.to_dict()
+        log_ai_invocation(
+            trace_id=generation.get('trace_id') or roadmap.id.hex,
+            feature="roadmap_assembly",
+            provider="deterministic",
+            model=None,
+            latency_ms=0,
+            input_tokens=0,
+            output_tokens=0,
+            validation_success=True,
+            fallback_used=provenance.fallback_used,
+            task_type="roadmap_structure",
+            extra={
+                "structure_source": provenance.structure_source,
+                "retrieval_chunk_count": provenance.retrieval_chunk_count,
+                "retrieved_doc_count": len(provenance.retrieved_doc_ids),
+            },
         )
         estimated_duration_weeks = sum(phase['weeks'] for phase in phases_data)
         default_summary = (
@@ -857,7 +880,7 @@ class RoadmapService:
                 'status': 'completed',
                 'runtime_version': personalization.metadata.version,
                 'trace_id': personalization.metadata.trace_id,
-                'fallback_used': personalization.metadata.fallback_used,
+                'fallback_used': personalization.metadata.fallback_used or provenance.fallback_used,
                 'error_code': personalization.metadata.error_code,
                 'provider': personalization.metadata.provider,
             }

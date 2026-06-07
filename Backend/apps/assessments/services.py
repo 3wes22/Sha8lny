@@ -22,7 +22,6 @@ from apps.core.ai_contracts import (
 )
 from apps.core.ai_validation import (
     build_stage_choice_options,
-    normalize_choice_options,
     normalize_interaction_mode,
     normalize_stage_options,
     normalize_stage_question_type,
@@ -289,6 +288,7 @@ class AssessmentService:
             if not isinstance(question, dict):
                 continue
 
+            scenario_context = str(question.get("scenario_context") or "").strip()
             normalized_question = {
                 key: value
                 for key, value in dict(question).items()
@@ -302,6 +302,19 @@ class AssessmentService:
                     "option_rationales",
                 }
             }
+            question_text = str(
+                normalized_question.get("question_text")
+                or normalized_question.get("question")
+                or ""
+            ).strip()
+            if scenario_context and scenario_context not in question_text:
+                question_text = (
+                    f"{scenario_context}\n\n{question_text}" if question_text else scenario_context
+                )
+                normalized_question["question_text"] = question_text
+            # Frontend reads `question`; keep in sync with question_text (stem only, no helper).
+            if normalized_question.get("question_text"):
+                normalized_question["question"] = normalized_question["question_text"]
             semantic_type = normalize_stage_question_type(
                 normalized_question.get("question_type") or normalized_question.get("type"),
                 raw_mode=normalized_question.get("interaction_mode"),
@@ -329,11 +342,10 @@ class AssessmentService:
                         question_type=semantic_type,
                         default_options=[],
                     )
-                elif category:
-                    normalized_question["options"] = normalize_choice_options(
-                        normalized_question.get("options"),
-                        default_options=build_stage_choice_options(category),
-                    )
+                elif isinstance(raw_options, list) and raw_options and category:
+                    normalized_question["options"] = build_stage_choice_options(category)
+                else:
+                    normalized_question["options"] = []
             elif normalized_question.get("type") == "scale":
                 normalized_question["interaction_mode"] = normalize_interaction_mode(
                     normalized_question.get("interaction_mode"),

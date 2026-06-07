@@ -838,7 +838,11 @@ def build_stage_validation_flags(question: dict[str, Any]) -> list[str]:
         correct_ids = answer_key.get("correct_option_ids") or []
         if len(options) < 4 or len(options) > 6:
             flags.append("multi_select_option_count_out_of_range")
-        if len(correct_ids) < 2 or len(correct_ids) >= len(options):
+        if len(correct_ids) < 2:
+            flags.append("multi_select_requires_two_or_more_correct_options")
+        if len(correct_ids) > 3:
+            flags.append("multi_select_too_many_correct_options")
+        if len(correct_ids) >= len(options):
             flags.append("multi_select_requires_two_or_more_correct_options")
         if _options_not_parallel(options):
             flags.append("options_not_parallel")
@@ -1141,7 +1145,8 @@ def sanitize_stage_question_payload(
             options=options,
             answer_key=answer_key,
         )
-        helper = str(raw_question.get("helper") or defaults["helper"]).strip()
+        # helper is type-scoped by QuestionTypeRouter after sanitize — do not bleed from defaults.
+        helper = str(raw_question.get("helper") or "").strip()
 
         normalized_question = {
             "id": str(raw_question.get("id") or f"s{stage}_q{index + 1}"),

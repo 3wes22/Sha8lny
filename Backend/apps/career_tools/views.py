@@ -21,6 +21,7 @@ from apps.career_tools.serializers import (
     PortfolioSerializer,
     PortfolioListSerializer,
 )
+from apps.career_tools.services import ResumeService, PortfolioService
 
 
 class ResumeViewSet(viewsets.ModelViewSet):
@@ -57,19 +58,22 @@ class ResumeViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def generate(self, request, pk=None):
         """
-        Generate resume as PDF or DOCX.
+        Generate the structured resume document.
 
         POST /resumes/{id}/generate/
 
         Query Parameters:
-        - format: pdf or docx (default: pdf)
+        - file_format: pdf or docx (default: pdf)
 
-        Returns: File download
+        Returns the assembled, ordered resume content as JSON. Binary file export
+        (a downloadable PDF/DOCX) is a v2 feature; ``export_format`` reports the
+        requested format and ``export_available`` whether a file download exists.
 
-        TODO: Implement PDF/DOCX generation using ReportLab or python-docx
+        Note: ``file_format`` is used instead of ``format`` because DRF reserves
+        the ``format`` query parameter for content negotiation.
         """
         resume = self.get_object()
-        format_type = request.query_params.get('format', 'pdf').lower()
+        format_type = request.query_params.get('file_format', 'pdf').lower()
 
         if format_type not in ['pdf', 'docx']:
             return Response(
@@ -77,13 +81,13 @@ class ResumeViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # TODO: Implement actual PDF/DOCX generation
-        # For now, return a placeholder response
         return Response({
-            'message': f'{format_type.upper()} generation is pending implementation',
             'resume_id': str(resume.id),
-            'format': format_type
-        }, status=status.HTTP_501_NOT_IMPLEMENTED)
+            'export_format': format_type,
+            'export_available': False,
+            'export_note': 'Downloadable file export (PDF/DOCX) is planned for v2.',
+            'document': ResumeService.build_resume_document(resume),
+        }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
     def optimize_ats(self, request, pk=None):
@@ -94,27 +98,17 @@ class ResumeViewSet(viewsets.ModelViewSet):
 
         SRS FR-23: ATS-Optimized Resume Generation
 
-        Analyzes resume and provides ATS optimization suggestions.
-
-        TODO: Implement ATS optimization using AI
+        Scores the resume deterministically from its content and returns tailored
+        suggestions. Works offline (no external service required).
         """
         resume = self.get_object()
-
-        # TODO: Implement ATS optimization logic
-        # For now, return a placeholder score
-        resume.is_ats_optimized = True
-        resume.ats_score = 85.0
-        resume.save()
+        resume = ResumeService.optimize_for_ats(resume)
 
         return Response({
             'message': 'ATS optimization analysis complete',
-            'ats_score': resume.ats_score,
-            'suggestions': [
-                'Add more keywords from job description',
-                'Use standard section headings',
-                'Avoid tables and complex formatting',
-                'Include measurable achievements'
-            ]
+            'ats_score': float(resume.ats_score),
+            'ats_grade': resume.ats_grade_display,
+            'suggestions': resume.ats_suggestions.get('improvements', []),
         }, status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
@@ -151,7 +145,7 @@ class PortfolioViewSet(viewsets.ModelViewSet):
         return Portfolio.objects.filter(
             user=self.request.user,
             is_deleted=False
-        ).prefetch_related('projects').order_by('-updated_at')
+        ).order_by('-updated_at')
 
     def get_serializer_class(self):
         """Use minimal serializer for list view."""
@@ -169,15 +163,12 @@ class PortfolioViewSet(viewsets.ModelViewSet):
         Generates public URL and makes portfolio visible.
         """
         portfolio = self.get_object()
-        portfolio.is_public = True
-        portfolio.save()
-
-        public_url = f"/portfolio/{portfolio.slug}/"
+        portfolio = PortfolioService.publish_portfolio(portfolio)
 
         return Response({
             'message': 'Portfolio published successfully',
-            'public_url': public_url,
-            'slug': portfolio.slug
+            'public_url': portfolio.public_url,
+            'slug': portfolio.custom_url_slug,
         }, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='public/(?P<slug>[-\\w]+)')
@@ -191,7 +182,7 @@ class PortfolioViewSet(viewsets.ModelViewSet):
         """
         try:
             portfolio = Portfolio.objects.get(
-                slug=slug,
+                custom_url_slug=slug,
                 is_public=True,
                 is_deleted=False
             )

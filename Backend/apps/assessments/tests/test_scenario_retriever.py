@@ -62,7 +62,7 @@ def _seed_scenario(
     role_key: str = "backend",
     subskill_key: str = "http_api_design",
     competency: str = "HTTP API Design",
-    dimension_key: str = "api_service_design",
+    dimension_key: str = "rest_api_design",
     stage: int = 1,
     question_type: str = "single_choice",
 ) -> dict[str, Any]:

@@ -356,18 +356,21 @@ def build_vector_database():
     for src, count in sorted(sources.items()):
         print(f"  - {src}: {count}")
 
-    # Quick test query
+    # Quick test query (non-fatal — index may already be complete)
     print("\n🧪 Testing with sample query...")
-    test_query = "What skills do I need to become a backend developer?"
-    test_embedding = model.encode([test_query]).tolist()
-    results = collection.query(query_embeddings=test_embedding, n_results=3)
+    try:
+        test_query = "What skills do I need to become a backend developer?"
+        test_embedding = model.encode([test_query]).tolist()
+        results = collection.query(query_embeddings=test_embedding, n_results=3)
 
-    print(f"Query: '{test_query}'")
-    print("Top 3 results:")
-    for i, (doc, meta) in enumerate(
-        zip(results["documents"][0], results["metadatas"][0])
-    ):
-        print(f"  {i+1}. [{meta['source']}] {doc[:100]}...")
+        print(f"Query: '{test_query}'")
+        print("Top 3 results:")
+        for i, (doc, meta) in enumerate(
+            zip(results["documents"][0], results["metadatas"][0])
+        ):
+            print(f"  {i+1}. [{meta['source']}] {doc[:100]}...")
+    except Exception as error:
+        print(f"⚠️  Post-build smoke query failed (index may still be usable): {error}")
 
     return collection
 

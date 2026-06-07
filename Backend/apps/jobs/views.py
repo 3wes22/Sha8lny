@@ -156,6 +156,7 @@ class JobViewSet(viewsets.ReadOnlyModelViewSet):
         """Return jobs ranked by skill overlap against the authenticated user."""
         limit = int(request.query_params.get("limit", 20))
         matches = JobService.match_jobs_for_user(request.user, limit=limit)
+        user_level = matches[0].get("user_career_level") if matches else None
         payload = []
         for item in matches:
             job = item["job"]
@@ -165,9 +166,17 @@ class JobViewSet(viewsets.ReadOnlyModelViewSet):
                     "match_score": item["match_score"],
                     "matching_skills": item.get("matching_skills", []),
                     "missing_skills": item.get("missing_skills", []),
+                    "explanation": item.get("explanation", {}),
+                    "user_career_level": item.get("user_career_level"),
+                    "job_experience_level": item.get("job_experience_level"),
                 }
             )
-        return Response(payload)
+        return Response(
+            {
+                "user_career_level": user_level,
+                "results": payload,
+            }
+        )
 
     # ============================================================================
     # EXTRA ENDPOINTS - NOT IN SRS APPENDIX B
