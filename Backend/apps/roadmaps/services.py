@@ -622,13 +622,18 @@ class RoadmapService:
 
         foundation_weeks = max(MIN_PHASE_WEEKS, math.ceil(estimated_weeks * PHASE_WEEK_SPLIT[0]))
         gap_weeks = max(MIN_PHASE_WEEKS, math.ceil(estimated_weeks * PHASE_WEEK_SPLIT[1]))
+        # Third phase takes the remainder (may fall below the floor); the guard
+        # below then borrows from the gap phase so the three phases still sum to
+        # ``estimated_weeks``. Clamping here instead would make the guard dead
+        # code and silently overshoot the planned duration.
         phase_weeks = [
             foundation_weeks,
             gap_weeks,
-            max(MIN_PHASE_WEEKS, estimated_weeks - foundation_weeks - gap_weeks),
+            estimated_weeks - foundation_weeks - gap_weeks,
         ]
         if phase_weeks[2] < MIN_PHASE_WEEKS:
-            phase_weeks[1] = max(MIN_PHASE_WEEKS, phase_weeks[1] - (MIN_PHASE_WEEKS - phase_weeks[2]))
+            deficit = MIN_PHASE_WEEKS - phase_weeks[2]
+            phase_weeks[1] = max(MIN_PHASE_WEEKS, phase_weeks[1] - deficit)
             phase_weeks[2] = MIN_PHASE_WEEKS
 
         return [

@@ -4,7 +4,7 @@ _Generated: 2026-06-08_
 
 ## Dataset
 
-- Source export: `/home/user/repo/ai-models/data/job_ranker_training.json`
+- Source export: `data/job_ranker_training.json`
 - Jobs (documents): 60
 - Query groups (synthetic user profiles): 8
 - Evaluation: **leave-one-group-out** cross-validation (8 folds, seed=42)
@@ -21,11 +21,11 @@ Metrics are averaged over the folds. MAP treats grades >= 2.0 as relevant.
 
 | Metric | LightGBM | Overlap baseline | Random baseline |
 |---|---|---|---|
-| ndcg@5 | 0.5827 | 0.5833 | 0.1597 |
-| ndcg@10 | 0.5797 | 0.5833 | 0.2177 |
+| ndcg@5 | 0.5895 | 0.5603 | 0.1597 |
+| ndcg@10 | 0.5755 | 0.5601 | 0.2118 |
 | map | 0.3750 | 0.3750 | 0.1589 |
 
-LightGBM ndcg@5 lift over the overlap baseline: **-0.0006**.
+LightGBM ndcg@5 lift over the overlap baseline: **+0.0292**.
 
 ## Limitations
 

@@ -40,6 +40,7 @@ if str(SRC) not in sys.path:
 from recommendations.feature_engineering import (  # noqa: E402
     build_feature_vector,
     embeddings_available,
+    required_skill_overlap_ratio,
 )
 from recommendations.ranker import (  # noqa: E402
     train_and_evaluate,
@@ -85,8 +86,13 @@ def build_training_data(jobs: list[dict]) -> tuple[np.ndarray, np.ndarray, list[
         group_rows = []
         group_labels = []
         for job in jobs:
-            required = set(job.get("required_skills") or [])
-            overlap = len(skill_set & required) / len(required) if required else 0.0
+            # Use the same overlap definition as the LightGBM feature
+            # (case-insensitive) so the weak label and the
+            # ``required_skill_overlap_ratio`` feature can never disagree —
+            # otherwise casing drift in real postings silently inverts labels.
+            overlap = required_skill_overlap_ratio(
+                skill_set, set(job.get("required_skills") or [])
+            )
             vector = build_feature_vector(
                 user_skills,
                 job,
@@ -138,7 +144,12 @@ def main() -> None:
     # 2. Honest evaluation on a held-out group split (throwaway model).
     evaluation = train_and_evaluate(matrix, labels, groups, seed=42)
     evaluation["n_jobs"] = len(jobs)
-    evaluation["training_input"] = str(args.input)
+    try:
+        # Keep committed artifacts portable — record a repo-relative path so
+        # regenerating on another machine doesn't churn the diff.
+        evaluation["training_input"] = str(args.input.resolve().relative_to(ROOT))
+    except ValueError:
+        evaluation["training_input"] = args.input.name
     evaluation["generated_on"] = date.today().isoformat()
     evaluation["embeddings_enabled"] = embeddings_available()
 

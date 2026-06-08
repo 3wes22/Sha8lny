@@ -11,6 +11,7 @@ Features (v1):
 
 from __future__ import annotations
 
+import os
 from datetime import date, datetime
 from typing import Any, Sequence
 
@@ -36,6 +37,12 @@ _EMBEDDER = None
 
 
 def _embeddings_enabled() -> bool:
+    # Explicit env override first, so eval artifacts are reproducible regardless
+    # of whether sentence-transformers happens to be installed. Set
+    # JOB_RANKER_SKIP_EMBEDDINGS=1 to force the deterministic, embedding-free path.
+    env = os.environ.get("JOB_RANKER_SKIP_EMBEDDINGS")
+    if env is not None:
+        return env.strip().lower() not in {"1", "true", "yes", "on"}
     try:
         from django.conf import settings
 
