@@ -1,0 +1,36 @@
+{
+  "evaluation": "leave-one-group-out",
+  "n_groups": 8,
+  "n_folds": 8,
+  "seed": 42,
+  "features": [
+    "skill_embedding_cosine",
+    "required_skill_overlap_ratio",
+    "experience_level_delta",
+    "job_freshness_score",
+    "location_match"
+  ],
+  "relevant_grade_for_map": 2.0,
+  "label_provenance": "weak-supervision (pseudo-label), not ground truth",
+  "metrics": {
+    "ndcg@5": {
+      "lightgbm": 0.5827,
+      "overlap_baseline": 0.5833,
+      "random_baseline": 0.1597
+    },
+    "ndcg@10": {
+      "lightgbm": 0.5797,
+      "overlap_baseline": 0.5833,
+      "random_baseline": 0.2177
+    },
+    "map": {
+      "lightgbm": 0.375,
+      "overlap_baseline": 0.375,
+      "random_baseline": 0.1589
+    }
+  },
+  "n_jobs": 60,
+  "training_input": "/home/user/repo/ai-models/data/job_ranker_training.json",
+  "generated_on": "2026-06-08",
+  "embeddings_enabled": false
+}

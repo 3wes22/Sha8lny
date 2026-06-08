@@ -61,6 +61,16 @@ def _get_embedder():
     return _EMBEDDER
 
 
+def embeddings_available() -> bool:
+    """True when the sentence-transformers embedder is loaded and usable.
+
+    When False, ``skill_embedding_cosine`` returns 0.0 for every pair, so the
+    embedding feature is effectively disabled (relevant for interpreting eval
+    metrics — the model loses its main differentiating signal).
+    """
+    return bool(_get_embedder())
+
+
 def _cosine(a: np.ndarray, b: np.ndarray) -> float:
     denom = float(np.linalg.norm(a) * np.linalg.norm(b))
     if denom <= 0:
