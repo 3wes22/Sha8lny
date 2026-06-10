@@ -15,8 +15,44 @@ any change._
 | **corpus_chunking** (license-clean corpus, structure-aware chunks) | 0.209 | 0.209 | 0.062 | 0.161 | 43 / 55 |
 | **hybrid** (+ BM25 + RRF fusion, rank-based selection) | 0.536 | 0.673 | 0.175 | 0.396 | 17 / 55 |
 | **rerank** (+ cross-encoder top-pool re-ranking) | **0.627** | **0.682** | **0.226** | **0.553** | **16 / 55** |
+| **corpus_v2** (+ egypt_official & tech_trends sources, validation layer, build dedupe, rank-time diversity) | 0.609 | 0.664 | 0.218 | 0.544 | 17 / 55 |
+| **abstain_floor** (+ rerank-logit abstention, default −6.0) | 0.609 | 0.664 | 0.218 | 0.544 | 17 / 55 |
 
-**Cumulative: recall@5 ×5.3, MRR ×5.1, precision@5 ×4.1 over baseline.**
+**Cumulative: recall@5 ×5.2, MRR ×5.0, precision@5 ×4.0 over baseline.**
+
+corpus_v2's small dip vs. the rerank stage (−0.018 recall@5) is a deliberate
+trade: the diversity quota (max 2 chunks per file/section) swaps redundant
+same-section hits — which doc-level matchers reward — for varied sources,
+which the generating LLM's context quality rewards. The abstention floor is
+measured at **zero cost**: identical metrics, because every genuine hit
+scores above the floor.
+
+## Stress test (2026-06-10, `scripts/stress_test_retrieval.py`)
+
+18 adversarial/robustness queries across 7 categories, run against the
+production path. Findings:
+
+- **Egypt-official coverage (new corpus): excellent.** All 3 queries hit
+  `egypt_official` with HIGH confidence and strongly positive rerank logits
+  (+5.2…+6.4), including the DEPI/DEBI training-programs query.
+- **Exact-term lookups: excellent.** SOC-code queries land precisely
+  (BM25 doing its job; +5.1…+6.6, HIGH).
+- **Off-topic abstention: fixed during the stress test.** Headache/visa/
+  football queries previously returned MEDIUM-tier junk; with the abstention
+  floor they return zero docs → advisory's `no_retrieval_context` path.
+- **Paraphrase robustness: 2/3.** One salary paraphrase without
+  salary-keywords retrieved only weakly related context.
+- **Typos: weak.** Misspelled keyword queries lose both BM25 and dense
+  signal; with the floor they now abstain rather than mislead. Spelling
+  normalization is future work.
+- **Arabic / code-switched queries: fail (known limitation).** The corpus is
+  English and all-MiniLM-L6-v2 is English-centric. For an Egyptian platform
+  this is the most important honest gap: multilingual embeddings
+  (e.g. paraphrase-multilingual-MiniLM) + Arabic corpus content are the
+  documented upgrade path.
+- **Diversity invariants: 0 violations** (no duplicate content, ≤2 chunks
+  per section across all queries). Latency p50 0.72s / p95 1.11s after a
+  one-time ~16s index warmup per process.
 
 ## What each layer fixed (diagnosed, not assumed)
 
