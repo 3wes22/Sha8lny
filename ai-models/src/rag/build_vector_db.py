@@ -21,6 +21,7 @@ from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
+from .chunking import chunk_markdown
 from .runtime_settings import get_chroma_persist_dir, get_embedding_model
 
 # ---------------------------------------------------------------------------
@@ -33,29 +34,7 @@ ROADMAP_DIR = DATA_DIR / "roadmap-sh-data" / "src" / "data"
 ONET_DIR = DATA_DIR / "onet_data" / "db_30_1_text"
 VECTOR_DB_DIR = DATA_DIR / "vector_db"
 
-CHUNK_SIZE = 500       # characters per chunk
-CHUNK_OVERLAP = 50
 BATCH_SIZE = 100       # documents per batch for embedding
-
-
-# ---------------------------------------------------------------------------
-# Chunking
-# ---------------------------------------------------------------------------
-
-def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
-    """Split text into overlapping chunks."""
-    if len(text) <= chunk_size:
-        return [text] if text.strip() else []
-
-    chunks = []
-    start = 0
-    while start < len(text):
-        end = start + chunk_size
-        chunk = text[start:end]
-        if chunk.strip():
-            chunks.append(chunk.strip())
-        start = end - overlap
-    return chunks
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +82,7 @@ def process_kb_md(file_path: Path) -> List[Dict]:
                             "section": title,
                             "subsection": h3_title,
                             "file": file_path.name,
+                            "quality_tier": "curated",
                         },
                     })
         else:
@@ -115,6 +95,7 @@ def process_kb_md(file_path: Path) -> List[Dict]:
                     "category": _categorize(title, ""),
                     "section": title,
                     "file": file_path.name,
+                    "quality_tier": "curated",
                 },
             })
 
@@ -158,29 +139,29 @@ def process_roadmap_md(file_path: Path) -> List[Dict]:
             break
     category = parts[roadmap_idx + 1] if roadmap_idx and roadmap_idx + 1 < len(parts) else "general"
 
-    # Clean content
+    # Strip astro/YAML frontmatter, then clean links/mentions but keep
+    # headings — the chunker uses them for structure
+    content = re.sub(r"\A---\r?\n.*?\r?\n---\r?\n", "", content, flags=re.DOTALL)
     clean = re.sub(r"\[@[^\]]+\]\([^)]+\)", "", content)
     clean = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", clean)
-    clean = re.sub(r"#+ ", "", clean)
     clean = re.sub(r"\n{3,}", "\n\n", clean)
 
-    chunks = chunk_text(clean)
     path_hash = hashlib.md5(str(file_path).encode()).hexdigest()[:8]
+    chunks = chunk_markdown(clean, base_metadata={
+        "source": "roadmap.sh",
+        "category": category,
+        "title": title,
+        "file": file_path.name,
+        "url": f"https://roadmap.sh/{category}",
+        "quality_tier": "dev_fallback",  # personal-use license — never a defended source
+    })
 
-    return [
-        {
-            "id": f"rm_{category}_{path_hash}_{i}",
-            "content": chunk,
-            "metadata": {
-                "source": "roadmap.sh",
-                "category": category,
-                "title": title,
-                "file": file_path.name,
-                "chunk_index": i,
-            },
-        }
-        for i, chunk in enumerate(chunks)
-    ]
+    documents = []
+    for i, chunk in enumerate(chunks):
+        chunk["id"] = f"rm_{category}_{path_hash}_{i}"
+        chunk["metadata"]["chunk_index"] = i
+        documents.append(chunk)
+    return documents
 
 
 # ---------------------------------------------------------------------------
@@ -229,6 +210,7 @@ def process_onet_file(file_path: Path) -> List[Dict]:
                     "file": file_path.name,
                     "category": file_name.replace("_", " "),
                     "row_index": i,
+                    "quality_tier": "official",
                 },
             })
 
