@@ -41,11 +41,45 @@ def _get_hybrid_index() -> Optional[HybridIndex]:
     return _hybrid_index
 
 
+# Source quality_tier (set at build time, see DATASET_REGISTRY.md) -> base
+# confidence. A weak joint-relevance signal (negative cross-encoder logit)
+# downgrades one level.
+_TIER_BY_QUALITY = {
+    "official": "HIGH",
+    "curated": "HIGH",
+    "established": "MEDIUM",
+    "dev_fallback": "LOW",
+}
+_DOWNGRADE = {"HIGH": "MEDIUM", "MEDIUM": "LOW", "LOW": "LOW"}
+
+
+def _confidence_tier(doc: Dict[str, Any]) -> str:
+    metadata = doc.get("metadata") or {}
+    tier = _TIER_BY_QUALITY.get(metadata.get("quality_tier"), "LOW")
+    rerank_score = doc.get("rerank_score")
+    if rerank_score is not None and rerank_score < 0:
+        tier = _DOWNGRADE[tier]
+    return tier
+
+
+def _build_where(category: Optional[str], filters: Optional[Dict[str, Any]]):
+    """Combine filters into a Chroma where clause ($and for multiple keys)."""
+    combined: Dict[str, Any] = dict(filters or {})
+    if category:
+        combined["category"] = category
+    if not combined:
+        return None
+    if len(combined) == 1:
+        return combined
+    return {"$and": [{key: value} for key, value in combined.items()]}
+
+
 def retrieve_context(
     query: str,
     top_k: int = 5,
     min_score: float = 0.3,
-    category: Optional[str] = None
+    category: Optional[str] = None,
+    filters: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Retrieve relevant context for a query.
@@ -64,16 +98,22 @@ def retrieve_context(
         top_k: Maximum number of documents to retrieve
         min_score: Similarity threshold (dense-only fallback path)
         category: Optional category filter (career_path, interview_prep, ...)
+        filters: Optional metadata equality filters, e.g. {"source": "roadmap.sh"}
 
     Returns:
-        List of relevant documents with content and metadata
+        List of relevant documents with content, metadata, and a
+        confidence_tier (HIGH/MEDIUM/LOW) derived from source quality
+        and re-ranking strength.
     """
-    filter_metadata = {"category": category} if category else None
+    filter_metadata = _build_where(category, filters)
 
     hybrid = None if filter_metadata else _get_hybrid_index()
     if hybrid is None:
         results = vector_store.search(query, top_k=top_k, filter_metadata=filter_metadata)
-        return [r for r in results if r['score'] >= min_score]
+        results = [r for r in results if r['score'] >= min_score]
+        for doc in results:
+            doc["confidence_tier"] = _confidence_tier(doc)
+        return results
 
     dense = vector_store.search(query, top_k=CANDIDATE_POOL)
     bm25 = hybrid.search(query, top_k=CANDIDATE_POOL)
@@ -101,7 +141,10 @@ def retrieve_context(
         doc["retrieval"] = "hybrid_rrf"
         candidates.append(doc)
 
-    return reranker.rerank(query, candidates, top_k=top_k)
+    results = reranker.rerank(query, candidates, top_k=top_k)
+    for doc in results:
+        doc["confidence_tier"] = _confidence_tier(doc)
+    return results
 
 
 def format_context_for_llm(documents: List[Dict[str, Any]]) -> str:
