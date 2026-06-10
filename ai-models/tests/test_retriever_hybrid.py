@@ -103,6 +103,32 @@ class TestDiversitySelection:
         assert len(selected) == 4
 
 
+class TestAbstentionFloor:
+    def _ranked(self, scores):
+        return [{"id": str(i), "content": f"Doc {i}.", "metadata": {"source": "x"},
+                 "rerank_score": s} for i, s in enumerate(scores)]
+
+    def test_junk_below_floor_dropped(self, hybrid_env, monkeypatch):
+        monkeypatch.setenv("RAG_RERANK_ENABLED", "1")
+        ranked = self._ranked([-7.8, -8.2, -10.4])
+        monkeypatch.setattr(retriever.reranker, "rerank",
+                            lambda query, docs, top_k: ranked)
+        assert retriever.retrieve_context("off topic query", top_k=3) == []
+
+    def test_strong_docs_survive_floor(self, hybrid_env, monkeypatch):
+        monkeypatch.setenv("RAG_RERANK_ENABLED", "1")
+        ranked = self._ranked([6.3, -2.1, -9.0])
+        monkeypatch.setattr(retriever.reranker, "rerank",
+                            lambda query, docs, top_k: ranked)
+        results = retriever.retrieve_context("real query", top_k=3)
+        assert [doc["id"] for doc in results] == ["0", "1"]
+
+    def test_no_rerank_scores_means_no_floor(self, hybrid_env):
+        # rerank disabled in hybrid_env fixture: docs carry no rerank_score
+        results = retriever.retrieve_context("query", top_k=3)
+        assert len(results) == 3
+
+
 class TestDenseFallback:
     def test_min_score_filter_applies_when_index_unavailable(self, monkeypatch):
         monkeypatch.setattr(retriever, "_get_hybrid_index", lambda: None)

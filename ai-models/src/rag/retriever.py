@@ -5,6 +5,7 @@ Retrieves relevant context from knowledge base for LLM generation.
 """
 
 import logging
+import os
 import re
 from typing import List, Dict, Any, Optional
 
@@ -20,6 +21,21 @@ CANDIDATE_POOL = 20
 # Diversity: at most this many chunks from one (file, section) in the final
 # results — stops a single document section from monopolizing the context
 MAX_PER_SECTION = 2
+
+# Abstention: docs whose cross-encoder logit falls below this floor are
+# treated as not relevant. Stress testing (scripts/stress_test_retrieval.py)
+# showed genuine answers score roughly +1..+7 while off-topic junk scores
+# -6..-11; without a floor, rank-based selection returns confident-looking
+# context for ANY query (headache medication, visas) and feeds confabulation.
+# An empty result triggers the advisory module's no_retrieval_context path.
+DEFAULT_ABSTAIN_FLOOR = -6.0
+
+
+def _abstain_floor() -> float:
+    try:
+        return float(os.getenv("RAG_RERANK_ABSTAIN_FLOOR", DEFAULT_ABSTAIN_FLOOR))
+    except ValueError:
+        return DEFAULT_ABSTAIN_FLOOR
 
 
 def _select_diverse(ranked: List[Dict[str, Any]], top_k: int) -> List[Dict[str, Any]]:
@@ -174,6 +190,10 @@ def retrieve_context(
         candidates.append(doc)
 
     ranked = reranker.rerank(query, candidates, top_k=len(candidates))
+    # abstain on junk: only applicable when rerank scores exist
+    floor = _abstain_floor()
+    ranked = [doc for doc in ranked
+              if doc.get("rerank_score") is None or doc["rerank_score"] >= floor]
     results = _select_diverse(ranked, top_k)
     for doc in results:
         doc["confidence_tier"] = _confidence_tier(doc)
