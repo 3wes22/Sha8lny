@@ -4,8 +4,40 @@ RAG Retriever for Career Advisory
 Retrieves relevant context from knowledge base for LLM generation.
 """
 
+import logging
 from typing import List, Dict, Any, Optional
+
 from . import vector_store
+from .hybrid_search import HybridIndex, rrf_fuse
+
+logger = logging.getLogger(__name__)
+
+# Candidate pool fetched from each ranker before fusion
+CANDIDATE_POOL = 20
+
+_hybrid_index: Optional[HybridIndex] = None
+_hybrid_index_failed = False
+
+
+def _get_hybrid_index() -> Optional[HybridIndex]:
+    """Lazily build the BM25 index over the collection; None on any failure.
+
+    One-time per-process cost (tokenizing the collection). Failure or a
+    missing rank_bm25 dependency degrades retrieval to dense-only — same
+    fault-tolerance contract the advisory module already relies on.
+    """
+    global _hybrid_index, _hybrid_index_failed
+    if _hybrid_index is not None or _hybrid_index_failed:
+        return _hybrid_index
+    try:
+        index = HybridIndex(list(vector_store.iter_all_documents()))
+        _hybrid_index = index if index.available else None
+        if _hybrid_index is None:
+            _hybrid_index_failed = True
+    except Exception as error:
+        logger.warning("Hybrid index build failed; dense-only retrieval: %s", error)
+        _hybrid_index_failed = True
+    return _hybrid_index
 
 
 def retrieve_context(
@@ -16,28 +48,56 @@ def retrieve_context(
 ) -> List[Dict[str, Any]]:
     """
     Retrieve relevant context for a query.
-    
+
+    Hybrid path (default): dense + BM25 candidates fused with reciprocal
+    rank fusion; ranking is relative, so no absolute score threshold is
+    applied (the old min_score cutoff against cosine scores silently
+    starved the advisor of context — see eval_results/retrieval/).
+
+    Dense-only fallback (BM25 index unavailable, or category filter in
+    use — the BM25 index is collection-wide): legacy behavior, including
+    the min_score threshold.
+
     Args:
         query: User's question
         top_k: Maximum number of documents to retrieve
-        min_score: Minimum similarity score threshold
-        category: Optional category filter (career_path, interview_prep, learning, etc.)
-        
+        min_score: Similarity threshold (dense-only fallback path)
+        category: Optional category filter (career_path, interview_prep, ...)
+
     Returns:
         List of relevant documents with content and metadata
     """
-    # Build metadata filter if category specified
-    filter_metadata = None
-    if category:
-        filter_metadata = {"category": category}
-    
-    # Search vector store
-    results = vector_store.search(query, top_k=top_k, filter_metadata=filter_metadata)
-    
-    # Filter by minimum score
-    relevant = [r for r in results if r['score'] >= min_score]
-    
-    return relevant
+    filter_metadata = {"category": category} if category else None
+
+    hybrid = None if filter_metadata else _get_hybrid_index()
+    if hybrid is None:
+        results = vector_store.search(query, top_k=top_k, filter_metadata=filter_metadata)
+        return [r for r in results if r['score'] >= min_score]
+
+    dense = vector_store.search(query, top_k=CANDIDATE_POOL)
+    bm25 = hybrid.search(query, top_k=CANDIDATE_POOL)
+
+    fused = rrf_fuse([
+        [doc["id"] for doc in dense],
+        [doc_id for doc_id, _ in bm25],
+    ])
+    top_ids = [doc_id for doc_id, _ in fused[:top_k]]
+    fused_scores = dict(fused)
+
+    dense_by_id = {doc["id"]: doc for doc in dense}
+    missing = [doc_id for doc_id in top_ids if doc_id not in dense_by_id]
+    fetched_by_id = {doc["id"]: doc for doc in vector_store.get_by_ids(missing)}
+
+    results = []
+    for doc_id in top_ids:
+        doc = dense_by_id.get(doc_id) or fetched_by_id.get(doc_id)
+        if doc is None:
+            continue
+        doc = dict(doc)
+        doc["score"] = fused_scores[doc_id]
+        doc["retrieval"] = "hybrid_rrf"
+        results.append(doc)
+    return results
 
 
 def format_context_for_llm(documents: List[Dict[str, Any]]) -> str:
