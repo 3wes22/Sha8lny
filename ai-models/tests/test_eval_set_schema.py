@@ -27,7 +27,7 @@ KB_DIR = AI_MODELS_ROOT / "data" / "knowledge_base"
 ROADMAP_DIR = AI_MODELS_ROOT / "data" / "roadmap-sh-data" / "src" / "data"
 ONET_DIR = AI_MODELS_ROOT / "data" / "onet_data" / "db_30_1_text"
 
-ALLOWED_SOURCES = {"knowledge_base", "roadmap.sh", "onet"}
+ALLOWED_SOURCES = {"knowledge_base", "roadmap.sh", "onet", "bls_ooh", "mdn"}
 ALLOWED_MATCHER_KEYS = {"source", "file", "section", "subsection", "category", "content_contains"}
 REQUIRED_ENTRY_KEYS = {"query_id", "query", "relevant"}
 ALLOWED_ENTRY_KEYS = REQUIRED_ENTRY_KEYS | {"category", "notes"}
@@ -107,6 +107,10 @@ def test_ground_truth_files_exist(entries):
             if source == "knowledge_base":
                 assert (KB_DIR / file_name).exists(), (
                     f"{entry['query_id']}: {file_name} not in knowledge_base/"
+                )
+            elif source in ("bls_ooh", "mdn"):
+                assert (KB_DIR / source / file_name).exists(), (
+                    f"{entry['query_id']}: {file_name} not in knowledge_base/{source}/"
                 )
             elif source == "onet":
                 assert (ONET_DIR / file_name).exists(), (

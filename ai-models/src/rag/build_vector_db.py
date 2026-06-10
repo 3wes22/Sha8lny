@@ -117,6 +117,52 @@ def _categorize(title: str, subsection: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Source 1b: fetched corpus subdirectories (bls_ooh/, mdn/)
+# Files carry a provenance header comment written by fetch_corpus_sources.py.
+# ---------------------------------------------------------------------------
+
+FETCHED_SOURCES = {
+    # dir name -> (source label, quality tier, id prefix)
+    "bls_ooh": ("bls_ooh", "official", "bls"),
+    "mdn": ("mdn", "established", "mdn"),
+}
+
+
+def process_fetched_md(file_path: Path, source: str, quality_tier: str, id_prefix: str) -> List[Dict]:
+    """Process a fetched corpus file into structure-aware chunks."""
+    try:
+        content = file_path.read_text(encoding="utf-8")
+    except Exception:
+        return []
+
+    url = ""
+    header_match = re.match(r"\A<!--(.*?)-->\s*", content, flags=re.DOTALL)
+    if header_match:
+        url_match = re.search(r"url:\s*(\S+)", header_match.group(1))
+        url = url_match.group(1) if url_match else ""
+        content = content[header_match.end():]
+
+    # Drop markdown links' targets (keep text) and bare nav artifacts
+    clean = re.sub(r"\[([^\]]*)\]\([^)]+\)", r"\1", content)
+    clean = re.sub(r"\n{3,}", "\n\n", clean)
+
+    path_hash = hashlib.md5(str(file_path).encode()).hexdigest()[:8]
+    chunks = chunk_markdown(clean, base_metadata={
+        "source": source,
+        "file": file_path.name,
+        "url": url,
+        "quality_tier": quality_tier,
+    })
+
+    documents = []
+    for i, chunk in enumerate(chunks):
+        chunk["id"] = f"{id_prefix}_{path_hash}_{i}"
+        chunk["metadata"]["chunk_index"] = i
+        documents.append(chunk)
+    return documents
+
+
+# ---------------------------------------------------------------------------
 # Source 2: Roadmap.sh markdown files
 # ---------------------------------------------------------------------------
 
@@ -168,9 +214,16 @@ def process_roadmap_md(file_path: Path) -> List[Dict]:
 # Source 3: O*NET occupation data
 # ---------------------------------------------------------------------------
 
+# Exact stems only. The previous substring whitelist also matched crosswalk
+# files like "Abilities to Work Activities", exploding the collection to
+# ~359k near-identical numeric rows that drowned all prose (see baseline eval
+# and DATASET_REGISTRY.md). Numeric rating files (Skills, Knowledge,
+# Abilities, Work Activities) are excluded from RAG by registry decision —
+# they stay on disk for structured lookups (onet_mapper.py).
 KEY_ONET_FILES = [
-    "Skills", "Knowledge", "Abilities", "Occupation Data",
-    "Task Statements", "Technology Skills", "Work Activities",
+    "Occupation Data",      # titles + rich descriptions — retrievable prose
+    "Task Statements",      # real task sentences per occupation
+    "Technology Skills",    # tool/software names per occupation
 ]
 
 
@@ -186,8 +239,8 @@ def process_onet_file(file_path: Path) -> List[Dict]:
     if len(lines) < 2:
         return []
 
-    # Only process key files
-    if not any(kf in file_name for kf in KEY_ONET_FILES):
+    # Only process whitelisted files (exact stem match)
+    if file_name not in KEY_ONET_FILES:
         return []
 
     headers = lines[0].split("\t")
@@ -233,6 +286,17 @@ def collect_all_documents() -> Generator[Dict, None, None]:
                 yield doc
     else:
         print(f"⚠️  Knowledge base not found at {KB_DIR}, skipping.")
+
+    # 1b. Fetched sources (BLS OOH, MDN)
+    for dir_name, (source, tier, prefix) in FETCHED_SOURCES.items():
+        source_dir = KB_DIR / dir_name
+        if source_dir.exists():
+            print(f"\n📚 Processing {source} documents...")
+            for file_path in tqdm(sorted(source_dir.glob("*.md")), desc=source):
+                for doc in process_fetched_md(file_path, source, tier, prefix):
+                    yield doc
+        else:
+            print(f"⚠️  {source} not found at {source_dir}, skipping.")
 
     # 2. Roadmap.sh
     if ROADMAP_DIR.exists():
