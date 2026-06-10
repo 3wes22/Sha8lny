@@ -22,6 +22,7 @@ from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
 from .chunking import chunk_markdown
+from .corpus_validation import dedupe_chunks, validate_file
 from .runtime_settings import get_chroma_persist_dir, get_embedding_model
 
 # ---------------------------------------------------------------------------
@@ -125,11 +126,22 @@ FETCHED_SOURCES = {
     # dir name -> (source label, quality tier, id prefix)
     "bls_ooh": ("bls_ooh", "official", "bls"),
     "mdn": ("mdn", "established", "mdn"),
+    "egypt_official": ("egypt_official", "official", "egy"),
+    "tech_trends": ("tech_trends", "established", "sot"),
 }
 
 
 def process_fetched_md(file_path: Path, source: str, quality_tier: str, id_prefix: str) -> List[Dict]:
-    """Process a fetched corpus file into structure-aware chunks."""
+    """Process a fetched corpus file into structure-aware chunks.
+
+    Files failing the corpus validation layer are skipped with a warning —
+    junk must not silently enter the collection.
+    """
+    issues = validate_file(file_path)
+    if issues:
+        print(f"⚠️  validation failed, skipping {file_path.name}: {'; '.join(issues)}")
+        return []
+
     try:
         content = file_path.read_text(encoding="utf-8")
     except Exception:
@@ -360,7 +372,9 @@ def build_vector_database():
     # Collect
     print("\n📄 Collecting documents...")
     all_docs = list(collect_all_documents())
-    print(f"\n✅ Total documents collected: {len(all_docs)}")
+    all_docs, duplicates_dropped = dedupe_chunks(all_docs)
+    print(f"\n✅ Total documents collected: {len(all_docs)} "
+          f"({duplicates_dropped} exact duplicates dropped)")
 
     if not all_docs:
         print("❌ No documents found — check that data/ directories have content.")

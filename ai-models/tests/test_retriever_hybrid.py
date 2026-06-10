@@ -70,6 +70,39 @@ class TestHybridPath:
         assert len(retriever.retrieve_context("query", top_k=2)) == 2
 
 
+class TestDiversitySelection:
+    def _doc(self, doc_id, content, file=None, section=None):
+        return {"id": doc_id, "content": content,
+                "metadata": {"source": "bls_ooh", "file": file, "section": section}}
+
+    def test_exact_duplicate_content_skipped(self):
+        ranked = [
+            self._doc("a", "Same passage.", "f.md", "S1"),
+            self._doc("b", "same   PASSAGE.", "g.md", "S2"),
+            self._doc("c", "Different.", "h.md", "S3"),
+        ]
+        selected = retriever._select_diverse(ranked, top_k=3)
+        assert [d["id"] for d in selected] == ["a", "c"]
+
+    def test_section_quota_caps_at_two_and_backfills(self):
+        ranked = [
+            self._doc("a", "One.", "f.md", "Duties"),
+            self._doc("b", "Two.", "f.md", "Duties"),
+            self._doc("c", "Three.", "f.md", "Duties"),
+            self._doc("d", "Other section.", "f.md", "Pay"),
+        ]
+        selected = retriever._select_diverse(ranked, top_k=3)
+        assert [d["id"] for d in selected] == ["a", "b", "d"]
+
+    def test_docs_without_section_identity_not_quota_limited(self):
+        ranked = [
+            {"id": str(i), "content": f"Doc {i}.", "metadata": {"source": "x"}}
+            for i in range(4)
+        ]
+        selected = retriever._select_diverse(ranked, top_k=4)
+        assert len(selected) == 4
+
+
 class TestDenseFallback:
     def test_min_score_filter_applies_when_index_unavailable(self, monkeypatch):
         monkeypatch.setattr(retriever, "_get_hybrid_index", lambda: None)

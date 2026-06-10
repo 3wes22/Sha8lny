@@ -110,6 +110,16 @@ standards bodies), `established` (recognized platforms/publishers),
 - **Decision:** **USE**, tier `established`, with per-chunk attribution metadata
   (url + "Mozilla Contributors, CC-BY-SA 2.5+").
 
+> **Ingestion status (2026-06-10):** MCIT/ITIDA and the Stack Overflow survey
+> are now ingested as authored excerpt-and-cite summaries under
+> `ai-models/data/knowledge_base/egypt_official/` and `tech_trends/`
+> (per-fact citations inline; provenance headers; validated by
+> `src/rag/corpus_validation.py` before embedding). BLS OOH and MDN were
+> ingested in plan Task 1.7. Every fetched/authored corpus file must pass the
+> validation layer (provenance header, length, structure, junk and control
+> character checks); exact-duplicate chunks are dropped per (source, category)
+> at build time.
+
 ### Stack Overflow Annual Developer Survey (public dataset)
 - **Source URL:** https://survey.stackoverflow.co/ (data under ODbL per SO's
   public data releases)

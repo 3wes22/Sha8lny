@@ -5,6 +5,7 @@ Retrieves relevant context from knowledge base for LLM generation.
 """
 
 import logging
+import re
 from typing import List, Dict, Any, Optional
 
 from . import vector_store
@@ -15,6 +16,37 @@ logger = logging.getLogger(__name__)
 
 # Candidate pool fetched from each ranker before fusion
 CANDIDATE_POOL = 20
+
+# Diversity: at most this many chunks from one (file, section) in the final
+# results — stops a single document section from monopolizing the context
+MAX_PER_SECTION = 2
+
+
+def _select_diverse(ranked: List[Dict[str, Any]], top_k: int) -> List[Dict[str, Any]]:
+    """Pick top_k in rank order, skipping exact duplicates and over-quota sections."""
+    seen_content = set()
+    section_counts: Dict[tuple, int] = {}
+    selected: List[Dict[str, Any]] = []
+
+    for doc in ranked:
+        if len(selected) >= top_k:
+            break
+        normalized = re.sub(r"\s+", " ", (doc.get("content") or "")).strip().lower()
+        if normalized in seen_content:
+            continue
+        metadata = doc.get("metadata") or {}
+        if metadata.get("file") is None and metadata.get("section") is None:
+            # no section identity — never quota-limit (each doc is its own key)
+            section_key = ("__doc__", doc.get("id") or id(doc))
+        else:
+            section_key = (metadata.get("file"), metadata.get("section"))
+        if section_counts.get(section_key, 0) >= MAX_PER_SECTION:
+            continue
+        seen_content.add(normalized)
+        section_counts[section_key] = section_counts.get(section_key, 0) + 1
+        selected.append(doc)
+
+    return selected
 
 _hybrid_index: Optional[HybridIndex] = None
 _hybrid_index_failed = False
@@ -141,7 +173,8 @@ def retrieve_context(
         doc["retrieval"] = "hybrid_rrf"
         candidates.append(doc)
 
-    results = reranker.rerank(query, candidates, top_k=top_k)
+    ranked = reranker.rerank(query, candidates, top_k=len(candidates))
+    results = _select_diverse(ranked, top_k)
     for doc in results:
         doc["confidence_tier"] = _confidence_tier(doc)
     return results
