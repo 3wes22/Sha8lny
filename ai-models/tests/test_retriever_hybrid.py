@@ -31,6 +31,9 @@ class FakeIndex:
 
 @pytest.fixture
 def hybrid_env(monkeypatch):
+    # rerank off: these tests pin the RRF fusion contract (the reranker has
+    # its own tests); also prevents any model download in CI
+    monkeypatch.setenv("RAG_RERANK_ENABLED", "0")
     monkeypatch.setattr(retriever, "_hybrid_index", None)
     monkeypatch.setattr(retriever, "_hybrid_index_failed", False)
     monkeypatch.setattr(retriever, "_get_hybrid_index", lambda: FakeIndex())

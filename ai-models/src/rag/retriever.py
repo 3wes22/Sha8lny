@@ -8,6 +8,7 @@ import logging
 from typing import List, Dict, Any, Optional
 
 from . import vector_store
+from . import reranker
 from .hybrid_search import HybridIndex, rrf_fuse
 
 logger = logging.getLogger(__name__)
@@ -81,23 +82,26 @@ def retrieve_context(
         [doc["id"] for doc in dense],
         [doc_id for doc_id, _ in bm25],
     ])
-    top_ids = [doc_id for doc_id, _ in fused[:top_k]]
+    # keep the full fused pool as rerank candidates; the cross-encoder
+    # picks the final top_k (passthrough truncation when disabled)
+    candidate_ids = [doc_id for doc_id, _ in fused]
     fused_scores = dict(fused)
 
     dense_by_id = {doc["id"]: doc for doc in dense}
-    missing = [doc_id for doc_id in top_ids if doc_id not in dense_by_id]
+    missing = [doc_id for doc_id in candidate_ids if doc_id not in dense_by_id]
     fetched_by_id = {doc["id"]: doc for doc in vector_store.get_by_ids(missing)}
 
-    results = []
-    for doc_id in top_ids:
+    candidates = []
+    for doc_id in candidate_ids:
         doc = dense_by_id.get(doc_id) or fetched_by_id.get(doc_id)
         if doc is None:
             continue
         doc = dict(doc)
         doc["score"] = fused_scores[doc_id]
         doc["retrieval"] = "hybrid_rrf"
-        results.append(doc)
-    return results
+        candidates.append(doc)
+
+    return reranker.rerank(query, candidates, top_k=top_k)
 
 
 def format_context_for_llm(documents: List[Dict[str, Any]]) -> str:
