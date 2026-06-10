@@ -35,7 +35,7 @@ Depends on: none (parallel with 1.1)
 ### Task 1.3 — Eval runner + BASELINE measurement (control group)
 Files: Create `ai-models/scripts/run_retrieval_eval.py`; Create `ai-models/eval_results/retrieval/baseline.json` (run artifact, committed)
 Deliverable: Runner that loads the eval set, calls the current `rag.retriever.retrieve_context` against the existing Chroma collection, computes Recall@5/10, Precision@5, MRR via `eval_metrics`, and writes a labeled results JSON (`{"stage": "baseline", "metrics": {...}, "timestamp": ...}`).
-Acceptance: `cd ai-models && python scripts/run_retrieval_eval.py --stage baseline` completes; `eval_results/retrieval/baseline.json` contains non-null metrics; file is committed. (Env note: needs the local Chroma volume in `ai-models/data/vector_db/` and sentence-transformers installed — both already present per `requirements.txt`.)
+Acceptance: `cd ai-models && python scripts/run_retrieval_eval.py --stage baseline` completes; `eval_results/retrieval/baseline.json` contains non-null metrics; file is committed. (Env note: needs the local Chroma volume in `ai-models/data/vector_db/` and sentence-transformers. **Discovered during Task 1.1:** `ai-models/venv` is broken — pytest shim present, module missing — so this task starts by repairing/recreating the venv from `requirements.txt`. Until then the suite runs on system Python 3.13, where `tests/conftest.py` pins `OMP_NUM_THREADS=1` to avoid a pre-existing lightgbm/OpenMP segfault at interpreter shutdown.)
 Depends on: Task 1.1, Task 1.2. **Blocks 1.6–1.10.**
 
 ### Task 1.4 — DATASET_REGISTRY.md for all existing sources
