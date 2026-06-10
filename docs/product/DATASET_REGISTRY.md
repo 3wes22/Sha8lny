@@ -82,11 +82,61 @@ standards bodies), `established` (recognized platforms/publishers),
 
 ---
 
-## Candidate sources (Task 1.5 — license check before ingestion)
+## Approved candidate sources (Task 1.5 — license verified 2026-06-10, ingestion in Task 1.7)
 
-_Entries are appended by the acquisition research task. No candidate may be
-ingested while its Decision is empty or REJECT._
+### BLS Occupational Outlook Handbook (OOH)
+- **Source URL:** https://www.bls.gov/ooh/ (republishing guidance: https://www.bls.gov/ooh/about/ooh-developer-info.htm)
+- **License:** U.S. federal government work — public domain (17 U.S.C. §105); BLS
+  publishes explicit data-access and republishing guidance
+- **Size:** 300+ occupation profiles ("what they do", "how to become one", "pay",
+  "job outlook") — semantically rich career prose
+- **Quality:** official (USDOL/BLS); US-centric like O*NET, used as occupational
+  reference, not Egyptian market data
+- **Credibility rationale:** government statistical agency; the strongest possible
+  license; prose (unlike O*NET numeric rows) embeds and retrieves well.
+- **Decision:** **USE**, tier `official`. Ingest the ~25 computer/IT occupation
+  profiles relevant to the platform's 8 roles.
 
-| Candidate | License | Decision | Notes |
-|---|---|---|---|
-| _(pending Task 1.5)_ | | | |
+### MDN Web Docs (prose content)
+- **Source URL:** https://developer.mozilla.org/ (license page:
+  /en-US/docs/MDN/Writing_guidelines/Attrib_copyright_license)
+- **License:** CC-BY-SA 2.5 or later for prose; attribution to "Mozilla
+  Contributors" + source link required; share-alike on reuse
+- **Size:** ingest selectively — concept/guide pages for web fundamentals
+  (HTTP, JavaScript, accessibility, web security basics)
+- **Quality:** established (Mozilla); industry-reference documentation
+- **Credibility rationale:** the de-facto authoritative web-platform documentation,
+  openly licensed — a license-clean replacement for part of roadmap.sh's role.
+- **Decision:** **USE**, tier `established`, with per-chunk attribution metadata
+  (url + "Mozilla Contributors, CC-BY-SA 2.5+").
+
+### Stack Overflow Annual Developer Survey (public dataset)
+- **Source URL:** https://survey.stackoverflow.co/ (data under ODbL per SO's
+  public data releases)
+- **License:** Open Database License (ODbL 1.0) — attribution, keep-open on
+  redistribution, share-alike for adapted databases
+- **Size:** ~65k responses/year; tabular
+- **Quality:** established; global (not Egypt-specific); self-selected sample —
+  noted as a bias
+- **Credibility rationale:** largest recurring developer survey; standard source
+  for technology-adoption and career-trend claims.
+- **Decision:** **PARTIAL** — do not embed raw rows; derive short attributed
+  summary passages (technology popularity, learning trends) for the curated
+  knowledge base, citing survey year.
+
+### MCIT / ITIDA official Egypt ICT publications
+- **Source URLs:** https://mcit.gov.eg/en/Publications (ICT Indicators monthly +
+  quarterly bulletins, MCIT Yearbook), https://itida.gov.eg (Industry Outlook,
+  talent-landscape pages, Digital Egypt Strategy for Offshoring 2022–2026)
+- **License:** official government publications; no explicit open license —
+  reuse as cited facts/excerpts with attribution, no bulk republication of PDFs
+- **Size:** selective — sector growth, employment, talent-pool, and
+  capacity-building program facts
+- **Quality:** official (Egyptian government / IT development authority)
+- **Credibility rationale:** the missing piece — *official Egyptian* grounding for
+  the Egypt-market claims currently uncited in `egyptian_market.md` (e.g., ICT
+  sector growth 14–16%/yr, 2025 digital exports USD 4.8B, DEPI/DEBI training
+  initiatives, 240+ offshoring companies).
+- **Decision:** **USE (excerpt-and-cite)**, tier `official`. Authored summary
+  passages with per-fact citations enter the curated knowledge base; PDFs are
+  not vendored into the repo.
