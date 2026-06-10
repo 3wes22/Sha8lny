@@ -6,8 +6,10 @@ metadata matchers rather than chunk ids, because chunk ids are hash+index
 based and change on every rebuild. A matcher hits a retrieved doc when every
 field it specifies matches:
 
-- ``source`` / ``file`` / ``section`` / ``subsection``: equality against
-  ``doc["metadata"]``
+- ``source`` / ``file`` / ``section`` / ``subsection`` / ``category``:
+  equality against ``doc["metadata"]`` (``category`` matters for roadmap.sh,
+  whose main ``<role>.md`` files are frontmatter-only — prose lives in
+  ``content/*.md`` topic files sharing the path-derived category)
 - ``content_contains``: case-insensitive substring of ``doc["content"]``
 
 Docs are the dicts returned by ``vector_store.search`` /
@@ -18,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence, Set
 
-_METADATA_KEYS = ("source", "file", "section", "subsection")
+_METADATA_KEYS = ("source", "file", "section", "subsection", "category")
 
 
 def matcher_hits(matcher: Dict[str, str], doc: Dict[str, Any]) -> bool:

@@ -28,7 +28,7 @@ ROADMAP_DIR = AI_MODELS_ROOT / "data" / "roadmap-sh-data" / "src" / "data"
 ONET_DIR = AI_MODELS_ROOT / "data" / "onet_data" / "db_30_1_text"
 
 ALLOWED_SOURCES = {"knowledge_base", "roadmap.sh", "onet"}
-ALLOWED_MATCHER_KEYS = {"source", "file", "section", "subsection", "content_contains"}
+ALLOWED_MATCHER_KEYS = {"source", "file", "section", "subsection", "category", "content_contains"}
 REQUIRED_ENTRY_KEYS = {"query_id", "query", "relevant"}
 ALLOWED_ENTRY_KEYS = REQUIRED_ENTRY_KEYS | {"category", "notes"}
 
@@ -85,8 +85,11 @@ def test_matcher_shape(entries):
             assert matcher.get("source") in ALLOWED_SOURCES, (
                 f"{entry['query_id']}: matcher source must be one of {ALLOWED_SOURCES}"
             )
-            assert isinstance(matcher.get("file"), str) and matcher["file"], (
-                f"{entry['query_id']}: matcher needs a file name"
+            has_anchor = isinstance(matcher.get("file"), str) and matcher["file"] or (
+                isinstance(matcher.get("category"), str) and matcher["category"]
+            )
+            assert has_anchor, (
+                f"{entry['query_id']}: matcher needs a file name or (roadmap.sh) a category"
             )
             for optional in ("section", "subsection", "content_contains"):
                 if optional in matcher:
@@ -100,7 +103,7 @@ def test_ground_truth_files_exist(entries):
     roadmap_names = None  # built lazily; the tree holds ~10k files
     for entry in entries:
         for matcher in entry["relevant"]:
-            source, file_name = matcher["source"], matcher["file"]
+            source, file_name = matcher["source"], matcher.get("file")
             if source == "knowledge_base":
                 assert (KB_DIR / file_name).exists(), (
                     f"{entry['query_id']}: {file_name} not in knowledge_base/"
@@ -110,8 +113,15 @@ def test_ground_truth_files_exist(entries):
                     f"{entry['query_id']}: {file_name} not in onet db_30_1_text/"
                 )
             elif source == "roadmap.sh":
-                if roadmap_names is None:
-                    roadmap_names = {p.name for p in ROADMAP_DIR.rglob("*.md")}
-                assert file_name in roadmap_names, (
-                    f"{entry['query_id']}: {file_name} not under roadmap-sh-data/src/data/"
-                )
+                category = matcher.get("category")
+                if category:
+                    category_dir = ROADMAP_DIR / "roadmaps" / category
+                    assert category_dir.is_dir(), (
+                        f"{entry['query_id']}: no roadmap category dir {category!r}"
+                    )
+                else:
+                    if roadmap_names is None:
+                        roadmap_names = {p.name for p in ROADMAP_DIR.rglob("*.md")}
+                    assert file_name in roadmap_names, (
+                        f"{entry['query_id']}: {file_name} not under roadmap-sh-data/src/data/"
+                    )

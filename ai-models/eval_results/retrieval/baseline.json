@@ -1,6 +1,6 @@
 {
   "stage": "baseline",
-  "timestamp": "2026-06-10T08:22:54+00:00",
+  "timestamp": "2026-06-10T08:39:06+00:00",
   "eval_set": "data/eval/retrieval_eval_set.jsonl",
   "num_queries": 52,
   "retriever_config": {
@@ -8,10 +8,10 @@
     "embedding_model": "all-MiniLM-L6-v2"
   },
   "metrics": {
-    "recall@5": 0.0673,
-    "recall@10": 0.0865,
-    "precision@5": 0.0308,
-    "mrr": 0.0697
+    "recall@5": 0.125,
+    "recall@10": 0.125,
+    "precision@5": 0.0577,
+    "mrr": 0.1154
   },
   "per_query": [
     {
@@ -268,7 +268,7 @@
       "first_hit_rank": 1,
       "recall@5": 1.0,
       "recall@10": 1.0,
-      "precision@5": 1.0
+      "precision@5": 0.6
     },
     {
       "query_id": "q033",
@@ -300,23 +300,23 @@
       "first_hit_rank": 1,
       "recall@5": 1.0,
       "recall@10": 1.0,
-      "precision@5": 0.2
+      "precision@5": 0.8
     },
     {
       "query_id": "q037",
       "n_retrieved": 3,
-      "first_hit_rank": 0,
-      "recall@5": 0.0,
-      "recall@10": 0.0,
-      "precision@5": 0.0
+      "first_hit_rank": 1,
+      "recall@5": 1.0,
+      "recall@10": 1.0,
+      "precision@5": 0.4
     },
     {
       "query_id": "q038",
       "n_retrieved": 8,
-      "first_hit_rank": 8,
-      "recall@5": 0.0,
+      "first_hit_rank": 1,
+      "recall@5": 1.0,
       "recall@10": 1.0,
-      "precision@5": 0.0
+      "precision@5": 0.6
     },
     {
       "query_id": "q039",
@@ -369,10 +369,10 @@
     {
       "query_id": "q045",
       "n_retrieved": 10,
-      "first_hit_rank": 0,
-      "recall@5": 0.0,
-      "recall@10": 0.0,
-      "precision@5": 0.0
+      "first_hit_rank": 2,
+      "recall@5": 1.0,
+      "recall@10": 1.0,
+      "precision@5": 0.2
     },
     {
       "query_id": "q046",

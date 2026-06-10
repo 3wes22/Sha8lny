@@ -58,6 +58,17 @@ class TestMatcherHits:
     def test_doc_without_metadata_fails_gracefully(self):
         assert matcher_hits({"source": "knowledge_base", "file": "x.md"}, {"content": "hi"}) is False
 
+    def test_category_matcher_for_roadmap_topic_files(self):
+        # roadmap.sh main <role>.md files are frontmatter-only; prose lives in
+        # content/*.md topic files anchored by the path-derived category
+        doc = {
+            "content": "Repo hosting services provide storage...",
+            "metadata": {"source": "roadmap.sh", "category": "backend",
+                         "file": "repo-hosting-services@abc123.md"},
+        }
+        assert matcher_hits({"source": "roadmap.sh", "category": "backend"}, doc) is True
+        assert matcher_hits({"source": "roadmap.sh", "category": "frontend"}, doc) is False
+
 
 class TestRankHelpers:
     def setup_method(self):
