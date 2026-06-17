@@ -114,7 +114,15 @@ class RoadmapAIService:
 
         client = GemmaClient(
             task_type="roadmap_personalization",
-            max_output_tokens=900,
+            # The model must echo back the full 3-phase / ~13-milestone structure
+            # (ids preserved) with rewritten copy. The old 900-token cap truncated
+            # that — the echoed JSON measures ~1.3-2k tokens for a typical roadmap
+            # and more for larger ones — producing malformed JSON and forcing the
+            # deterministic fallback on every request. Give it comfortable
+            # headroom so valid JSON fits. (If malformed JSON persists after this,
+            # the cause is flash-lite's structured-output reliability, not
+            # truncation — route this task to gemini-2.5-flash instead.)
+            max_output_tokens=4096,
         )
         try:
             result = client.generate_structured(
