@@ -23,6 +23,41 @@ from apps.courses.models import Course
 from apps.notifications.signals import roadmap_generated, roadmap_updated
 
 
+# ---------------------------------------------------------------------------
+# Roadmap sizing heuristics (stated assumptions, not empirically validated)
+# ---------------------------------------------------------------------------
+# These constants drive the deterministic fallback blueprint. They are design
+# heuristics chosen to produce a realistic part-time study plan, not learning
+# science with measured outcomes — documented here so each number has an
+# explicit, defensible rationale rather than being an inline "magic number".
+#
+# Baseline study hours by starting proficiency. Anchored to a ~10-12 week
+# part-time plan at the default weekly study load (see MIN_PLAN_WEEKS): a
+# beginner needs more total hours to reach job-readiness than an advanced
+# learner who is mostly closing targeted gaps.
+BASE_HOURS_BY_LEVEL = {
+    'beginner': 96,
+    'intermediate': 72,
+    'advanced': 54,
+}
+DEFAULT_BASE_HOURS = 72  # used when the current level is unknown
+
+# Extra study hours budgeted per assessment-flagged focus item (priority skill
+# or gap). Each focus item adds roughly one short course/practice unit.
+HOURS_PER_FOCUS_ITEM = 10
+
+# Lower bound on plan length so a roadmap always spans a meaningful horizon
+# even when computed hours are small (avoids a 1-2 week "plan").
+MIN_PLAN_WEEKS = 8
+
+# Fraction of total weeks allocated to each of the three phases
+# (foundation / gap-closing / portfolio+job-search). Sums to 1.0.
+PHASE_WEEK_SPLIT = (0.30, 0.40, 0.30)
+
+# Minimum weeks per phase so no phase collapses to zero.
+MIN_PHASE_WEEKS = 2
+
+
 class RoadmapTemplateService:
     """Service for roadmap template management"""
 
@@ -575,13 +610,9 @@ class RoadmapService:
     ) -> List[Dict[str, Any]]:
         """Create a deterministic, assessment-aware roadmap structure."""
         total_focus_items = max(1, len(priority_skills) + len(gaps))
-        base_hours = {
-            'beginner': 96,
-            'intermediate': 72,
-            'advanced': 54,
-        }.get(current_level, 72)
-        total_hours = base_hours + (total_focus_items * 10)
-        estimated_weeks = max(8, math.ceil(total_hours / max(weekly_hours, 1)))
+        base_hours = BASE_HOURS_BY_LEVEL.get(current_level, DEFAULT_BASE_HOURS)
+        total_hours = base_hours + (total_focus_items * HOURS_PER_FOCUS_ITEM)
+        estimated_weeks = max(MIN_PLAN_WEEKS, math.ceil(total_hours / max(weekly_hours, 1)))
 
         first_skill = priority_skills[0] if priority_skills else (top_skills[0] if top_skills else target_career)
         second_skill = priority_skills[1] if len(priority_skills) > 1 else first_skill
@@ -589,14 +620,21 @@ class RoadmapService:
         second_gap = gaps[1] if len(gaps) > 1 else 'project execution'
         lead_strength = strengths[0] if strengths else 'your strongest skills'
 
+        foundation_weeks = max(MIN_PHASE_WEEKS, math.ceil(estimated_weeks * PHASE_WEEK_SPLIT[0]))
+        gap_weeks = max(MIN_PHASE_WEEKS, math.ceil(estimated_weeks * PHASE_WEEK_SPLIT[1]))
+        # Third phase takes the remainder (may fall below the floor); the guard
+        # below then borrows from the gap phase so the three phases still sum to
+        # ``estimated_weeks``. Clamping here instead would make the guard dead
+        # code and silently overshoot the planned duration.
         phase_weeks = [
-            max(2, math.ceil(estimated_weeks * 0.3)),
-            max(2, math.ceil(estimated_weeks * 0.4)),
-            max(2, estimated_weeks - max(2, math.ceil(estimated_weeks * 0.3)) - max(2, math.ceil(estimated_weeks * 0.4))),
+            foundation_weeks,
+            gap_weeks,
+            estimated_weeks - foundation_weeks - gap_weeks,
         ]
-        if phase_weeks[2] < 2:
-            phase_weeks[1] = max(2, phase_weeks[1] - (2 - phase_weeks[2]))
-            phase_weeks[2] = 2
+        if phase_weeks[2] < MIN_PHASE_WEEKS:
+            deficit = MIN_PHASE_WEEKS - phase_weeks[2]
+            phase_weeks[1] = max(MIN_PHASE_WEEKS, phase_weeks[1] - deficit)
+            phase_weeks[2] = MIN_PHASE_WEEKS
 
         return [
             {

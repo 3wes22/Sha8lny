@@ -11,6 +11,7 @@ Features (v1):
 
 from __future__ import annotations
 
+import os
 from datetime import date, datetime
 from typing import Any, Sequence
 
@@ -36,6 +37,12 @@ _EMBEDDER = None
 
 
 def _embeddings_enabled() -> bool:
+    # Explicit env override first, so eval artifacts are reproducible regardless
+    # of whether sentence-transformers happens to be installed. Set
+    # JOB_RANKER_SKIP_EMBEDDINGS=1 to force the deterministic, embedding-free path.
+    env = os.environ.get("JOB_RANKER_SKIP_EMBEDDINGS")
+    if env is not None:
+        return env.strip().lower() not in {"1", "true", "yes", "on"}
     try:
         from django.conf import settings
 
@@ -59,6 +66,16 @@ def _get_embedder():
     except Exception:
         _EMBEDDER = False
     return _EMBEDDER
+
+
+def embeddings_available() -> bool:
+    """True when the sentence-transformers embedder is loaded and usable.
+
+    When False, ``skill_embedding_cosine`` returns 0.0 for every pair, so the
+    embedding feature is effectively disabled (relevant for interpreting eval
+    metrics — the model loses its main differentiating signal).
+    """
+    return bool(_get_embedder())
 
 
 def _cosine(a: np.ndarray, b: np.ndarray) -> float:

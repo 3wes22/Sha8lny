@@ -1489,6 +1489,39 @@ class AssessmentAIService:
         }
 
     @classmethod
+    def _weighted_overall(cls, role_graph, dimension_scores: dict[str, float]) -> float:
+        """Roll dimension scores up to a single overall score using role weights.
+
+        Each dimension's importance comes from its ``assessment_weight`` (an
+        assessment-specific override) when present, otherwise its canonical
+        ``weight`` (defined for every role and validated to sum to 1.0). Weights
+        are re-normalized over the dimensions actually measured, so a partially
+        covered assessment never divides by an assumed total of 1.0. Falls back
+        to a flat mean only when no weights can be resolved.
+        """
+        if not dimension_scores:
+            return 0.0
+        weight_map = {
+            dimension.key: (
+                dimension.assessment_weight
+                if dimension.assessment_weight is not None
+                else dimension.weight
+            )
+            for dimension in role_graph.dimensions
+        }
+        weighted_sum = 0.0
+        total_weight = 0.0
+        for dimension_key, score in dimension_scores.items():
+            weight = weight_map.get(dimension_key)
+            if weight is None:
+                continue
+            weighted_sum += weight * score
+            total_weight += weight
+        if total_weight <= 0:
+            return round(mean(dimension_scores.values()), 2)
+        return round(weighted_sum / total_weight, 2)
+
+    @classmethod
     def _derive_strengths_and_gaps(cls, role_graph, merged_evidence):
         subskill_lookup = {
             subskill.key: subskill.label
@@ -1569,7 +1602,7 @@ class AssessmentAIService:
         metadata: AIInvocationMetadata,
     ) -> AssessmentAnalysisResult:
         dimension_scores = cls._summarize_dimension_scores(merged_evidence)
-        overall_score = round(mean(dimension_scores.values()), 2) if dimension_scores else 0.0
+        overall_score = cls._weighted_overall(role_graph, dimension_scores)
         strengths, gaps = cls._derive_strengths_and_gaps(role_graph, merged_evidence)
         return AssessmentAnalysisResult(
             overall_score=Decimal(str(overall_score)),
@@ -1628,7 +1661,9 @@ class AssessmentAIService:
             completion_tokens = response.completion_tokens
             deterministic = cls._deterministic_staged_analysis(role_graph, merged_evidence, metadata)
             analysis = AssessmentAnalysisResult(
-                overall_score=Decimal(str(round(repaired["overall_score"], 2))),
+                # Headline score is a reproducible weighted roll-up we compute,
+                # not the LLM's self-reported number.
+                overall_score=deterministic.overall_score,
                 skill_scores=deterministic.skill_scores,
                 strengths=repaired["strengths"],
                 areas_for_improvement=repaired["areas_for_improvement"],

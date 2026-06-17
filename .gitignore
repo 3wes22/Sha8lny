@@ -71,6 +71,15 @@ htmlcov/
 *.pth
 *.onnx
 models/
+# Keep human-readable job-ranker evaluation artifacts under version control.
+# (Re-include the directory path, keep its contents ignored, then allow only the
+# small text reports through — the binary .lgb model stays ignored.)
+!ai-models/models/
+ai-models/models/*
+!ai-models/models/custom/
+ai-models/models/custom/*
+!ai-models/models/custom/EVAL_REPORT.md
+!ai-models/models/custom/job_ranker_eval.json
 checkpoints/
 wandb/
 

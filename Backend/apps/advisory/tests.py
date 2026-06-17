@@ -199,3 +199,46 @@ def test_build_user_context_prefers_active_roadmap_and_progress(
     assert context["active_roadmap"]["id"] != str(draft_roadmap.id)
     assert context["active_roadmap"]["current_streak_days"] == 4
     assert context["active_roadmap"]["total_learning_hours"] == 9.5
+
+
+def test_normalize_documents_carries_citation_fields():
+    service = LLMAdvisoryService()
+    documents = [
+        {
+            "id": "bls_x_1",
+            "content": "Software developers design computer applications and systems.",
+            "score": 0.41,
+            "confidence_tier": "HIGH",
+            "metadata": {
+                "source": "bls_ooh",
+                "file": "software-developers.md",
+                "url": "https://www.bls.gov/ooh/computer-and-information-technology/software-developers.htm",
+                "section": "What They Do",
+                "category": "career_development",
+                "quality_tier": "official",
+            },
+        }
+    ]
+
+    (normalized,) = service._normalize_documents(documents)
+
+    assert normalized["source_name"] == "bls_ooh"
+    assert normalized["url"].startswith("https://www.bls.gov")
+    assert normalized["section"] == "What They Do"
+    assert normalized["file"] == "software-developers.md"
+    assert normalized["confidence_tier"] == "HIGH"
+    # legacy fields keep their original semantics
+    assert normalized["source"] == "career_development"
+    assert normalized["excerpt"]
+
+
+def test_normalize_documents_defaults_for_legacy_payloads():
+    service = LLMAdvisoryService()
+
+    (normalized,) = service._normalize_documents(
+        [{"content": "Some retrieved passage with enough length.", "score": 0.2, "metadata": {}}]
+    )
+
+    assert normalized["confidence_tier"] == "LOW"
+    assert normalized["url"] == ""
+    assert normalized["source_name"] == "general"

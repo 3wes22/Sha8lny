@@ -105,6 +105,13 @@ class LLMAdvisoryService:
                     "topic": str(metadata.get("topic") or "").strip(),
                     "score": float(document.get("score") or 0),
                     "excerpt": excerpt,
+                    # citation fields (knowledge-layer payload, Task 1.10);
+                    # safe defaults keep older retriever runtimes working
+                    "source_name": str(metadata.get("source") or "general"),
+                    "url": str(metadata.get("url") or ""),
+                    "section": str(metadata.get("section") or "").strip(),
+                    "file": str(metadata.get("file") or ""),
+                    "confidence_tier": str(document.get("confidence_tier") or "LOW"),
                 }
             )
             total_chars += len(excerpt)

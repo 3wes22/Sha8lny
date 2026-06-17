@@ -357,9 +357,9 @@ npm run lint
 | Area | Status |
 |---|---|
 | Users / Auth (JWT + Auth0) | ✅ Working, well-tested |
-| Assessments (staged AI, 8 roles, RAG corpus) | ✅ Working, strongest coverage |
-| Roadmaps (AI generation + deterministic fallback) | ✅ Working |
-| Jobs (search, skill match, LightGBM ranking, ingest) | ✅ Working |
+| Assessments (staged AI, 8 roles, RAG corpus; **weighted** formative scoring) | ✅ Working, strongest coverage |
+| Roadmaps (AI generation + deterministic fallback; O*NET = backend-only PoC) | ✅ Working |
+| Jobs (search, skill match, LightGBM **weak-supervision** ranker + eval, ingest) | ✅ Working |
 | Advisory (Gemini chat, RAG-grounded) | ✅ Working; light test coverage |
 | Progress | 🟡 Working; light test coverage |
 | Notifications | 🟡 Models/API/signals; email/push stubbed |
@@ -374,6 +374,8 @@ Backend test suite: **274 tests passing**. Frontend builds clean.
 2. **Career Tools PDF/DOCX export**: deferred to v2 (endpoints return structured JSON, not a file)
 3. **No Error Boundaries**: Frontend could add React error boundaries
 4. **Celery present but optional**: AI tasks can run async; demo path runs them in-request
+5. **roadmap.sh content license**: the vendored `ai-models/data/roadmap-sh-data/` is under a personal-use-only license (no redistribution). Treat as development-only; see `ai-models/data/CITATIONS.md` for the required pre-publication fix.
+6. **Job ranker is a weak-supervision demonstrator**: trained on synthetic fixture postings with pseudo-labels, evaluated by leave-one-group-out NDCG/MAP vs. baselines (`ai-models/models/custom/EVAL_REPORT.md`). Real labeled market data is future work.
 
 ## Getting Help
 

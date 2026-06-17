@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Loader2, Map, Sparkles } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { ROUTES } from "@/app/routes";
 import { Button } from "@/components/ui/button";
@@ -17,12 +17,25 @@ const CURRENT_ROADMAP_STATUSES = ["in_progress", "active", "draft"] as const;
 
 const RoadmapPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  // A just-created roadmap (e.g. from the assessment results page) passes its
+  // id here so we display THAT roadmap rather than resolving to a pre-existing
+  // active one — otherwise a freshly generated draft is shadowed and invisible.
+  const preferredRoadmapId = (location.state as { roadmapId?: string } | null)?.roadmapId;
   const [templates, setTemplates] = useState<RoadmapTemplate[]>([]);
   const [activeRoadmap, setActiveRoadmap] = useState<RoadmapType | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
   const loadCurrentRoadmap = useCallback(async () => {
+    if (preferredRoadmapId) {
+      try {
+        return await roadmapApi.get(preferredRoadmapId);
+      } catch {
+        // Fall back to the status scan if that id is gone.
+      }
+    }
+
     for (const status of CURRENT_ROADMAP_STATUSES) {
       const response = await roadmapApi.list({ status });
       const roadmapSummary = response.results[0];
@@ -33,7 +46,7 @@ const RoadmapPage: React.FC = () => {
     }
 
     return null;
-  }, []);
+  }, [preferredRoadmapId]);
 
   const fetchData = useCallback(async () => {
     try {

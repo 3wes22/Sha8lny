@@ -73,9 +73,11 @@ export default function AssessmentResultsPage() {
 
     try {
       setCreatingRoadmap(true);
-      await roadmapApi.createAI({ assessment_id: result.id });
-      toast.success("Personalized roadmap is being prepared.");
-      navigate(ROUTES.roadmap);
+      const roadmap = await roadmapApi.createAI({ assessment_id: result.id });
+      toast.success("Personalized roadmap is ready.");
+      // Pass the new roadmap's id so the roadmap page shows THIS draft (and its
+      // Activate button) instead of resolving to a pre-existing active roadmap.
+      navigate(ROUTES.roadmap, { state: { roadmapId: roadmap.id } });
     } catch (err) {
       toast.error(getApiErrorMessage(err, "Could not generate a personalized roadmap."));
     } finally {
