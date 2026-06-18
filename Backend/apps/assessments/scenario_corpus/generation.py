@@ -46,8 +46,17 @@ _ANSWER_KEY_SHAPE = {
 def build_generation_prompt(
     blueprint: Blueprint, *, exemplars: list[dict[str, Any]]
 ) -> tuple[str, str]:
-    """Return (system, prompt) for one blueprint. `exemplars` are existing
-    approved scenarios used purely as style anchors."""
+    """Return (system, prompt) for one blueprint.
+
+    `exemplars` are existing approved scenarios used as style anchors; only
+    the first entry (if any) is embedded in the prompt.
+    """
+    answer_contract = _ANSWER_KEY_SHAPE.get(blueprint.question_type)
+    if answer_contract is None:
+        raise ValueError(
+            f"build_generation_prompt: unknown question_type "
+            f"{blueprint.question_type!r}. Expected one of: {list(_ANSWER_KEY_SHAPE)}"
+        )
     system = (
         "You are an expert technical assessment author. You write one scenario-"
         "based question as strict JSON. No markdown, no commentary."
@@ -72,7 +81,7 @@ def build_generation_prompt(
         "3. All distractors must be plausible to a junior; options parallel in shape/length.\n"
         f"4. Use real {blueprint.role_key} engineering vocabulary.\n"
         f"5. Never use these phrases: {', '.join(_BANNED_PHRASES)}.\n\n"
-        f"Answer-key contract: {_ANSWER_KEY_SHAPE[blueprint.question_type]}\n"
+        f"Answer-key contract: {answer_contract}\n"
         f"{exemplar_block}\n"
         "Return JSON with exactly these keys: "
         f"{', '.join(LLM_CONTENT_KEYS)}."

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from apps.assessments.scenario_corpus.coverage import Blueprint
 from apps.assessments.scenario_corpus.generation import (
     LLM_CONTENT_KEYS,
@@ -63,3 +65,16 @@ def test_llm_content_keys_are_the_required_keys():
     assert "scenario_context" in LLM_CONTENT_KEYS
     assert "stem" in LLM_CONTENT_KEYS
     assert "doc_id" not in LLM_CONTENT_KEYS  # governance fields are injected, not generated
+
+
+def test_prompt_raises_for_unknown_question_type():
+    bp = Blueprint(
+        role_key="backend",
+        subskill_key="decorators",
+        competency="Decorators",
+        dimension_key="python_fundamentals",
+        stage=1,
+        question_type="bogus_type",
+    )
+    with pytest.raises(ValueError, match="unknown question_type"):
+        build_generation_prompt(bp, exemplars=[])
