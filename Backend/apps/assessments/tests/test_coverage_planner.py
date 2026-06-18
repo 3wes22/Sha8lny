@@ -34,3 +34,8 @@ def test_uncovered_excludes_already_satisfied_subskills():
     full = tier1_blueprints("backend")
     todo = uncovered_blueprints("backend", tier=1)
     assert len(todo) < len(full)
+
+
+def test_uncovered_blueprints_raises_for_unsupported_tier():
+    with pytest.raises(ValueError, match="tier 2 not yet supported"):
+        uncovered_blueprints("backend", tier=2)

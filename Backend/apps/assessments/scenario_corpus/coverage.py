@@ -12,8 +12,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from apps.assessments.engine import StageAllocator
-from apps.assessments.role_graph import load_role_graph
-from apps.assessments.role_graph_data import ROLE_GRAPHS
+from apps.assessments.role_graph import SubSkill, load_role_graph
 from apps.assessments.scenario_corpus.registry import iter_approved_scenarios
 
 # Floors mirror scenario_corpus_audit + AUTHOR_GUIDE.
@@ -30,8 +29,8 @@ class Blueprint:
     question_type: str
 
 
-def _subskill_lookup(role_key: str) -> dict[str, object]:
-    graph = ROLE_GRAPHS[role_key]
+def _subskill_lookup(role_key: str) -> dict[str, SubSkill]:
+    graph = load_role_graph(role_key)
     return {
         subskill.key: subskill
         for dimension in graph.dimensions
