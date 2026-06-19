@@ -71,7 +71,7 @@ class Command(BaseCommand):
             type=str,
             default="all",
             choices=["1", "2", "all"],
-            help="Gate only Tier 1 (stage-1 calibration), Tier 2 (stage-2 demand set), or all.",
+            help="Scope the coverage report to Tier 1 (stage-1 calibration), Tier 2 (stage-2), or all.",
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
