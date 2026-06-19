@@ -35,7 +35,10 @@ class Command(BaseCommand):
 
     def handle(self, *args: Any, **options: Any) -> None:
         role_key = options["role"]
-        todo = uncovered_blueprints(role_key, tier=options["tier"])[: options["limit"]]
+        try:
+            todo = uncovered_blueprints(role_key, tier=options["tier"])[: options["limit"]]
+        except ValueError as error:
+            raise CommandError(str(error)) from error
         if not todo:
             self.stdout.write(self.style.SUCCESS(f"{role_key}: already covered for tier {options['tier']}."))
             return
@@ -71,6 +74,11 @@ class Command(BaseCommand):
                 continue
             staged.append(doc)
 
+        if options["dry_run"]:
+            self.stdout.write(self.style.SUCCESS(
+                f"{role_key}: dry-run complete, {len(todo)} blueprint(s) previewed."
+            ))
+            return
         if staged:
             append_drafts(role_key, staged)
         self.stdout.write(self.style.SUCCESS(

@@ -85,3 +85,39 @@ def test_generate_skips_invalid_model_output(tmp_path, monkeypatch):
 
     call_command("generate_scenarios", "--role", "frontend", "--tier", "1", "--limit", "2", stdout=StringIO())
     assert read_drafts("frontend") == []  # nothing valid was staged
+
+
+@pytest.mark.django_db
+def test_generate_skips_failed_generation_and_continues(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "apps.assessments.scenario_corpus.staging._STAGING_DIR", tmp_path
+    )
+    calls = {"n": 0}
+
+    def fake_generate_structured(self, *, prompt, system="", required_keys=(), response_json_schema=None):  # noqa: ARG001
+        calls["n"] += 1
+        if calls["n"] == 1:
+            from apps.core.exceptions import AIServiceError
+
+            raise AIServiceError("simulated generation failure")
+        return GemmaResponse(
+            text="{}",
+            payload=_valid_payload(),
+            metadata=build_ai_metadata(source="llm", processing_time_ms=1, model="mock"),
+            prompt_tokens=1,
+            completion_tokens=1,
+        )
+
+    monkeypatch.setattr(
+        "apps.core.gemma_client.GemmaClient.generate_structured",
+        fake_generate_structured,
+    )
+
+    call_command(
+        "generate_scenarios", "--role", "frontend", "--tier", "1", "--limit", "2",
+        stdout=StringIO(), stderr=StringIO(),
+    )
+
+    drafts = read_drafts("frontend")
+    assert len(drafts) == 1   # first blueprint failed (skipped), second succeeded
+    assert calls["n"] == 2    # the batch continued past the failure
