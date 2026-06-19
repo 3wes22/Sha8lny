@@ -59,18 +59,21 @@ def format_scenario_literal(doc: dict[str, Any]) -> str:
 
 
 def promote_to_module(role_key: str, docs: list[dict[str, Any]]) -> int:
-    """Insert literals before the closing `]` of the module's SCENARIOS list."""
+    """Insert literals at the head of the module's SCENARIOS list (just after
+    the opening ``[``). Head-insertion avoids having to find the matching
+    closing ``]`` in a file whose scenario literals contain many ``]`` of their
+    own; scenario order is irrelevant to the registry, so this is safe."""
     module_path = _CORPUS_DIR / f"{role_key}.py"
     source = module_path.read_text(encoding="utf-8")
-    marker = "SCENARIOS: list[ScenarioDocument] = ["
-    if marker not in source:
-        raise ValueError(f"{module_path} has no recognizable SCENARIOS list opener")
-    # Handle the empty-stub form `SCENARIOS: list[ScenarioDocument] = []`.
+    open_marker = "SCENARIOS: list[ScenarioDocument] = ["
+    # Normalise the empty-stub form `... = []` to the multiline open form first.
     empty_form = "SCENARIOS: list[ScenarioDocument] = []"
     if empty_form in source:
-        source = source.replace(empty_form, marker + "\n]")
-    closing_index = source.index("]", source.index(marker))
-    literals = "".join(format_scenario_literal(doc) for doc in docs)
-    new_source = source[:closing_index] + literals + source[closing_index:]
+        source = source.replace(empty_form, open_marker + "\n]")
+    if open_marker not in source:
+        raise ValueError(f"{module_path} has no recognizable SCENARIOS list opener")
+    insert_at = source.index(open_marker) + len(open_marker)
+    literals = "\n" + "".join(format_scenario_literal(doc) for doc in docs)
+    new_source = source[:insert_at] + literals + source[insert_at:]
     module_path.write_text(new_source, encoding="utf-8")
     return len(docs)
