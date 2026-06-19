@@ -9,6 +9,17 @@ from __future__ import annotations
 import statistics
 from typing import Any
 
+_MIN_SCENARIO_WORDS = 8
+_OPTIONS_CV_THRESHOLD = 0.5
+
+_CHECK_KEYS = (
+    "has_concrete_scenario",
+    "no_banned_phrase",
+    "decision_not_definition",
+    "options_parallel",
+    "uses_role_vocab",
+)
+
 _BANNED = (
     "disable logging",
     "preserves correctness, clarity, and maintainability",
@@ -34,14 +45,14 @@ def score_question(question: dict[str, Any], *, role_key: str) -> dict[str, Any]
     options = question.get("options") or []
     blob = " ".join([scenario.lower(), stem] + [str(o.get("label", "")).lower() for o in options])
 
-    has_concrete_scenario = len(scenario.split()) >= 8
+    has_concrete_scenario = len(scenario.split()) >= _MIN_SCENARIO_WORDS
     no_banned_phrase = not any(b in blob for b in _BANNED)
     decision_not_definition = any(
         w in stem for w in ("which", "best", "most", "strongest", "prevents", "reduces")
     )
     if len(options) >= 2:
         lengths = [len(str(o.get("label", ""))) for o in options]
-        options_parallel = (statistics.pstdev(lengths) / (statistics.mean(lengths) or 1)) < 0.5
+        options_parallel = (statistics.pstdev(lengths) / (statistics.mean(lengths) or 1)) < _OPTIONS_CV_THRESHOLD
     else:
         options_parallel = True
     vocab = _ROLE_VOCAB.get(role_key, ())
@@ -54,5 +65,5 @@ def score_question(question: dict[str, Any], *, role_key: str) -> dict[str, Any]
         "options_parallel": options_parallel,
         "uses_role_vocab": uses_role_vocab,
     }
-    checks["total"] = sum(1 for v in checks.values() if v is True)
+    checks["total"] = sum(1 for key in _CHECK_KEYS if checks[key])
     return checks

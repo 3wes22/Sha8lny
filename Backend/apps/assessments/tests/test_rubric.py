@@ -29,3 +29,20 @@ def test_banned_phrase_flagged():
     bad["options"][0]["label"] = "Disable logging to avoid the duplicate."
     result = score_question(bad, role_key="backend")
     assert result["no_banned_phrase"] is False
+
+
+def test_short_scenario_not_concrete():
+    q = _good()
+    q["scenario_context"] = "A short scenario."
+    assert score_question(q, role_key="backend")["has_concrete_scenario"] is False
+
+
+def test_definition_stem_not_decision():
+    q = _good()
+    q["stem"] = "Explain what an idempotency key represents."
+    assert score_question(q, role_key="backend")["decision_not_definition"] is False
+
+
+def test_unknown_role_key_has_no_vocab_and_does_not_raise():
+    result = score_question(_good(), role_key="security")
+    assert result["uses_role_vocab"] is False
