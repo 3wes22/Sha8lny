@@ -24,11 +24,22 @@ from apps.advisory.serializers import (
 
 
 # Response serializer for schema documentation
+class CitationSerializer(drf_serializers.Serializer):
+    """Public per-source citation surfaced under each assistant answer (Task 2.2)."""
+    source = drf_serializers.CharField()
+    url = drf_serializers.CharField(allow_blank=True)
+    section = drf_serializers.CharField(allow_blank=True)
+    excerpt = drf_serializers.CharField(allow_blank=True)
+    confidence_tier = drf_serializers.ChoiceField(choices=["HIGH", "MEDIUM", "LOW"])
+
+
 class ChatResponseSerializer(drf_serializers.Serializer):
     """Response serializer for chat endpoint (for OpenAPI schema)."""
     conversation_id = drf_serializers.UUIDField()
     response = drf_serializers.CharField()
     delay_ms = drf_serializers.IntegerField()
+    retrieved_documents = CitationSerializer(many=True)
+    no_retrieval_context = drf_serializers.BooleanField()
     metadata = drf_serializers.DictField()
 
 
@@ -105,6 +116,10 @@ class ChatView(APIView):
             'conversation_id': str(conversation.id),
             'response': response_text,
             'delay_ms': int(delay_seconds * 1000),
+            # Top-level citation contract (Task 2.2) so the frontend renders
+            # Sources / no-context state without reaching into `metadata`.
+            'retrieved_documents': metadata.get('retrieved_documents', []),
+            'no_retrieval_context': bool(metadata.get('no_retrieval_context', False)),
             'metadata': metadata,
         }, status=status.HTTP_200_OK)
 

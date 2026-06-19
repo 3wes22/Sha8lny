@@ -242,3 +242,144 @@ def test_normalize_documents_defaults_for_legacy_payloads():
     assert normalized["confidence_tier"] == "LOW"
     assert normalized["url"] == ""
     assert normalized["source_name"] == "general"
+
+
+def test_generate_response_exposes_public_citations(monkeypatch):
+    """Task 2.2: a successful answer carries a public citation payload with all five fields."""
+    service = LLMAdvisoryService()
+
+    monkeypatch.setattr(
+        "apps.advisory.llm_service.get_rag_runtime",
+        lambda: {
+            "classify_message": lambda message: ("in_scope", ""),
+            "get_redirect_response": lambda message: "redirect",
+            "get_clarifying_question": lambda: "Clarify",
+            "system_prompt": "system",
+            "retrieve_context": lambda *args, **kwargs: [
+                {
+                    "content": "Backend engineers in Egypt earn competitive salaries.",
+                    "score": 0.5,
+                    "confidence_tier": "HIGH",
+                    "metadata": {
+                        "source": "bls_ooh",
+                        "url": "https://www.bls.gov/ooh/example.htm",
+                        "section": "Pay",
+                        "category": "career_development",
+                    },
+                }
+            ],
+        },
+    )
+
+    class _FakeMeta:
+        processing_time_ms = 120
+        model = "gemini-fake"
+        provider = "gemini"
+        trace_id = "trace-citation"
+
+    class _FakeResult:
+        text = "Backend roles pay well; focus on system design."
+        metadata = _FakeMeta()
+        prompt_tokens = 10
+        completion_tokens = 20
+
+    class _FakeGemmaClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def generate_text(self, *args, **kwargs):
+            return _FakeResult()
+
+    monkeypatch.setattr("apps.advisory.llm_service.GemmaClient", _FakeGemmaClient)
+
+    _response, _delay, metadata = service.generate_response(
+        "What do backend engineers earn?",
+        conversation_history=[],
+        user_context={"skills": ["Python"]},
+    )
+
+    assert metadata["no_retrieval_context"] is False
+    citations = metadata["retrieved_documents"]
+    assert len(citations) == 1
+    citation = citations[0]
+    assert set(citation.keys()) == {"source", "url", "section", "excerpt", "confidence_tier"}
+    assert citation["source"] == "bls_ooh"
+    assert citation["url"].startswith("https://www.bls.gov")
+    assert citation["section"] == "Pay"
+    assert citation["confidence_tier"] == "HIGH"
+    assert citation["excerpt"]
+
+
+def test_generate_response_flags_no_retrieval_context(monkeypatch):
+    """Task 2.2: an empty retrieval sets an explicit machine-readable flag for the frontend."""
+    service = LLMAdvisoryService()
+
+    monkeypatch.setattr(
+        "apps.advisory.llm_service.get_rag_runtime",
+        lambda: {
+            "classify_message": lambda message: ("in_scope", ""),
+            "get_redirect_response": lambda message: "redirect",
+            "get_clarifying_question": lambda: "Clarify",
+            "system_prompt": "system",
+            "retrieve_context": lambda *args, **kwargs: [],
+        },
+    )
+
+    _response, _delay, metadata = service.generate_response(
+        "What should I learn for backend jobs?",
+        conversation_history=[],
+        user_context={"skills": ["Python"]},
+    )
+
+    assert metadata["error_code"] == "no_retrieval_context"
+    assert metadata["no_retrieval_context"] is True
+    assert metadata["retrieved_documents"] == []
+
+
+@pytest.mark.django_db
+def test_chat_response_surfaces_citations_and_flag(api_client, advisory_user, monkeypatch):
+    """Task 2.2: the chat endpoint lifts citations + no-context flag to the top level."""
+    api_client.force_authenticate(user=advisory_user)
+
+    class StubLLMService:
+        def build_user_context(self, user):
+            return {"name": user.full_name, "skills": []}
+
+        def generate_response(self, message, conversation_history=None, user_context=None):
+            return (
+                "Backend roles pay well in Egypt.",
+                0.3,
+                {
+                    "source": "llm",
+                    "fallback_used": False,
+                    "no_retrieval_context": False,
+                    "retrieved_documents": [
+                        {
+                            "source": "bls_ooh",
+                            "url": "https://www.bls.gov/ooh/example.htm",
+                            "section": "Pay",
+                            "excerpt": "Backend engineers earn competitive salaries.",
+                            "confidence_tier": "HIGH",
+                        }
+                    ],
+                    "context_used": {"retrieved_documents": []},
+                },
+            )
+
+    monkeypatch.setattr(
+        "apps.advisory.llm_service.get_llm_service",
+        lambda: StubLLMService(),
+    )
+
+    response = api_client.post(
+        "/api/v1/advisory/chat/",
+        {"message": "What do backend engineers earn?"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["no_retrieval_context"] is False
+    assert isinstance(response.data["retrieved_documents"], list)
+    citation = response.data["retrieved_documents"][0]
+    assert set(citation.keys()) == {"source", "url", "section", "excerpt", "confidence_tier"}
+    assert citation["source"] == "bls_ooh"
