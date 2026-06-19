@@ -637,10 +637,20 @@ export interface RoadmapSignal {
   generation_metadata: Record<string, unknown>;
 }
 
+export interface Citation {
+  source: string;
+  url: string;
+  section: string;
+  excerpt: string;
+  confidence_tier: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
 export interface ChatResponse {
   conversation_id: string;
   response: string;
   delay_ms: number;
+  retrieved_documents?: Citation[];
+  no_retrieval_context?: boolean;
   metadata: AIInvocationMetadata;
 }
 

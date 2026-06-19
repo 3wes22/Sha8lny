@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Loader2, Send } from "lucide-react";
+import { Info, Loader2, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { advisorApi, type ChatRequest } from "@/lib/api";
+import { advisorApi, type ChatRequest, type Citation } from "@/lib/api";
+import { MessageSources } from "@/features/advisory/components/MessageSources";
 import { PageShell } from "@/shared/components/PageShell";
 import { StatePanel } from "@/shared/components/StatePanel";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +13,8 @@ interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  sources?: Citation[];
+  noRetrievalContext?: boolean;
 }
 
 const ADVISORY_UNAVAILABLE_MESSAGE =
@@ -56,7 +59,13 @@ export default function AdvisoryPage() {
       setConversationId(response.conversation_id);
       setMessages((previous) => [
         ...previous,
-        { id: `${Date.now()}-assistant`, role: "assistant", content: response.response },
+        {
+          id: `${Date.now()}-assistant`,
+          role: "assistant",
+          content: response.response,
+          sources: response.retrieved_documents ?? [],
+          noRetrievalContext: response.no_retrieval_context ?? false,
+        },
       ]);
     } catch {
       setMessages((previous) => [
@@ -102,6 +111,15 @@ export default function AdvisoryPage() {
               key={message.id}
             >
               <p className="whitespace-pre-wrap text-sm leading-6">{message.content}</p>
+              {message.role === "assistant" && message.noRetrievalContext ? (
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Info className="h-3.5 w-3.5" />
+                  I don’t have grounded sources on that yet, so this is general guidance — not retrieved facts.
+                </p>
+              ) : null}
+              {message.role === "assistant" && message.sources && message.sources.length > 0 ? (
+                <MessageSources sources={message.sources} />
+              ) : null}
             </div>
           ))}
         </div>
