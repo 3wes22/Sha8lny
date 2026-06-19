@@ -28,6 +28,7 @@ _TIER2_FLOORS: tuple[tuple[str, int], ...] = (
     ("multi_select", TIER2_STAGE2_MULTI_SELECT_MIN),
     ("open_ended", TIER2_STAGE2_OPEN_ENDED_MIN),
 )
+_TIER2_FLOOR_MAP: dict[str, int] = dict(_TIER2_FLOORS)
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,7 @@ def tier2_subskills(role_key: str, *, per_dimension: int = 2) -> list[str]:
     graph = load_role_graph(role_key)
     demand: list[str] = list(stage1_calibration_subskills(role_key))
     for dimension in graph.dimensions:
+        # Ties in target_proficiency are broken by definition order (stable sort).
         ranked = sorted(
             dimension.subskills,
             key=lambda s: s.target_proficiency,
@@ -116,9 +118,15 @@ def tier2_blueprints(role_key: str) -> list[Blueprint]:
 
 
 def _floor_for(stage: int, question_type: str) -> int:
+    # Stage 1 only contains single_choice in this system.
     if stage == 1:
         return TIER1_STAGE1_SINGLE_CHOICE_MIN
-    return dict(_TIER2_FLOORS).get(question_type, 1)
+    try:
+        return _TIER2_FLOOR_MAP[question_type]
+    except KeyError:
+        raise ValueError(
+            f"no Tier-2 floor defined for stage-2 question_type={question_type!r}"
+        )
 
 
 def _approved_counts() -> dict[tuple[str, int, str, str], int]:

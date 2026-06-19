@@ -58,3 +58,30 @@ def test_uncovered_tier2_returns_stage2_blueprints():
     assert todo  # backend has little/no stage-2 content yet
     assert all(bp.stage == 2 for bp in todo)
     assert all(bp.question_type in ("single_choice", "multi_select", "open_ended") for bp in todo)
+
+
+@pytest.mark.django_db
+def test_uncovered_tier2_respects_per_type_floor():
+    from apps.assessments.scenario_corpus.coverage import (
+        _approved_counts,
+        tier2_subskills,
+        uncovered_blueprints,
+    )
+
+    demand = tier2_subskills("backend")
+    counts = _approved_counts()
+    # A demand subskill with no approved stage-2 content -> gaps equal the floor.
+    target = next(
+        s
+        for s in demand
+        if counts.get(("backend", 2, "single_choice", s), 0) == 0
+        and counts.get(("backend", 2, "multi_select", s), 0) == 0
+        and counts.get(("backend", 2, "open_ended", s), 0) == 0
+    )
+    todo = uncovered_blueprints("backend", tier=2)
+    sc = [bp for bp in todo if bp.subskill_key == target and bp.question_type == "single_choice"]
+    ms = [bp for bp in todo if bp.subskill_key == target and bp.question_type == "multi_select"]
+    oe = [bp for bp in todo if bp.subskill_key == target and bp.question_type == "open_ended"]
+    assert len(sc) == 2  # floor 2, have 0
+    assert len(ms) == 1  # floor 1, have 0
+    assert len(oe) == 1  # floor 1, have 0
