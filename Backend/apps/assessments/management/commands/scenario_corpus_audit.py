@@ -66,6 +66,13 @@ class Command(BaseCommand):
             default=0.92,
             help="Cosine similarity threshold for near-duplicate detection (default 0.92).",
         )
+        parser.add_argument(
+            "--tier",
+            type=str,
+            default="all",
+            choices=["1", "2", "all"],
+            help="Gate only Tier 1 (stage-1 calibration), Tier 2 (stage-2 demand set), or all.",
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         exit_code = 0
@@ -93,7 +100,7 @@ class Command(BaseCommand):
 
         # --- 2. Coverage ----------------------------------------------------
         approved = list(iter_approved_scenarios())
-        coverage_ok = self._report_coverage(approved)
+        coverage_ok = self._report_coverage(approved, options["tier"])
         if not coverage_ok:
             exit_code = 1
 
@@ -138,7 +145,7 @@ class Command(BaseCommand):
     # Coverage report
     # ------------------------------------------------------------------
 
-    def _report_coverage(self, approved: list[dict[str, Any]]) -> bool:
+    def _report_coverage(self, approved: list[dict[str, Any]], tier: str) -> bool:
         self.stdout.write("\nCoverage report")
         self.stdout.write("-" * 68)
         all_ok = True
@@ -174,12 +181,18 @@ class Command(BaseCommand):
                 ))
                 stage1_targets = set(role_subskills)
 
-            checks: list[tuple[str, int, list[str], int]] = [
+            all_checks: list[tuple[str, int, list[str], int]] = [
                 ("stage 1 single_choice", 1, sorted(stage1_targets), _STAGE1_SINGLE_CHOICE_MIN),
                 ("stage 2 single_choice", 2, role_subskills, _STAGE2_SINGLE_CHOICE_MIN),
                 ("stage 2 multi_select", 2, role_subskills, _STAGE2_MULTI_SELECT_MIN),
                 ("stage 2 open_ended", 2, role_subskills, _STAGE2_OPEN_ENDED_MIN),
             ]
+            if tier == "1":
+                checks = [c for c in all_checks if c[1] == 1]
+            elif tier == "2":
+                checks = [c for c in all_checks if c[1] == 2]
+            else:
+                checks = all_checks
             for label, stage, expected_subskills, floor in checks:
                 question_type = label.rsplit(" ", 1)[1]
                 gaps: list[str] = []
