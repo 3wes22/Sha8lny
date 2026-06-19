@@ -31,6 +31,7 @@ from django.core.management.base import BaseCommand
 from apps.assessments.engine import StageAllocator
 from apps.assessments.role_graph import load_role_graph
 from apps.assessments.role_graph_data import ROLE_GRAPHS
+from apps.assessments.scenario_corpus.coverage import tier2_subskills
 from apps.assessments.scenario_corpus.registry import (
     SCENARIO_CORPUS_VERSION,
     iter_all_scenarios,
@@ -181,11 +182,15 @@ class Command(BaseCommand):
                 ))
                 stage1_targets = set(role_subskills)
 
+            stage2_subskills = role_subskills
+            if tier == "2":
+                stage2_subskills = tier2_subskills(role_key)
+
             all_checks: list[tuple[str, int, list[str], int]] = [
                 ("stage 1 single_choice", 1, sorted(stage1_targets), _STAGE1_SINGLE_CHOICE_MIN),
-                ("stage 2 single_choice", 2, role_subskills, _STAGE2_SINGLE_CHOICE_MIN),
-                ("stage 2 multi_select", 2, role_subskills, _STAGE2_MULTI_SELECT_MIN),
-                ("stage 2 open_ended", 2, role_subskills, _STAGE2_OPEN_ENDED_MIN),
+                ("stage 2 single_choice", 2, stage2_subskills, _STAGE2_SINGLE_CHOICE_MIN),
+                ("stage 2 multi_select", 2, stage2_subskills, _STAGE2_MULTI_SELECT_MIN),
+                ("stage 2 open_ended", 2, stage2_subskills, _STAGE2_OPEN_ENDED_MIN),
             ]
             if tier == "1":
                 checks = [c for c in all_checks if c[1] == 1]

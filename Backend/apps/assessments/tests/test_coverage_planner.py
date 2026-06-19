@@ -7,6 +7,7 @@ from apps.assessments.scenario_corpus.coverage import (
     stage1_calibration_subskills,
     tier1_blueprints,
     uncovered_blueprints,
+    tier2_subskills,
 )
 
 
@@ -37,5 +38,23 @@ def test_uncovered_excludes_already_satisfied_subskills():
 
 
 def test_uncovered_blueprints_raises_for_unsupported_tier():
-    with pytest.raises(ValueError, match="tier 2 not yet supported"):
-        uncovered_blueprints("backend", tier=2)
+    with pytest.raises(ValueError, match="unsupported tier"):
+        uncovered_blueprints("backend", tier=3)
+
+
+@pytest.mark.django_db
+def test_tier2_subskills_are_a_subset_of_all_subskills():
+    from apps.assessments.role_graph_data import ROLE_GRAPHS
+
+    all_subs = {s.key for d in ROLE_GRAPHS["backend"].dimensions for s in d.subskills}
+    demand = set(tier2_subskills("backend"))
+    assert demand and demand.issubset(all_subs)
+    assert len(demand) < len(all_subs)  # demand-weighted, not all subskills
+
+
+@pytest.mark.django_db
+def test_uncovered_tier2_returns_stage2_blueprints():
+    todo = uncovered_blueprints("backend", tier=2)
+    assert todo  # backend has little/no stage-2 content yet
+    assert all(bp.stage == 2 for bp in todo)
+    assert all(bp.question_type in ("single_choice", "multi_select", "open_ended") for bp in todo)
