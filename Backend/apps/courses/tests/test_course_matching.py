@@ -91,3 +91,83 @@ def test_match_courses_for_milestone_links_course(user):
     assert milestone.courses.count() == 1
     link = milestone.courses.first()
     assert link.match_score == Decimal("91.00")
+
+
+@pytest.mark.django_db
+def test_match_courses_for_roadmap_populates_multiple_milestones(user):
+    """C9: match_courses_for_roadmap links courses across all course milestones."""
+    platform = CoursePlatform.objects.create(
+        name="Demo Platform",
+        slug="demo-platform-3",
+        website_url="https://example.com",
+        integration_type=CoursePlatform.MANUAL,
+    )
+    course = Course.objects.create(
+        platform=platform,
+        external_id="c3",
+        title="REST API Design",
+        slug="rest-api-design",
+        description="Designing HTTP APIs",
+        url="https://example.com/c3",
+        is_published=True,
+    )
+
+    roadmap = Roadmap.objects.create(
+        user=user,
+        title="Backend roadmap",
+        target_career="Backend Developer",
+        current_level="beginner",
+        target_level="job-ready",
+        estimated_duration_weeks=12,
+        status=Roadmap.DRAFT,
+    )
+    course_milestones = []
+    for phase_order, (phase_title, milestone_title, skill) in enumerate(
+        [
+            ("Foundations", "Learn HTTP APIs", "REST"),
+            ("Persistence", "Model relational data", "SQL"),
+        ],
+        start=1,
+    ):
+        phase = RoadmapPhase.objects.create(
+            roadmap=roadmap,
+            title=phase_title,
+            description="desc",
+            order=phase_order,
+            estimated_duration_weeks=4,
+        )
+        course_milestones.append(
+            RoadmapMilestone.objects.create(
+                phase=phase,
+                title=milestone_title,
+                description="desc",
+                milestone_type=RoadmapMilestone.COURSE,
+                order=1,
+                estimated_duration_hours=Decimal("10.00"),
+                skills=[skill],
+            )
+        )
+        # A non-course milestone should be skipped by the matcher.
+        RoadmapMilestone.objects.create(
+            phase=phase,
+            title="Build a project",
+            description="desc",
+            milestone_type=RoadmapMilestone.PROJECT,
+            order=2,
+            estimated_duration_hours=Decimal("8.00"),
+            skills=[skill],
+        )
+
+    with patch.object(
+        CourseIndex,
+        "search",
+        return_value=[{"course_id": str(course.id), "title": course.title, "score": 0.88}],
+    ):
+        RoadmapService.match_courses_for_roadmap(roadmap)
+
+    populated = [m for m in course_milestones if m.courses.exists()]
+    assert len(populated) >= 2
+    for milestone in populated:
+        link = milestone.courses.first()
+        assert link.match_score > Decimal("0")
+        assert link.recommendation_reason

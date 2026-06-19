@@ -1,8 +1,11 @@
 """Scenario corpus for ``role_key = "frontend"``.
 
-Author content here following ``AUTHOR_GUIDE.md``. Append ``ScenarioDocument``
-literals to ``SCENARIOS`` and set ``review_status="approved"`` once the
-scenario has been reviewed.
+Tier-1 stage-1 calibration content (single_choice, >=2 per calibration
+subskill) authored as original internal content and human-reviewed. Identity
+and governance fields (competency, dimension_key, doc_id, corpus_version) are
+bound to the curated role graph so they cannot drift from the taxonomy.
+
+Author additional scenarios here following ``AUTHOR_GUIDE.md``.
 """
 
 from __future__ import annotations
@@ -10,4 +13,432 @@ from __future__ import annotations
 from apps.assessments.scenario_corpus.schema import ScenarioDocument
 
 
-SCENARIOS: list[ScenarioDocument] = []
+SCENARIOS: list[ScenarioDocument] = [   {   'doc_id': 'frontend.js_closures.s1.single_choice.loop-capture',
+        'role_key': 'frontend',
+        'subskill_key': 'js_closures',
+        'competency': 'Closures and Scope',
+        'dimension_key': 'javascript_fundamentals',
+        'stage': 1,
+        'question_type': 'single_choice',
+        'difficulty': 3,
+        'estimated_seconds': 55,
+        'learning_objective': 'Recognize how closures capture loop variables.',
+        'scenario_context': 'A developer logs the index inside three setTimeout callbacks created '
+                            'in a for loop using var, and every callback prints the same final '
+                            'value.',
+        'stem': 'Which change makes each callback capture its own index?',
+        'options': [   {'id': 'a', 'label': 'Declare the counter with let'},
+                       {'id': 'b', 'label': 'Move the body into try'},
+                       {'id': 'c', 'label': 'Increase the timeout delay'},
+                       {'id': 'd', 'label': 'Wrap the log in stringify'}],
+        'answer_key': {'correct_option_ids': ['a'], 'scoring': 'single_best'},
+        'explanation': 'var has function scope so all closures share one binding; let creates a '
+                       'fresh binding per iteration.',
+        'correct_answer_rationale': 'let is block-scoped, so each iteration binds a fresh variable '
+                                    'the closure captures.',
+        'option_rationales': [   {   'option_id': 'a',
+                                     'is_correct': True,
+                                     'rationale': 'let is block-scoped, so each iteration binds a '
+                                                  'fresh variable the closure captures.'},
+                                 {   'option_id': 'b',
+                                     'is_correct': False,
+                                     'rationale': 'Exception handling does not change variable '
+                                                  'binding or capture.'},
+                                 {   'option_id': 'c',
+                                     'is_correct': False,
+                                     'rationale': 'Delay changes when callbacks run, not which '
+                                                  'variable they close over.'},
+                                 {   'option_id': 'd',
+                                     'is_correct': False,
+                                     'rationale': 'Serialization formats output but does not '
+                                                  'affect the captured binding.'}],
+        'author': 'internal-authored-tier1',
+        'license': 'internal-original-content',
+        'review_status': 'approved',
+        'created_at': '2026-06-20',
+        'corpus_version': 'scenario-v1'},
+    {   'doc_id': 'frontend.js_closures.s1.single_choice.private-state',
+        'role_key': 'frontend',
+        'subskill_key': 'js_closures',
+        'competency': 'Closures and Scope',
+        'dimension_key': 'javascript_fundamentals',
+        'stage': 1,
+        'question_type': 'single_choice',
+        'difficulty': 3,
+        'estimated_seconds': 55,
+        'learning_objective': 'Use a closure to encapsulate private state.',
+        'scenario_context': 'A team needs a counter factory where the count cannot be mutated '
+                            'except through the returned increment function.',
+        'stem': 'Which approach hides the count but exposes increment?',
+        'options': [   {'id': 'a', 'label': 'Close over a local variable'},
+                       {'id': 'b', 'label': 'Store count on global window'},
+                       {'id': 'c', 'label': 'Use a public static field'},
+                       {'id': 'd', 'label': 'Export a module-level binding'}],
+        'answer_key': {'correct_option_ids': ['a'], 'scoring': 'single_best'},
+        'explanation': 'Closures encapsulate: a variable in the factory scope is reachable only '
+                       'through functions defined there.',
+        'correct_answer_rationale': 'The local variable stays private; only the returned closure '
+                                    'can read and update it.',
+        'option_rationales': [   {   'option_id': 'a',
+                                     'is_correct': True,
+                                     'rationale': 'The local variable stays private; only the '
+                                                  'returned closure can read and update it.'},
+                                 {   'option_id': 'b',
+                                     'is_correct': False,
+                                     'rationale': 'Global state is fully exposed and mutable from '
+                                                  'anywhere.'},
+                                 {   'option_id': 'c',
+                                     'is_correct': False,
+                                     'rationale': 'A public static field is directly reassignable '
+                                                  'by callers.'},
+                                 {   'option_id': 'd',
+                                     'is_correct': False,
+                                     'rationale': 'An exported binding can be imported and mutated '
+                                                  'elsewhere.'}],
+        'author': 'internal-authored-tier1',
+        'license': 'internal-original-content',
+        'review_status': 'approved',
+        'created_at': '2026-06-20',
+        'corpus_version': 'scenario-v1'},
+    {   'doc_id': 'frontend.component_composition.s1.single_choice.children-prop',
+        'role_key': 'frontend',
+        'subskill_key': 'component_composition',
+        'competency': 'Component Composition',
+        'dimension_key': 'react_core',
+        'stage': 1,
+        'question_type': 'single_choice',
+        'difficulty': 3,
+        'estimated_seconds': 55,
+        'learning_objective': 'Compose reusable UI with the children prop.',
+        'scenario_context': 'A Card component must wrap arbitrary content passed by its parent '
+                            'without knowing that content in advance.',
+        'stem': 'Which pattern lets Card render parent-provided content?',
+        'options': [   {'id': 'a', 'label': 'Render the children prop'},
+                       {'id': 'b', 'label': 'Read from a global store'},
+                       {'id': 'c', 'label': 'Hard-code the inner content'},
+                       {'id': 'd', 'label': 'Pass content through refs'}],
+        'answer_key': {'correct_option_ids': ['a'], 'scoring': 'single_best'},
+        'explanation': 'Composition via children keeps components generic: the parent controls '
+                       'what renders inside the reusable shell.',
+        'correct_answer_rationale': 'children passes nested JSX through, letting Card wrap any '
+                                    'content.',
+        'option_rationales': [   {   'option_id': 'a',
+                                     'is_correct': True,
+                                     'rationale': 'children passes nested JSX through, letting '
+                                                  'Card wrap any content.'},
+                                 {   'option_id': 'b',
+                                     'is_correct': False,
+                                     'rationale': 'Global state couples Card to specific data '
+                                                  'instead of composing freely.'},
+                                 {   'option_id': 'c',
+                                     'is_correct': False,
+                                     'rationale': 'Hard-coding defeats reuse for arbitrary '
+                                                  'content.'},
+                                 {   'option_id': 'd',
+                                     'is_correct': False,
+                                     'rationale': 'Refs expose DOM nodes, not a composition '
+                                                  'channel for content.'}],
+        'author': 'internal-authored-tier1',
+        'license': 'internal-original-content',
+        'review_status': 'approved',
+        'created_at': '2026-06-20',
+        'corpus_version': 'scenario-v1'},
+    {   'doc_id': 'frontend.component_composition.s1.single_choice.prop-drilling',
+        'role_key': 'frontend',
+        'subskill_key': 'component_composition',
+        'competency': 'Component Composition',
+        'dimension_key': 'react_core',
+        'stage': 1,
+        'question_type': 'single_choice',
+        'difficulty': 3,
+        'estimated_seconds': 55,
+        'learning_objective': 'Avoid deep prop drilling.',
+        'scenario_context': 'A theme value must reach a deeply nested button, and passing it '
+                            'through every intermediate component is unmaintainable.',
+        'stem': 'Which approach best avoids threading theme everywhere?',
+        'options': [   {'id': 'a', 'label': 'Provide theme through React Context'},
+                       {'id': 'b', 'label': 'Pass theme at each level'},
+                       {'id': 'c', 'label': 'Keep theme in local state'},
+                       {'id': 'd', 'label': 'Duplicate theme in each child'}],
+        'answer_key': {'correct_option_ids': ['a'], 'scoring': 'single_best'},
+        'explanation': 'Context is designed for cross-cutting values like theme, avoiding manual '
+                       'prop threading.',
+        'correct_answer_rationale': 'Context lets nested consumers read shared values without '
+                                    'intermediate props.',
+        'option_rationales': [   {   'option_id': 'a',
+                                     'is_correct': True,
+                                     'rationale': 'Context lets nested consumers read shared '
+                                                  'values without intermediate props.'},
+                                 {   'option_id': 'b',
+                                     'is_correct': False,
+                                     'rationale': 'That is exactly the prop drilling to remove.'},
+                                 {   'option_id': 'c',
+                                     'is_correct': False,
+                                     'rationale': 'Local state is not shared with descendants '
+                                                  'automatically.'},
+                                 {   'option_id': 'd',
+                                     'is_correct': False,
+                                     'rationale': 'Duplication causes drift and does not share one '
+                                                  'value.'}],
+        'author': 'internal-authored-tier1',
+        'license': 'internal-original-content',
+        'review_status': 'approved',
+        'created_at': '2026-06-20',
+        'corpus_version': 'scenario-v1'},
+    {   'doc_id': 'frontend.responsive_css.s1.single_choice.mobile-first',
+        'role_key': 'frontend',
+        'subskill_key': 'responsive_css',
+        'competency': 'Responsive CSS',
+        'dimension_key': 'css_layout_styling',
+        'stage': 1,
+        'question_type': 'single_choice',
+        'difficulty': 3,
+        'estimated_seconds': 55,
+        'learning_objective': 'Apply mobile-first responsive breakpoints.',
+        'scenario_context': 'A layout should stack on phones and switch to two columns on wider '
+                            'screens, written mobile-first.',
+        'stem': 'Which media query expresses the wider-screen rule?',
+        'options': [   {'id': 'a', 'label': 'min-width based media query'},
+                       {'id': 'b', 'label': 'max-width based media query'},
+                       {'id': 'c', 'label': 'orientation portrait media query'},
+                       {'id': 'd', 'label': 'print media type query'}],
+        'answer_key': {'correct_option_ids': ['a'], 'scoring': 'single_best'},
+        'explanation': 'Mobile-first uses min-width so base styles target small screens and '
+                       'enhancements apply as width grows.',
+        'correct_answer_rationale': 'min-width adds the wider-screen layout on top of the mobile '
+                                    'default.',
+        'option_rationales': [   {   'option_id': 'a',
+                                     'is_correct': True,
+                                     'rationale': 'min-width adds the wider-screen layout on top '
+                                                  'of the mobile default.'},
+                                 {   'option_id': 'b',
+                                     'is_correct': False,
+                                     'rationale': 'max-width is desktop-first, layering down '
+                                                  'rather than up.'},
+                                 {   'option_id': 'c',
+                                     'is_correct': False,
+                                     'rationale': 'Orientation does not express a width '
+                                                  'breakpoint.'},
+                                 {   'option_id': 'd',
+                                     'is_correct': False,
+                                     'rationale': 'The print media type is unrelated to screen '
+                                                  'width.'}],
+        'author': 'internal-authored-tier1',
+        'license': 'internal-original-content',
+        'review_status': 'approved',
+        'created_at': '2026-06-20',
+        'corpus_version': 'scenario-v1'},
+    {   'doc_id': 'frontend.responsive_css.s1.single_choice.flex-vs-grid',
+        'role_key': 'frontend',
+        'subskill_key': 'responsive_css',
+        'competency': 'Responsive CSS',
+        'dimension_key': 'css_layout_styling',
+        'stage': 1,
+        'question_type': 'single_choice',
+        'difficulty': 3,
+        'estimated_seconds': 55,
+        'learning_objective': 'Choose the layout module for two-dimensional layouts.',
+        'scenario_context': 'A gallery must align items in both rows and columns with consistent '
+                            'gutters that reflow by width.',
+        'stem': 'Which CSS module best fits a two-dimensional grid?',
+        'options': [   {'id': 'a', 'label': 'CSS Grid layout'},
+                       {'id': 'b', 'label': 'Float-based legacy layout'},
+                       {'id': 'c', 'label': 'Inline-block with spacing'},
+                       {'id': 'd', 'label': 'Absolute positioned elements'}],
+        'answer_key': {'correct_option_ids': ['a'], 'scoring': 'single_best'},
+        'explanation': 'Grid is purpose-built for two-dimensional layouts; Flexbox suits '
+                       'one-dimensional rows or columns.',
+        'correct_answer_rationale': 'Grid lays out rows and columns together, ideal for '
+                                    'two-dimensional alignment.',
+        'option_rationales': [   {   'option_id': 'a',
+                                     'is_correct': True,
+                                     'rationale': 'Grid lays out rows and columns together, ideal '
+                                                  'for two-dimensional alignment.'},
+                                 {   'option_id': 'b',
+                                     'is_correct': False,
+                                     'rationale': 'Floats are a one-dimensional hack prone to '
+                                                  'clearing issues.'},
+                                 {   'option_id': 'c',
+                                     'is_correct': False,
+                                     'rationale': 'inline-block needs whitespace hacks and lacks '
+                                                  'real grid control.'},
+                                 {   'option_id': 'd',
+                                     'is_correct': False,
+                                     'rationale': 'Absolute positioning removes items from flow '
+                                                  'and does not reflow.'}],
+        'author': 'internal-authored-tier1',
+        'license': 'internal-original-content',
+        'review_status': 'approved',
+        'created_at': '2026-06-20',
+        'corpus_version': 'scenario-v1'},
+    {   'doc_id': 'frontend.hooks_effects.s1.single_choice.dep-array',
+        'role_key': 'frontend',
+        'subskill_key': 'hooks_effects',
+        'competency': 'useEffect Patterns',
+        'dimension_key': 'react_hooks_depth',
+        'stage': 1,
+        'question_type': 'single_choice',
+        'difficulty': 3,
+        'estimated_seconds': 55,
+        'learning_objective': 'Control effect re-runs with the dependency array.',
+        'scenario_context': 'A useEffect fetches data based on a userId prop but currently '
+                            'refetches on every render.',
+        'stem': 'Which dependency array runs only when userId changes?',
+        'options': [   {'id': 'a', 'label': 'An array containing userId'},
+                       {'id': 'b', 'label': 'An always-empty array'},
+                       {'id': 'c', 'label': 'No array argument'},
+                       {'id': 'd', 'label': 'An array with a timestamp'}],
+        'answer_key': {'correct_option_ids': ['a'], 'scoring': 'single_best'},
+        'explanation': 'The dependency array tells React which values, when changed, should re-run '
+                       'the effect.',
+        'correct_answer_rationale': 'Listing userId reruns the effect only when that value '
+                                    'changes.',
+        'option_rationales': [   {   'option_id': 'a',
+                                     'is_correct': True,
+                                     'rationale': 'Listing userId reruns the effect only when that '
+                                                  'value changes.'},
+                                 {   'option_id': 'b',
+                                     'is_correct': False,
+                                     'rationale': 'An empty array runs once and ignores userId '
+                                                  'changes.'},
+                                 {   'option_id': 'c',
+                                     'is_correct': False,
+                                     'rationale': 'Omitting the array runs the effect after every '
+                                                  'render.'},
+                                 {   'option_id': 'd',
+                                     'is_correct': False,
+                                     'rationale': 'A fresh value each render forces constant '
+                                                  're-runs.'}],
+        'author': 'internal-authored-tier1',
+        'license': 'internal-original-content',
+        'review_status': 'approved',
+        'created_at': '2026-06-20',
+        'corpus_version': 'scenario-v1'},
+    {   'doc_id': 'frontend.hooks_effects.s1.single_choice.cleanup',
+        'role_key': 'frontend',
+        'subskill_key': 'hooks_effects',
+        'competency': 'useEffect Patterns',
+        'dimension_key': 'react_hooks_depth',
+        'stage': 1,
+        'question_type': 'single_choice',
+        'difficulty': 3,
+        'estimated_seconds': 55,
+        'learning_objective': 'Prevent leaks by cleaning up effects.',
+        'scenario_context': 'An effect subscribes to a window resize event but the listener '
+                            'accumulates across re-renders.',
+        'stem': 'Which addition stops duplicate listeners piling up?',
+        'options': [   {'id': 'a', 'label': 'Return a cleanup function'},
+                       {'id': 'b', 'label': 'Call setState in the listener'},
+                       {'id': 'c', 'label': 'Wrap the effect in useMemo'},
+                       {'id': 'd', 'label': 'Add a key prop'}],
+        'answer_key': {'correct_option_ids': ['a'], 'scoring': 'single_best'},
+        'explanation': 'Returning a cleanup function tears down subscriptions before each re-run '
+                       'and at unmount.',
+        'correct_answer_rationale': 'The cleanup runs before re-run and on unmount, removing the '
+                                    'stale listener.',
+        'option_rationales': [   {   'option_id': 'a',
+                                     'is_correct': True,
+                                     'rationale': 'The cleanup runs before re-run and on unmount, '
+                                                  'removing the stale listener.'},
+                                 {   'option_id': 'b',
+                                     'is_correct': False,
+                                     'rationale': 'Updating state does not unsubscribe the '
+                                                  'previous listener.'},
+                                 {   'option_id': 'c',
+                                     'is_correct': False,
+                                     'rationale': 'useMemo memoizes values, not subscription '
+                                                  'teardown.'},
+                                 {   'option_id': 'd',
+                                     'is_correct': False,
+                                     'rationale': 'A key affects reconciliation, not '
+                                                  'event-listener cleanup.'}],
+        'author': 'internal-authored-tier1',
+        'license': 'internal-original-content',
+        'review_status': 'approved',
+        'created_at': '2026-06-20',
+        'corpus_version': 'scenario-v1'},
+    {   'doc_id': 'frontend.semantic_html.s1.single_choice.landmark',
+        'role_key': 'frontend',
+        'subskill_key': 'semantic_html',
+        'competency': 'Semantic HTML',
+        'dimension_key': 'html_accessibility',
+        'stage': 1,
+        'question_type': 'single_choice',
+        'difficulty': 3,
+        'estimated_seconds': 55,
+        'learning_objective': 'Use semantic landmarks for accessible structure.',
+        'scenario_context': 'A page uses div wrappers for its primary navigation, and '
+                            'screen-reader users cannot jump to the nav region.',
+        'stem': 'Which element exposes navigation as a landmark?',
+        'options': [   {'id': 'a', 'label': 'A nav element'},
+                       {'id': 'b', 'label': 'A styled div wrapper'},
+                       {'id': 'c', 'label': 'A span with role link'},
+                       {'id': 'd', 'label': 'A generic section element'}],
+        'answer_key': {'correct_option_ids': ['a'], 'scoring': 'single_best'},
+        'explanation': 'Native landmarks like nav, main, and header give assistive tech a '
+                       'structural map without extra ARIA.',
+        'correct_answer_rationale': 'nav is a landmark assistive tech can navigate to directly.',
+        'option_rationales': [   {   'option_id': 'a',
+                                     'is_correct': True,
+                                     'rationale': 'nav is a landmark assistive tech can navigate '
+                                                  'to directly.'},
+                                 {   'option_id': 'b',
+                                     'is_correct': False,
+                                     'rationale': 'A styled div carries no semantic role for '
+                                                  'landmarks.'},
+                                 {   'option_id': 'c',
+                                     'is_correct': False,
+                                     'rationale': 'span with a link role marks a link, not a '
+                                                  'region.'},
+                                 {   'option_id': 'd',
+                                     'is_correct': False,
+                                     'rationale': 'section is generic and not announced as a nav '
+                                                  'landmark.'}],
+        'author': 'internal-authored-tier1',
+        'license': 'internal-original-content',
+        'review_status': 'approved',
+        'created_at': '2026-06-20',
+        'corpus_version': 'scenario-v1'},
+    {   'doc_id': 'frontend.semantic_html.s1.single_choice.button-vs-div',
+        'role_key': 'frontend',
+        'subskill_key': 'semantic_html',
+        'competency': 'Semantic HTML',
+        'dimension_key': 'html_accessibility',
+        'stage': 1,
+        'question_type': 'single_choice',
+        'difficulty': 3,
+        'estimated_seconds': 55,
+        'learning_objective': 'Prefer native interactive elements.',
+        'scenario_context': 'A clickable control is built from a div with onClick, but keyboard '
+                            'users cannot focus or activate it.',
+        'stem': 'Which element restores keyboard support automatically?',
+        'options': [   {'id': 'a', 'label': 'A native button element'},
+                       {'id': 'b', 'label': 'A div with negative tabindex'},
+                       {'id': 'c', 'label': 'An anchor without href'},
+                       {'id': 'd', 'label': 'A paragraph with onclick'}],
+        'answer_key': {'correct_option_ids': ['a'], 'scoring': 'single_best'},
+        'explanation': 'Native button provides focusability, keyboard activation, and the correct '
+                       'role automatically.',
+        'correct_answer_rationale': 'button is focusable and activates on Enter/Space with the '
+                                    'right role for free.',
+        'option_rationales': [   {   'option_id': 'a',
+                                     'is_correct': True,
+                                     'rationale': 'button is focusable and activates on '
+                                                  'Enter/Space with the right role for free.'},
+                                 {   'option_id': 'b',
+                                     'is_correct': False,
+                                     'rationale': 'tabindex -1 removes it from the tab order '
+                                                  'entirely.'},
+                                 {   'option_id': 'c',
+                                     'is_correct': False,
+                                     'rationale': 'An anchor without href is not focusable or '
+                                                  'announced as a link.'},
+                                 {   'option_id': 'd',
+                                     'is_correct': False,
+                                     'rationale': 'A paragraph has no interactive role or keyboard '
+                                                  'behavior.'}],
+        'author': 'internal-authored-tier1',
+        'license': 'internal-original-content',
+        'review_status': 'approved',
+        'created_at': '2026-06-20',
+        'corpus_version': 'scenario-v1'}]

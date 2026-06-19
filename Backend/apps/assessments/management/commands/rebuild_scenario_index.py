@@ -81,7 +81,12 @@ class Command(BaseCommand):
             settings=Settings(anonymized_telemetry=False),
         )
 
-        existing_collections = {c.name for c in client.list_collections()}
+        # Chroma >=0.6 returns collection names (strings) from list_collections();
+        # older versions returned objects with a .name attribute. Support both.
+        existing_collections = {
+            c if isinstance(c, str) else c.name
+            for c in client.list_collections()
+        }
         if _COLLECTION_NAME in existing_collections:
             self.stdout.write(
                 f"Wiping existing '{_COLLECTION_NAME}' collection..."

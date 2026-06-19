@@ -19,7 +19,7 @@ This file provides backend-specific guidance for the Sha8lny Django application.
 - ✅ **Assessment Scenario RAG Corpus** (spec `005-scenario-rag-corpus`): role-aware, schema-validated few-shot examples retrieved per blueprint from a local Chroma collection. Layered after the existing static few-shot block in `apps/assessments/ai_pipeline.py:_build_stage_prompt`. Default-off (`ASSESSMENT_SCENARIO_RAG_ENABLED=false`); ships with a 10-scenario backend seed converted from `BACKEND_FALLBACK_SCENARIOS`. Authoring under `apps/assessments/scenario_corpus/`; rebuild via `manage.py rebuild_scenario_index`; audit via `manage.py scenario_corpus_audit`.
 
 ### Partial Modules
-- 🟡 **Progress**, **Notifications** (email/push stubbed), **Career Tools** (PDF export is v2), **Courses** (route disabled)
+- 🟡 **Progress**, **Notifications** (email/push stubbed), **Career Tools** (PDF export is v2), **Courses** (embedding match wired into roadmap generation; route at `config/urls.py`)
 
 ## Project Overview
 

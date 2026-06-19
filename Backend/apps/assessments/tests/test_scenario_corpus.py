@@ -134,16 +134,15 @@ def test_coverage_floor_for_backend_stage1_single_choice_seed():
     )
 
 
-def test_coverage_audit_reports_empty_roles_for_v1_seed():
-    """All non-backend roles are intentionally empty in v1; the audit's
-    coverage matrix must therefore mark them as below-floor."""
+def test_all_roles_have_tier1_approved_content():
+    """Every role now ships Tier-1 (stage-1 calibration) approved content, so the
+    coverage matrix has no empty roles. Tier-2 (stage-2) remains the open
+    authoring frontier and is not asserted here."""
     seen_roles = {s["role_key"] for s in iter_approved_scenarios()}
-    assert "backend" in seen_roles, "Backend seed should be approved in v1"
-    for role_key in ("frontend", "fullstack", "data_science", "devops",
+    for role_key in ("backend", "frontend", "fullstack", "data_science", "devops",
                      "android", "machine_learning_engineer", "ui_ux_designer"):
-        assert role_key not in seen_roles, (
-            f"v1 must ship only the backend seed; found unexpected approved "
-            f"content for {role_key!r}"
+        assert role_key in seen_roles, (
+            f"role {role_key!r} should have approved Tier-1 scenario content"
         )
 
 
