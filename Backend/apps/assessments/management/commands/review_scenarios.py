@@ -27,9 +27,15 @@ class Command(BaseCommand):
     help = "Review staged scenario drafts and promote accepted ones into the role module."
 
     def add_arguments(self, parser) -> None:
-        parser.add_argument("--role", required=True)
+        parser.add_argument(
+            "--role", required=True,
+            help="Role key (e.g. 'frontend'). Must match a key in ROLE_GRAPHS.",
+        )
         parser.add_argument("--yes", action="store_true", help="Accept all valid, non-duplicate drafts.")
-        parser.add_argument("--duplicate-threshold", type=float, default=0.92)
+        parser.add_argument(
+            "--duplicate-threshold", type=float, default=0.92,
+            help="Cosine similarity above which a draft is held as a near-duplicate (default: 0.92).",
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         role_key = options["role"]
@@ -85,10 +91,17 @@ class Command(BaseCommand):
             from sentence_transformers import SentenceTransformer
 
             from apps.core.ai_settings import EMBEDDING_MODEL
-
+        except ImportError:
+            self.stderr.write(self.style.WARNING(
+                "near-duplicate check skipped (sentence-transformers not installed)"
+            ))
+            return None
+        try:
             return SentenceTransformer(EMBEDDING_MODEL)
-        except Exception:  # noqa: BLE001 - dedup is best-effort
-            self.stderr.write(self.style.WARNING("near-duplicate check skipped (sentence-transformers unavailable)"))
+        except Exception as exc:  # noqa: BLE001 - dedup is best-effort
+            self.stderr.write(self.style.WARNING(
+                f"near-duplicate check skipped (model load failed: {exc})"
+            ))
             return None
 
     @staticmethod

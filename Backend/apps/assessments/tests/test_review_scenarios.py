@@ -126,3 +126,23 @@ def test_review_rejects_near_duplicate(tmp_path, monkeypatch):
     ast.parse(text)
     assert "gen-1" in text       # first promotes
     assert "gen-2" not in text   # identical second is held back as a near-duplicate
+    remaining = read_drafts("frontend")
+    assert any("gen-2" in d.get("doc_id", "") for d in remaining)  # held-back draft stays in staging
+
+
+@pytest.mark.django_db
+def test_review_holds_invalid_draft_in_staging(tmp_path, monkeypatch):
+    monkeypatch.setattr("apps.assessments.scenario_corpus.staging._STAGING_DIR", tmp_path)
+    monkeypatch.setattr("apps.assessments.scenario_corpus.staging._CORPUS_DIR", tmp_path)
+    _use_fake_embedder(monkeypatch)
+    _make_stub_module(tmp_path)
+    bad = _draft("gen-bad")
+    bad["options"] = bad["options"][:2]  # invalid single_choice (needs exactly 4 options)
+    append_drafts("frontend", [bad])
+
+    call_command("review_scenarios", "--role", "frontend", "--yes", stdout=StringIO(), stderr=StringIO())
+
+    module_text = (tmp_path / "frontend.py").read_text(encoding="utf-8")
+    assert "gen-bad" not in module_text  # invalid draft is NOT promoted
+    remaining = read_drafts("frontend")
+    assert any("gen-bad" in d.get("doc_id", "") for d in remaining)  # retained in staging
