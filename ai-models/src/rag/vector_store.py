@@ -140,6 +140,41 @@ def search(
     return formatted
 
 
+def get_by_ids(ids: List[str]) -> List[Dict[str, Any]]:
+    """Fetch documents by id (no scores) in the same shape as search()."""
+    if not ids:
+        return []
+    collection = get_collection()
+    result = collection.get(ids=ids)
+    docs_by_id = {}
+    for i, doc_id in enumerate(result["ids"]):
+        docs_by_id[doc_id] = {
+            "id": doc_id,
+            "content": result["documents"][i],
+            "metadata": result["metadatas"][i] if result["metadatas"] else {},
+        }
+    # preserve caller's order; silently drop unknown ids
+    return [docs_by_id[i] for i in ids if i in docs_by_id]
+
+
+def iter_all_documents(batch_size: int = 2000):
+    """Yield every document in the collection (for BM25 index building)."""
+    collection = get_collection()
+    offset = 0
+    while True:
+        result = collection.get(limit=batch_size, offset=offset)
+        ids = result["ids"]
+        if not ids:
+            break
+        for i, doc_id in enumerate(ids):
+            yield {
+                "id": doc_id,
+                "content": result["documents"][i],
+                "metadata": result["metadatas"][i] if result["metadatas"] else {},
+            }
+        offset += len(ids)
+
+
 def delete_documents(ids: List[str]) -> None:
     """Delete documents by ID."""
     collection = get_collection()

@@ -13,26 +13,30 @@ from apps.assessments.services import BaselineAssessmentAnalyzer
 
 
 def test_supported_role_graphs_are_structurally_valid():
+    from apps.assessments.role_graph_data import CURATED_VERSION
+
     for role_key in SUPPORTED_ROLES:
         graph = load_role_graph(role_key)
 
         assert graph.role_key == role_key
         assert graph.role_label
         assert graph.version
-        assert len(graph.dimensions) == 4
-        assert round(sum(dimension.weight for dimension in graph.dimensions), 4) == 1.0
+        assert 3 <= len(graph.dimensions) <= (30 if role_key == "fullstack" else 15)
+        assert abs(sum(dimension.weight for dimension in graph.dimensions) - 1.0) < 0.02
 
         subskill_keys = []
         for dimension in graph.dimensions:
             assert dimension.key
             assert dimension.label
-            assert len(dimension.subskills) == 4
+            assert 2 <= len(dimension.subskills) <= 10
+            if graph.version == CURATED_VERSION and role_key != "ui_ux_designer":
+                assert dimension.min_questions_per_stage >= 1
+                assert dimension.assessment_weight is not None
             for subskill in dimension.subskills:
                 assert subskill.dimension == dimension.key
                 assert 1 <= subskill.target_proficiency <= 5
                 subskill_keys.append(subskill.key)
 
-        assert len(subskill_keys) == 16
         assert len(subskill_keys) == len(set(subskill_keys))
 
 

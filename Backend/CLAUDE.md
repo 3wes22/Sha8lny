@@ -6,20 +6,24 @@ This file provides backend-specific guidance for the Sha8lny Django application.
 
 ## Backend Status
 
-**Current Phase**: Phase 2 Complete - Assessment Module Integration
-**Total Tests**: 67 passing (51 users + 16 assessments)
+**Current Phase**: Phases 0-5 Complete - Gemini AI integration across all core modules
+**Total Tests**: 274 passing
 **Database**: SQLite (development), PostgreSQL (production ready)
 
 ### Completed Modules
-- ✅ **Users** (Phase 1): Auth, profiles, skills - 51 tests passing
-- ✅ **Assessments** (Phase 2): CRUD, questions, submission, results - 16 tests passing
+- ✅ **Users**: Auth (JWT + Auth0), profiles, skills CRUD, demo seeder
+- ✅ **Assessments**: staged AI question generation (8 roles), scoring engine + chains, role-graph taxonomy (curated-v3), coverage enforcement. Overall score is a **weighted** roll-up of per-dimension scores (each dimension's `assessment_weight`/`weight`), computed deterministically — the LLM's self-reported score is not trusted. Positioned as a **formative** assessment, not a psychometrically validated instrument.
+- ✅ **Roadmaps**: AI generation from assessment with deterministic, assessment-aware fallback (structure retrieved from roadmap.sh). O*NET 30.1 crosswalk is a **backend-role-only proof-of-concept** (10 keyword mappings in `apps/roadmaps/onet_mapper.py`); other roles return no O*NET links. Phase sizing (hours/weeks/splits) uses documented heuristics, not validated learning science. Course embedding match.
+- ✅ **Jobs**: search, skill matching, LightGBM ranking, Wuzzuf/CSV ingest, experience-level resolution. The ranker is a **weak-supervision demonstrator** (pseudo-labeled synthetic profiles over fixture postings), evaluated by leave-one-group-out NDCG/MAP against skill-overlap + random baselines — see `ai-models/models/custom/EVAL_REPORT.md`. Not trained on real labeled market data (that is documented future work).
+- ✅ **Advisory**: Gemini chat grounded in user context + career-knowledge RAG
+- ✅ **Assessment Scenario RAG Corpus** (spec `005-scenario-rag-corpus`): role-aware, schema-validated few-shot examples retrieved per blueprint from a local Chroma collection. Layered after the existing static few-shot block in `apps/assessments/ai_pipeline.py:_build_stage_prompt`. Default-off (`ASSESSMENT_SCENARIO_RAG_ENABLED=false`); ships with a 10-scenario backend seed converted from `BACKEND_FALLBACK_SCENARIOS`. Authoring under `apps/assessments/scenario_corpus/`; rebuild via `manage.py rebuild_scenario_index`; audit via `manage.py scenario_corpus_audit`.
 
-### Next Module
-- 🔄 **Roadmaps** (Phase 3): Templates, progress tracking
+### Partial Modules
+- 🟡 **Progress**, **Notifications** (email/push stubbed), **Career Tools** (PDF export is v2), **Courses** (route disabled)
 
 ## Project Overview
 
-**Sha8alny** is an AI-powered career development platform that provides personalized learning roadmaps, skill assessments, course recommendations, and job market insights. The backend is built using Django with a **modular monolithic architecture**, using local Gemma via Ollama plus the shared backend AI runtime for intelligent career guidance.
+**Sha8alny** is an AI-powered career development platform that provides personalized learning roadmaps, skill assessments, course recommendations, and job market insights. The backend is built using Django with a **modular monolithic architecture**, using the Gemini API (default) with an optional local Ollama fallback for intelligent career guidance.
 
 **Architecture**: Modular Monolith
 - Single Django application with clear module boundaries

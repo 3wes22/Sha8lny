@@ -63,6 +63,7 @@ class SubSkill:
     dimension: str
     target_proficiency: int
     prerequisites: list[str]
+    frame: str | None = None
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,9 @@ class CoreDimension:
     label: str
     weight: float
     subskills: list[SubSkill]
+    assessment_weight: float | None = None
+    min_questions_per_stage: int = 1
+    origin: str | None = None
 
 
 @dataclass(frozen=True)
@@ -97,9 +101,10 @@ def _validate_graph(graph: RoleGraph) -> RoleGraph:
         raise RoleGraphValidationError("Role graph is missing role_label")
     if not graph.version:
         raise RoleGraphValidationError(f"Role graph {graph.role_key} is missing version")
-    if not 3 <= len(graph.dimensions) <= 5:
+    max_dimensions = 30 if graph.role_key == "fullstack" else 15
+    if not 3 <= len(graph.dimensions) <= max_dimensions:
         raise RoleGraphValidationError(
-            f"Role graph {graph.role_key} must define 3-5 dimensions"
+            f"Role graph {graph.role_key} must define 3-{max_dimensions} dimensions"
         )
 
     dimension_keys: set[str] = set()
@@ -114,9 +119,9 @@ def _validate_graph(graph: RoleGraph) -> RoleGraph:
         dimension_keys.add(dimension.key)
         total_weight += float(dimension.weight)
 
-        if not 3 <= len(dimension.subskills) <= 6:
+        if not 2 <= len(dimension.subskills) <= 10:
             raise RoleGraphValidationError(
-                f"Dimension {dimension.key} in {graph.role_key} must define 3-6 subskills"
+                f"Dimension {dimension.key} in {graph.role_key} must define 2-10 subskills"
             )
 
         for subskill in dimension.subskills:
@@ -140,7 +145,25 @@ def _validate_graph(graph: RoleGraph) -> RoleGraph:
             f"Role graph {graph.role_key} weights must sum to 1.0, got {total_weight}"
         )
 
+    assessment_weights = [
+        float(dimension.assessment_weight)
+        for dimension in graph.dimensions
+        if dimension.assessment_weight is not None
+    ]
+    if assessment_weights and len(assessment_weights) == len(graph.dimensions):
+        assessment_total = sum(assessment_weights)
+        if not isclose(assessment_total, 1.0, rel_tol=0.0, abs_tol=1e-6):
+            raise RoleGraphValidationError(
+                f"Role graph {graph.role_key} assessment_weight values must sum to 1.0, "
+                f"got {assessment_total}"
+            )
+
     for dimension in graph.dimensions:
+        if dimension.min_questions_per_stage < 1:
+            raise RoleGraphValidationError(
+                f"Dimension {dimension.key} in {graph.role_key} must have "
+                f"min_questions_per_stage >= 1"
+            )
         for subskill in dimension.subskills:
             missing_prerequisites = [
                 prerequisite

@@ -468,6 +468,9 @@ class MilestoneService:
                 milestone.save(update_fields=["status", "completed_at", "updated_at"])
                 ProgressService.update_progress_metrics(user, milestone.phase.roadmap)
                 ProgressService.update_streak(user, milestone.phase.roadmap)
+            from apps.users.milestone_skills import MilestoneSkillService
+
+            MilestoneSkillService.grant_milestone_skills(user, milestone)
             return existing
 
         # Calculate time to complete (if milestone has start tracking)
@@ -495,6 +498,10 @@ class MilestoneService:
         # Update roadmap progress
         ProgressService.update_progress_metrics(user, roadmap)
         ProgressService.update_streak(user, roadmap)
+
+        from apps.users.milestone_skills import MilestoneSkillService
+
+        MilestoneSkillService.grant_milestone_skills(user, milestone)
 
         # Check if phase is completed
         phase = milestone.phase

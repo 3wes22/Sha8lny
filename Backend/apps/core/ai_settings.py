@@ -8,7 +8,12 @@ local Ollama runtime later does not require another architecture rewrite.
 See ADR-002: docs/product/ADR-002-HOSTED-DEMO-AI-RUNTIME.md
 """
 
+from pathlib import Path
+
 from decouple import config
+
+
+_BACKEND_BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 # ---------------------------------------------------------------------------
@@ -52,31 +57,7 @@ LLM_MAX_OUTPUT_TOKENS = config("LLM_MAX_OUTPUT_TOKENS", default=1536, cast=int)
 OLLAMA_HOST = config("OLLAMA_HOST", default="http://127.0.0.1:11434")
 OLLAMA_MODEL = config("OLLAMA_MODEL", default="gemma4:e2b")
 
-# ---------------------------------------------------------------------------
-# Optional Ollama inference tuning
-# ---------------------------------------------------------------------------
-OLLAMA_TIMEOUT_SECONDS = config(
-    "OLLAMA_TIMEOUT_SECONDS",
-    default=LLM_TIMEOUT_SECONDS,
-    cast=int,
-)
-OLLAMA_RETRY_COUNT = config(
-    "OLLAMA_RETRY_COUNT",
-    default=LLM_RETRY_COUNT,
-    cast=int,
-)
-OLLAMA_RETRY_BACKOFF_SECONDS = config(
-    "OLLAMA_RETRY_BACKOFF_SECONDS",
-    default=LLM_RETRY_BACKOFF_SECONDS,
-    cast=float,
-)
-OLLAMA_TEMPERATURE = config(
-    "OLLAMA_TEMPERATURE",
-    default=LLM_TEMPERATURE,
-    cast=float,
-)
-
-# Maximum context window tokens to request.
+# Maximum context window tokens to request (Ollama emergency fallback only).
 OLLAMA_NUM_CTX = config("OLLAMA_NUM_CTX", default=4096, cast=int)
 
 # ---------------------------------------------------------------------------
@@ -95,6 +76,72 @@ CHROMA_PERSIST_DIR = config(
     default="",  # empty → falls back to ai-models default location
 )
 EMBEDDING_MODEL = config("EMBEDDING_MODEL", default="all-MiniLM-L6-v2")
+
+# ---------------------------------------------------------------------------
+# Assessment scenario RAG corpus (feature 005-scenario-rag-corpus)
+# ---------------------------------------------------------------------------
+# Global on/off switch. When false, ai_pipeline._build_stage_prompt produces
+# byte-identical output to the pre-feature behaviour.
+ASSESSMENT_SCENARIO_RAG_ENABLED = config(
+    "ASSESSMENT_SCENARIO_RAG_ENABLED",
+    default=True,
+    cast=bool,
+)
+# Dedicated on-disk Chroma directory for the scenario corpus. Kept separate
+# from CHROMA_PERSIST_DIR (advisory RAG) so the two indexes can evolve
+# independently and so wiping one cannot affect the other.
+SCENARIO_VECTOR_DB_PATH = config(
+    "SCENARIO_VECTOR_DB_PATH",
+    default=str(_BACKEND_BASE_DIR / "data" / "scenario_vector_db"),
+)
+# Per-blueprint nearest-neighbour count requested from Chroma.
+SCENARIO_RAG_TOP_K = config(
+    "SCENARIO_RAG_TOP_K",
+    default=1,
+    cast=int,
+)
+# Hard ceiling on retrieved few-shot examples appended to any single prompt
+# regardless of the blueprint count, so prompt size stays bounded.
+SCENARIO_RAG_MAX_EXAMPLES_PER_PROMPT = config(
+    "SCENARIO_RAG_MAX_EXAMPLES_PER_PROMPT",
+    default=5,
+    cast=int,
+)
+
+# Assessment question generation: "batched" (one Gemini call) or "per_question".
+ASSESSMENT_GENERATION_MODE = config(
+    "ASSESSMENT_GENERATION_MODE",
+    default="batched",
+).strip().lower()
+
+# When True, CoverageTracker.assert_complete() raises if dimension mins are not met.
+ASSESSMENT_COVERAGE_STRICT = config(
+    "ASSESSMENT_COVERAGE_STRICT",
+    default=False,
+    cast=bool,
+)
+
+# Second-pass LLM calls (quota-sensitive; off by default in dev/free tier).
+ASSESSMENT_AMBIGUITY_VALIDATION_ENABLED = config(
+    "ASSESSMENT_AMBIGUITY_VALIDATION_ENABLED",
+    default=False,
+    cast=bool,
+)
+
+ASSESSMENT_RUBRIC_LLM_ENABLED = config(
+    "ASSESSMENT_RUBRIC_LLM_ENABLED",
+    default=False,
+    cast=bool,
+)
+
+# ---------------------------------------------------------------------------
+# Course embedding index (roadmap course matching)
+# ---------------------------------------------------------------------------
+COURSE_VECTOR_DB_PATH = config(
+    "COURSE_VECTOR_DB_PATH",
+    default=str(_BACKEND_BASE_DIR / "data" / "course_vector_db"),
+)
+COURSE_INDEX_TOP_K = config("COURSE_INDEX_TOP_K", default=2, cast=int)
 
 # ---------------------------------------------------------------------------
 # Convenience helpers
@@ -132,4 +179,8 @@ def get_ai_settings_summary() -> dict:
         "celery_queue": AI_CELERY_QUEUE,
         "celery_concurrency": AI_CELERY_CONCURRENCY,
         "embedding_model": EMBEDDING_MODEL,
+        "assessment_scenario_rag_enabled": ASSESSMENT_SCENARIO_RAG_ENABLED,
+        "scenario_vector_db_path": SCENARIO_VECTOR_DB_PATH,
+        "scenario_rag_top_k": SCENARIO_RAG_TOP_K,
+        "scenario_rag_max_examples_per_prompt": SCENARIO_RAG_MAX_EXAMPLES_PER_PROMPT,
     }

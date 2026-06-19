@@ -63,7 +63,7 @@ urlpatterns = [
     path("api/v1/notifications/", include('apps.notifications.urls')),
 
     # Course Service endpoints
-    # path("api/v1/courses/", include('apps.courses.urls')),
+    path("api/v1/courses/", include('apps.courses.urls')),
 
     # API Documentation (OpenAPI/Swagger)
     # As per SRS requirement for REST API documentation

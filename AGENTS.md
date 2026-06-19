@@ -1,10 +1,12 @@
 # Grad-Project Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-04-21
+Auto-generated from all feature plans. Last updated: 2026-05-17
 
 ## Active Technologies
 - Python 3.13 backend; TypeScript 5.8 on React 18.3 frontend + Django 5, Django REST Framework, Celery, Redis cache/broker, Simple JWT, hosted Gemini default demo runtime, local Gemma via Ollama fallback, React Router 6, TanStack Query 5, Vitest, Testing Library (002-ai-rag-experiment)
 - Existing Django relational persistence with JSON-backed assessment payloads; Redis-backed cache in base/production; SQLite acceptable in development (002-ai-rag-experiment)
+- Python 3.13 (Backend), TypeScript 5.8 / React 18.3 (Frontend - not changed by this feature) + Django 5, Django REST Framework, `chromadb>=0.5,<1.0` (already in `Backend/requirements.txt`), `sentence-transformers>=2.2,<3.0` (already in `Backend/requirements.txt`), existing `apps.core.gemma_client.GemmaClient`, existing `apps.core.ai_validation.build_stage_validation_flags()` (005-scenario-rag-corpus)
+- Authored scenarios in version control as Python modules under `Backend/apps/assessments/scenario_corpus/`. Derived Chroma persistent collection `assessment_scenarios` at `SCENARIO_VECTOR_DB_PATH` (default `<BASE_DIR>/data/scenario_vector_db/`, separate from existing advisory `CHROMA_PERSIST_DIR`). No new Django models, no migrations. (005-scenario-rag-corpus)
 
 - Frontend: TypeScript 5.8, React 18.3, Vite 5, React Router 6, TanStack Query 5, Tailwind CSS 3, Radix UI primitives, Vitest, Testing Library
 - Backend: Python 3.13, Django 5.0, Django REST Framework, Simple JWT, drf-spectacular, pytest, Celery, Redis, PostgreSQL for production, SQLite for development
@@ -84,12 +86,10 @@ archive/
 - Treat AI orchestration as deterministic backend workflow code, not agentic planning inside the product runtime.
 
 ## Recent Changes
+- 005-scenario-rag-corpus: Added Python 3.13 (Backend), TypeScript 5.8 / React 18.3 (Frontend - not changed by this feature) + Django 5, Django REST Framework, `chromadb>=0.5,<1.0` (already in `Backend/requirements.txt`), `sentence-transformers>=2.2,<3.0` (already in `Backend/requirements.txt`), existing `apps.core.gemma_client.GemmaClient`, existing `apps.core.ai_validation.build_stage_validation_flags()`
 - 2026-05-04 demo runtime alignment: Hosted Gemini is the default demo provider, with local Gemma/Ollama retained as the fallback path.
 - 003-assessment-baseline-gate: Added Python 3.13 backend; TypeScript 5.8 on React 18.3 frontend + Django 5, Django REST Framework, Celery, Redis cache/broker, Simple JWT, local Gemma via Ollama, React Router 6, TanStack Query 5, Vitest, Testing Library
-- 002-ai-rag-experiment: Added Python 3.13 backend; TypeScript 5.8 on React 18.3 frontend + Django 5, Django REST Framework, Celery, Redis cache/broker, Simple JWT, local Gemma via Ollama, React Router 6, TanStack Query 5, Vitest, Testing Library
 
-- 001-frontend-visual-rebuild: Rebuilt the frontend around the career-atlas visual system, feature-first structure, lazy-loaded routes, shared authenticated shell, and contract-tested frontend/backend interfaces.
-- 2026-04-07 architecture reset: Accepted `docs/product/ADR-001-LOCAL-GEMMA-ARCHITECTURE.md` to replace old OpenAI/Anthropic/LangChain/Pinecone assumptions; later superseded for demo operations by hosted Gemini default with local Ollama fallback.
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

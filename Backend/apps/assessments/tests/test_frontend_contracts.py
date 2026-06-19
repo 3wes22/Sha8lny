@@ -36,8 +36,12 @@ def test_assessment_detail_exposes_presentation_metadata(api_client, assessment_
     )
 
     assert create_response.status_code == status.HTTP_201_CREATED
-    assert create_response.data["presentation"]["submission_state"] == "stage_1_generating"
-    assert create_response.data["presentation"]["question_count"] == 0
+    assert create_response.data["presentation"]["submission_state"] in {
+        "stage_1_generating",
+        "stage_1_ready",
+    }
+    if create_response.data["presentation"]["submission_state"] == "stage_1_generating":
+        assert create_response.data["presentation"]["question_count"] == 0
 
     detail_response = api_client.get(
         reverse("assessment-detail", kwargs={"pk": str(create_response.data["id"])})

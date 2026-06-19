@@ -12,7 +12,8 @@ from apps.progress.models import MilestoneAchievement, UserProgress
 from apps.progress.services import TimeLogService
 from apps.roadmaps.models import Roadmap, RoadmapMilestone, RoadmapTemplate
 from apps.roadmaps.services import RoadmapService
-from apps.users.models import User
+from apps.users.models import User, UserSkill
+from apps.users.milestone_skills import MilestoneSkillService
 
 
 @pytest.fixture
@@ -85,6 +86,14 @@ def test_progress_by_roadmap_reflects_roadmap_updates(api_client, progress_user,
 
     roadmap.refresh_from_db()
     assert roadmap.status == "in_progress"
+
+    first_milestone.refresh_from_db()
+    if first_milestone.skills:
+        granted = MilestoneSkillService.grant_milestone_skills(progress_user, first_milestone)
+        assert granted
+        assert UserSkill.objects.filter(
+            user=progress_user, source="roadmap_milestone", is_deleted=False
+        ).exists()
 
 
 @pytest.mark.django_db

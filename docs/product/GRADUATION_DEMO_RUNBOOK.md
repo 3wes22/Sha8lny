@@ -29,14 +29,16 @@ pip install -r requirements.txt
 cp .env.example .env
 python3 manage.py migrate
 python3 manage.py seed_graduation_demo --reset
+python3 manage.py seed_courses
+python3 manage.py rebuild_course_index
+cd ../ai-models && python -m rag.seeder && cd ../Backend
+python3 manage.py seed_jobs --clear --count 24
+python3 manage.py extract_job_skills --limit 24
+python3 manage.py ai_smoke
 python3 manage.py runserver
 ```
 
-Optional supporting data for the jobs page:
-
-```bash
-python3 manage.py seed_jobs --clear --count 24
-```
+Always run all commands in order after any reset — skipping `rebuild_course_index` or `rag.seeder` will produce zero course matches or ungrounded advisory responses.
 
 ### 2. Frontend
 
@@ -111,13 +113,20 @@ Use this command before each fresh demo pass:
 cd Backend
 source venv/bin/activate
 python3 manage.py seed_graduation_demo --reset
-```
-
-If you also want the supporting jobs surface reset:
-
-```bash
+python3 manage.py seed_courses
+python3 manage.py rebuild_course_index
+cd ../ai-models && python -m rag.seeder && cd ../Backend
 python3 manage.py seed_jobs --clear --count 24
+python3 manage.py extract_job_skills --limit 24
+python3 manage.py ai_smoke
 ```
+
+Always run all eight commands in order after any reset — skipping `rebuild_course_index` or `rag.seeder` will produce zero course matches or ungrounded advisory responses.
+
+## Notes
+
+- **Demo language:** English-only demo; advisory KB is English. Arabic input should redirect gracefully, not crash.
+- **AI runtime:** Hosted Gemini (`AI_PROVIDER=gemini`) is the default; deterministic fallbacks protect every AI feature if the API is unavailable.
 
 ## Verification
 
@@ -126,7 +135,7 @@ Recommended graduation-slice verification commands:
 ```bash
 cd Backend
 python3 manage.py check
-pytest apps/assessments/tests/test_frontend_contracts.py apps/roadmaps/tests/test_frontend_contracts.py apps/advisory/tests.py apps/progress/tests.py apps/users/tests/test_demo_seed.py
+pytest apps/assessments/ apps/roadmaps/ apps/advisory/ apps/jobs/ apps/core/tests.py apps/courses/tests/ apps/integration/tests/ apps/users/tests/test_demo_seed.py
 ```
 
 ```bash

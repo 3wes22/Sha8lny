@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Sha8lny** (also spelled Sha8alny) is an AI-powered career empowerment platform targeting the Egyptian job market. The platform provides personalized career guidance through AI-driven assessments, adaptive learning pathways, job matching, and career advisory.
 
-**Current Status**: Phase 2 Complete (Assessment Module Integration)
-**Implementation Approach**: MVP/Demo with Local LLM (Ollama) - no API costs
+**Current Status**: Phases 0-5 Complete (full Gemini AI integration across Assessment, Roadmap, Jobs, and Advisory modules)
+**Implementation Approach**: Hosted demo runtime on Gemini API (default), with an optional local Ollama fallback. See `docs/product/ADR-002-HOSTED-DEMO-AI-RUNTIME.md`.
 
 ## Project Architecture
 
@@ -197,11 +197,11 @@ apps/<module>/
 - `/assessment/session/:assessmentId` - Assessment taking (✅ Phase 2)
 - `/assessment/results/:assessmentId` - Results display (✅ Phase 2)
 
-**Partially Working (Mock Data)**:
-- `/roadmap` - Learning roadmap
-- `/jobs` - Job search
+**Wired to real backend APIs** (no longer mock data):
+- `/roadmap` - Learning roadmap (AI-generated from assessment, with deterministic fallback)
+- `/jobs` - Job search (skill-matched + LightGBM ranking)
 - `/jobs/saved` - Saved jobs
-- `/advisor` - AI career advisor
+- `/advisor` - AI career advisor (Gemini-backed, RAG-grounded)
 
 ## Development Workflows
 
@@ -352,13 +352,30 @@ npm run lint
 - `Backend/apps/core/models.py` - BaseModel definition
 - `Frontend/src/lib/api.ts` - API client and type definitions
 
+## Module Status (as of current branch)
+
+| Area | Status |
+|---|---|
+| Users / Auth (JWT + Auth0) | ✅ Working, well-tested |
+| Assessments (staged AI, 8 roles, RAG corpus; **weighted** formative scoring) | ✅ Working, strongest coverage |
+| Roadmaps (AI generation + deterministic fallback; O*NET = backend-only PoC) | ✅ Working |
+| Jobs (search, skill match, LightGBM **weak-supervision** ranker + eval, ingest) | ✅ Working |
+| Advisory (Gemini chat, RAG-grounded) | ✅ Working; light test coverage |
+| Progress | 🟡 Working; light test coverage |
+| Notifications | 🟡 Models/API/signals; email/push stubbed |
+| Career Tools (resume/portfolio) | 🟡 CRUD works; generate/ATS return structured responses, PDF export is v2 |
+| Courses (embedding search) | 🟡 Built; URL route currently disabled |
+
+Backend test suite: **274 tests passing**. Frontend builds clean.
+
 ## Current Known Issues
 
-1. **Dashboard Mock Data**: Dashboard still uses hardcoded stats (Phase 7 planned)
-2. **Jobs Mock Data**: Jobs list is static array (Phase 4 planned)
-3. **Advisor Simulated**: Chat uses setTimeout fake responses (Phase 5 planned)
-4. **No Error Boundaries**: Frontend needs React error boundaries
-5. **Celery Not Used**: Background tasks configured but not implemented yet
+1. **Notifications delivery stubbed**: email/push sending not implemented (signals/models exist)
+2. **Career Tools PDF/DOCX export**: deferred to v2 (endpoints return structured JSON, not a file)
+3. **No Error Boundaries**: Frontend could add React error boundaries
+4. **Celery present but optional**: AI tasks can run async; demo path runs them in-request
+5. **roadmap.sh content license**: the vendored `ai-models/data/roadmap-sh-data/` is under a personal-use-only license (no redistribution). Treat as development-only; see `ai-models/data/CITATIONS.md` for the required pre-publication fix.
+6. **Job ranker is a weak-supervision demonstrator**: trained on synthetic fixture postings with pseudo-labels, evaluated by leave-one-group-out NDCG/MAP vs. baselines (`ai-models/models/custom/EVAL_REPORT.md`). Real labeled market data is future work.
 
 ## Getting Help
 
@@ -380,5 +397,5 @@ When completing a phase:
 
 ---
 
-**Last Updated**: Phase 2 Complete - January 2026
-**Next Phase**: Phase 3 - Roadmap Module Integration
+**Last Updated**: Phases 0-5 complete (Gemini AI integration across all core modules)
+**Current Branch Focus**: `005-scenario-rag-corpus` - role-aware scenario retrieval for assessment question generation

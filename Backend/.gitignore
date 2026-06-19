@@ -225,3 +225,9 @@ yarn-error.log*
 # Project Specific
 # ==================================
 # Add any project-specific files to ignore here
+
+# Local Chroma persistent directory for the assessment scenario RAG corpus.
+# Source of truth is version-controlled scenario_corpus/*.py; this directory
+# is a derived, rebuildable index produced by:
+#   python manage.py rebuild_scenario_index
+data/scenario_vector_db/

@@ -18,6 +18,14 @@ from django.utils import timezone
 from datetime import timedelta
 
 from apps.jobs.models import JobPlatform, Job, JobSkill, MarketInsight, SkillDemand
+from apps.jobs.experience_matching import (
+    effective_job_level,
+    experience_fit_label,
+    filter_jobs_for_user_level,
+    job_matches_user_level,
+    resolve_user_career_level,
+)
+from apps.jobs.skill_matching import collect_user_match_skills, compare_skill_sets
 from apps.users.models import User, Skill, UserSkill
 
 
@@ -173,55 +181,101 @@ class JobService:
             - job: Job instance
             - match_score: Percentage match (0-100)
             - matching_skills: List of matched skill names
+            - missing_skills: Required skills the user lacks
+            - explanation: { matching_skills, missing_skills, top_factors }
         """
-        # Get user's skills
-        user_skills = set(
-            UserSkill.objects.filter(
-                user=user,
-                is_deleted=False
-            ).values_list('skill__name', flat=True)
-        )
+        user_skills = JobService._user_skill_names(user)
+        user_career_level = resolve_user_career_level(user)
 
         if not user_skills:
-            # No skills - return recent jobs with 0 match score
-            jobs = JobService.get_recent_jobs(limit=limit)
-            return [{'job': job, 'match_score': 0, 'matching_skills': []} for job in jobs]
+            return []
 
-        # Get active jobs with their required skills
-        jobs = Job.objects.filter(
-            is_active=True,
-            is_deleted=False,
-            platform__is_active=True
-        ).select_related('platform').prefetch_related('job_skills__skill')
+        jobs = list(
+            Job.objects.filter(
+                is_active=True,
+                is_deleted=False,
+                platform__is_active=True,
+            )
+            .select_related("platform")
+            .prefetch_related("job_skills__skill")
+            .order_by("-posted_date")[:200]
+        )
+        jobs_with_requirements = [
+            job
+            for job in jobs
+            if job.job_skills.filter(is_required=True).exists()
+        ]
+        candidate_jobs = jobs_with_requirements or jobs
+        candidate_jobs = filter_jobs_for_user_level(candidate_jobs, user_career_level)
+
+        if not candidate_jobs:
+            return []
+
+        try:
+            from apps.jobs.job_ranking import JobRankingIntegration
+
+            ranked = JobRankingIntegration.rank_user_jobs(
+                user, candidate_jobs, limit=limit
+            )
+            positive = [
+                item
+                for item in ranked
+                if item.get("match_score", 0) > 0
+                and job_matches_user_level(item["job"], user_career_level)
+            ]
+            if positive:
+                return JobService._attach_level_context(positive, user_career_level)[:limit]
+        except Exception:
+            pass
 
         matches = []
-        for job in jobs[:200]:  # Limit to 200 for performance
-            # Get required skills for this job
-            job_required_skills = set(
-                job.job_skills.filter(
-                    is_required=True
-                ).values_list('skill__name', flat=True)
+        for job in candidate_jobs:
+            scores = JobService.compute_match_score(job, user)
+            if scores["match_score"] <= 0:
+                continue
+            explanation = {
+                "matching_skills": scores["matching_skills"],
+                "missing_skills": scores["missing_skills"],
+                "top_factors": [
+                    {
+                        "feature": "required_skill_overlap_ratio",
+                        "value": round(scores["match_score"] / 100.0, 4),
+                        "contribution": round(scores["match_score"] / 100.0, 4),
+                    }
+                ],
+                "experience_fit": experience_fit_label(job, user_career_level),
+                "user_career_level": user_career_level,
+                "job_experience_level": effective_job_level(job),
+            }
+            matches.append(
+                {
+                    "job": job,
+                    "match_score": scores["match_score"],
+                    "matching_skills": scores["matching_skills"],
+                    "missing_skills": scores["missing_skills"],
+                    "explanation": explanation,
+                    "user_career_level": user_career_level,
+                    "job_experience_level": effective_job_level(job),
+                }
             )
 
-            if not job_required_skills:
-                continue
+        matches.sort(key=lambda item: item["match_score"], reverse=True)
+        return JobService._attach_level_context(matches, user_career_level)[:limit]
 
-            # Calculate match
-            matching_skills = user_skills & job_required_skills
-            match_score = int((len(matching_skills) / len(job_required_skills)) * 100)
-
-            if match_score > 0:
-                matches.append({
-                    'job': job,
-                    'match_score': match_score,
-                    'matching_skills': list(matching_skills),
-                    'missing_skills': list(job_required_skills - user_skills)
-                })
-
-        # Sort by match score descending
-        matches.sort(key=lambda x: x['match_score'], reverse=True)
-
-        return matches[:limit]
+    @staticmethod
+    def _attach_level_context(
+        matches: List[Dict[str, Any]], user_career_level: str
+    ) -> List[Dict[str, Any]]:
+        for item in matches:
+            job = item["job"]
+            item.setdefault("user_career_level", user_career_level)
+            item.setdefault("job_experience_level", effective_job_level(job))
+            explanation = item.get("explanation") or {}
+            explanation.setdefault("experience_fit", experience_fit_label(job, user_career_level))
+            explanation.setdefault("user_career_level", user_career_level)
+            explanation.setdefault("job_experience_level", effective_job_level(job))
+            item["explanation"] = explanation
+        return matches
 
     @staticmethod
     @transaction.atomic
@@ -319,6 +373,102 @@ class JobService:
                 skill=skill,
                 defaults={'is_required': is_required}
             )
+
+    @staticmethod
+    def _keyword_extract_skills(job: Job) -> List[str]:
+        """Deterministic skill extraction by matching known skill names in job text."""
+        corpus = " ".join(
+            filter(
+                None,
+                [
+                    job.title,
+                    job.description,
+                    job.requirements,
+                    job.responsibilities,
+                ],
+            )
+        ).lower()
+        if not corpus.strip():
+            return []
+
+        matches: list[str] = []
+        for skill in Skill.objects.filter(is_deleted=False).only("name"):
+            name = str(skill.name or "").strip()
+            if len(name) >= 2 and name.lower() in corpus:
+                matches.append(name)
+        return matches[:12]
+
+    @staticmethod
+    def extract_skills_from_job(job: Job, *, replace_existing: bool = False) -> List[str]:
+        """Extract skills from a job posting using Gemini with keyword fallback."""
+        from apps.core.gemma_client import GemmaClient
+
+        if replace_existing:
+            job.job_skills.all().delete()
+
+        existing = list(job.job_skills.values_list("skill__name", flat=True))
+        if existing:
+            return existing
+
+        combined_text = "\n".join(
+            filter(
+                None,
+                [
+                    f"Title: {job.title}",
+                    f"Description: {job.description}",
+                    f"Requirements: {job.requirements}",
+                    f"Responsibilities: {job.responsibilities}",
+                ],
+            )
+        )[:4000]
+
+        extracted: list[str] = []
+        try:
+            client = GemmaClient(task_type="json_generation", max_output_tokens=256)
+            response = client.generate_structured(
+                prompt=(
+                    "Extract the most important technical skills from this job posting. "
+                    f"Posting:\n{combined_text}"
+                ),
+                system='Return strict JSON: {"skills": ["skill1", "skill2", ...]} with 3-8 items.',
+                required_keys=("skills",),
+            )
+            raw_skills = response.payload.get("skills") if response.payload else []
+            if isinstance(raw_skills, list):
+                extracted = [str(item).strip() for item in raw_skills if str(item).strip()]
+        except Exception:
+            extracted = []
+
+        if not extracted:
+            extracted = JobService._keyword_extract_skills(job)
+
+        if extracted:
+            JobService.add_skills_to_job(job, extracted, is_required=True)
+
+        return extracted
+
+    @staticmethod
+    def _user_skill_names(user: User) -> set[str]:
+        return collect_user_match_skills(user)
+
+    @staticmethod
+    def compute_match_score(job: Job, user: User) -> Dict[str, Any]:
+        """Compute match score for one job against a user's skills/gaps."""
+        user_skills = JobService._user_skill_names(user)
+        job_required_skills = set(
+            job.job_skills.filter(is_required=True).values_list("skill__name", flat=True)
+        )
+        if not job_required_skills:
+            return {"match_score": 0, "matching_skills": [], "missing_skills": []}
+
+        matching_skills, missing_skills, match_score = compare_skill_sets(
+            user_skills, job_required_skills
+        )
+        return {
+            "match_score": match_score,
+            "matching_skills": matching_skills,
+            "missing_skills": missing_skills,
+        }
 
 
 class MarketInsightService:

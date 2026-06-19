@@ -26,10 +26,13 @@ MAX_DOC_CHARS = 280
 MAX_CONTEXT_CHARS = 1600
 
 DEFAULT_SYSTEM_PROMPT = (
-    "You are Sha8alny's career advisory assistant. Give concise, practical "
-    "career guidance grounded in the supplied user context and retrieved "
-    "knowledge snippets. Stay focused on careers, learning strategy, roadmaps, "
-    "and job search decisions."
+    "You are Sha8alny's career advisor for the Egyptian/MENA tech market. "
+    "Answer ONLY using the Retrieved Knowledge and the user's profile/assessment/roadmap context. "
+    "If the knowledge is insufficient, say what you do know and suggest a next step — "
+    "never fabricate salaries, companies, or programs. "
+    "Stay in career-guidance scope: redirect pure coding-implementation questions to "
+    "'how to learn this for a job'. Keep answers under ~180 words, concrete and actionable. "
+    "Respond in the user's language; if unsure, use English."
 )
 
 
@@ -102,6 +105,13 @@ class LLMAdvisoryService:
                     "topic": str(metadata.get("topic") or "").strip(),
                     "score": float(document.get("score") or 0),
                     "excerpt": excerpt,
+                    # citation fields (knowledge-layer payload, Task 1.10);
+                    # safe defaults keep older retriever runtimes working
+                    "source_name": str(metadata.get("source") or "general"),
+                    "url": str(metadata.get("url") or ""),
+                    "section": str(metadata.get("section") or "").strip(),
+                    "file": str(metadata.get("file") or ""),
+                    "confidence_tier": str(document.get("confidence_tier") or "LOW"),
                 }
             )
             total_chars += len(excerpt)
@@ -287,7 +297,7 @@ class LLMAdvisoryService:
                 for token in ("career", "job", "learn", "skill", "roadmap", "interview", "resume")
             ) else "unclear"
 
-        if classification in {"coding_redirect", "unclear", "out_of_scope"}:
+        if classification in {"coding_redirect", "unclear"}:
             return self._scope_response(
                 message=message,
                 runtime=runtime,

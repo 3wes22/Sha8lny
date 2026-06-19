@@ -12,6 +12,7 @@ SRS References:
 
 from rest_framework import serializers
 from apps.jobs.models import JobPlatform, Job, JobSkill, SavedJob, SkillDemand, MarketInsight
+from apps.jobs.services import JobService
 
 
 class JobPlatformSerializer(serializers.ModelSerializer):
@@ -53,6 +54,7 @@ class JobListSerializer(serializers.ModelSerializer):
     is_saved = serializers.SerializerMethodField()
     external_action_available = serializers.SerializerMethodField()
     skill_match_summary = serializers.SerializerMethodField()
+    match_score = serializers.SerializerMethodField()
 
     class Meta:
         model = Job
@@ -75,6 +77,7 @@ class JobListSerializer(serializers.ModelSerializer):
             'is_saved',
             'external_action_available',
             'skill_match_summary',
+            'match_score',
         ]
 
     def get_location(self, obj):
@@ -91,7 +94,9 @@ class JobListSerializer(serializers.ModelSerializer):
         return SavedJob.objects.filter(user=user, job=obj, is_deleted=False).exists()
 
     def get_external_action_available(self, obj):
-        return bool(obj.external_url)
+        from apps.jobs.external_links import resolve_external_apply_url
+
+        return bool(resolve_external_apply_url(obj))
 
     def get_skill_match_summary(self, obj):
         request = self.context.get('request')
@@ -111,6 +116,13 @@ class JobListSerializer(serializers.ModelSerializer):
             return f"Matches {len(overlap)} of your tracked skills."
         return "Few direct matches yet. Review this role against your roadmap focus."
 
+    def get_match_score(self, obj):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if not user or not user.is_authenticated:
+            return None
+        return JobService.compute_match_score(obj, user)["match_score"]
+
 
 class JobSerializer(serializers.ModelSerializer):
     """Complete job information."""
@@ -119,6 +131,8 @@ class JobSerializer(serializers.ModelSerializer):
     location = serializers.SerializerMethodField()
     is_saved = serializers.SerializerMethodField()
     external_action_available = serializers.SerializerMethodField()
+    external_apply_url = serializers.SerializerMethodField()
+    external_apply_label = serializers.SerializerMethodField()
     skill_match_summary = serializers.SerializerMethodField()
 
     class Meta:
@@ -147,6 +161,8 @@ class JobSerializer(serializers.ModelSerializer):
             'salary_period',
             'salary_disclosed',
             'external_url',
+            'external_apply_url',
+            'external_apply_label',
             'application_deadline',
             'posted_date',
             'skills',
@@ -166,7 +182,19 @@ class JobSerializer(serializers.ModelSerializer):
         return JobListSerializer(context=self.context).get_is_saved(obj)
 
     def get_external_action_available(self, obj):
-        return bool(obj.external_url)
+        from apps.jobs.external_links import resolve_external_apply_url
+
+        return bool(resolve_external_apply_url(obj))
+
+    def get_external_apply_url(self, obj):
+        from apps.jobs.external_links import resolve_external_apply_url
+
+        return resolve_external_apply_url(obj)
+
+    def get_external_apply_label(self, obj):
+        from apps.jobs.external_links import external_apply_label
+
+        return external_apply_label(obj)
 
     def get_skill_match_summary(self, obj):
         return JobListSerializer(context=self.context).get_skill_match_summary(obj)

@@ -368,12 +368,162 @@ class TestJobServiceSkillMatching:
         assert len(matches[0]['missing_skills']) == 0
 
     def test_no_user_skills(self, db, test_user, backend_job):
-        """Test matching when user has no skills."""
+        """Test matching when user has no inferable skills."""
         matches = JobService.match_jobs_for_user(test_user, limit=10)
+        assert matches == []
 
-        # Should return recent jobs with 0 match score
-        assert len(matches) > 0
-        assert all(match['match_score'] == 0 for match in matches)
+    def test_match_includes_explanation(self, db, test_user, backend_job, python_skill):
+        """Matched jobs include explainability payload."""
+        UserSkill.objects.create(
+            user=test_user,
+            skill=python_skill,
+            proficiency_level="intermediate",
+        )
+        matches = JobService.match_jobs_for_user(test_user, limit=5)
+        assert matches
+        assert "explanation" in matches[0]
+        assert "matching_skills" in matches[0]["explanation"]
+
+
+@pytest.mark.django_db
+class TestExperienceLevelMatching:
+    def test_entry_user_excludes_senior_jobs(
+        self, db, test_user, job_platform, python_skill
+    ):
+        from apps.roadmaps.models import Roadmap, RoadmapTemplate
+
+        entry_job = Job.objects.create(
+            platform=job_platform,
+            external_id="entry-filter-1",
+            external_url="https://wuzzuf.net/jobs/p/entry-filter-1",
+            title="Junior Backend Developer",
+            company_name="Co",
+            experience_level="entry",
+            location_country="Egypt",
+        )
+        senior_job = Job.objects.create(
+            platform=job_platform,
+            external_id="senior-filter-1",
+            external_url="https://wuzzuf.net/jobs/p/senior-filter-1",
+            title="Senior Backend Engineer",
+            company_name="Co",
+            experience_level="senior",
+            location_country="Egypt",
+        )
+        JobService.add_skills_to_job(entry_job, ["Python"], is_required=True)
+        JobService.add_skills_to_job(senior_job, ["Python"], is_required=True)
+        UserSkill.objects.create(
+            user=test_user,
+            skill=python_skill,
+            proficiency_level="beginner",
+        )
+        template = RoadmapTemplate.objects.create(
+            title="Backend Entry Filter",
+            slug="backend-entry-filter",
+            description="Entry path",
+            target_career="Backend Developer",
+            career_level=RoadmapTemplate.ENTRY_LEVEL,
+            estimated_duration_weeks=12,
+            difficulty_level="beginner",
+        )
+        Roadmap.objects.create(
+            user=test_user,
+            template=template,
+            title="My backend path",
+            target_career="Backend Developer",
+            current_level="Entry level",
+            target_level="Junior developer",
+            estimated_duration_weeks=12,
+            status=Roadmap.ACTIVE,
+        )
+
+        matches = JobService.match_jobs_for_user(test_user, limit=20)
+        job_ids = {item["job"].id for item in matches}
+        assert entry_job.id in job_ids
+        assert senior_job.id not in job_ids
+        assert matches[0].get("user_career_level") == "entry"
+
+    def test_milestone_skills_improve_job_match(
+        self, db, test_user, job_platform, python_skill, django_skill
+    ):
+        from apps.roadmaps.models import Roadmap, RoadmapMilestone, RoadmapPhase, RoadmapTemplate
+        from apps.users.milestone_skills import MilestoneSkillService
+        from apps.users.models import UserSkill
+
+        template = RoadmapTemplate.objects.create(
+            title="Backend Path Skills",
+            slug="backend-path-skills-match",
+            description="Test",
+            target_career="Backend Developer",
+            career_level=RoadmapTemplate.ENTRY_LEVEL,
+            estimated_duration_weeks=12,
+            difficulty_level="beginner",
+        )
+        roadmap = Roadmap.objects.create(
+            user=test_user,
+            template=template,
+            title="Backend",
+            target_career="Backend Developer",
+            target_level="Junior",
+            estimated_duration_weeks=12,
+            status=Roadmap.ACTIVE,
+        )
+        phase = RoadmapPhase.objects.create(
+            roadmap=roadmap,
+            title="Phase 1",
+            description="",
+            order=1,
+            estimated_duration_weeks=4,
+        )
+        milestone = RoadmapMilestone.objects.create(
+            phase=phase,
+            title="Learn Django",
+            description="",
+            milestone_type="course",
+            order=1,
+            estimated_duration_hours=10,
+            skills=["Python", "Django"],
+        )
+        MilestoneSkillService.grant_milestone_skills(test_user, milestone)
+        assert UserSkill.objects.filter(
+            user=test_user, skill=python_skill, source="roadmap_milestone"
+        ).exists()
+
+        job = Job.objects.create(
+            platform=job_platform,
+            external_id="match-milestone-2",
+            external_url="https://wuzzuf.net/jobs/p/match-milestone-2",
+            title="Junior Python Developer",
+            company_name="Co",
+            experience_level="entry",
+            location_country="Egypt",
+        )
+        JobService.add_skills_to_job(job, ["Python", "Django"], is_required=True)
+        matches = JobService.match_jobs_for_user(test_user, limit=5)
+        assert matches
+        assert matches[0]["match_score"] == 100
+
+
+@pytest.mark.django_db
+class TestJobMatchAPI:
+    """Tests for GET /jobs/match/."""
+
+    def test_match_endpoint_returns_explanation(
+        self, api_client, test_user, backend_job, python_skill
+    ):
+        api_client.force_authenticate(user=test_user)
+        UserSkill.objects.create(
+            user=test_user,
+            skill=python_skill,
+            proficiency_level="intermediate",
+        )
+        url = reverse("jobs:job-match")
+        response = api_client.get(url, {"limit": 5})
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data["results"]
+        assert len(results) > 0
+        assert "explanation" in results[0]
+        assert "user_career_level" in response.data
 
 
 @pytest.mark.django_db

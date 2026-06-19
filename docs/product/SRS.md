@@ -142,8 +142,8 @@ Sha8alny is a standalone, web-based platform integrated with external services.
 
 #### **External Services**
 - **Auth0** – Authentication  
-- **LLM APIs** (OpenAI GPT-4, Claude) – AI processing  
-- **Vector Database** – Semantic search for RAG  
+- **Hosted Gemini API** – AI processing (via `GemmaClient`)  
+- **ChromaDB** – Local vector store for RAG and course matching  
 - **Job Market Data** – Wuzzuf, Bayt scraping  
 
 #### **User Interactions**
@@ -294,9 +294,9 @@ Sha8alny supports three main user types:
 
 #### **Dependencies**
 - Auth0 for authentication
-- OpenAI/Anthropic for text generation
+- Hosted Gemini API for text generation (deterministic fallbacks when unavailable)
 - PostgreSQL database availability
-- Vector database for semantic search
+- ChromaDB for semantic search (career knowledge + course embeddings)
 - External job board structures may change over time
 
 # 3. Specific Requirements
@@ -514,18 +514,19 @@ A roadmap shall contain:
   - Roadmaps
   - Jobs
 
-### **SI-3: Vector Database**
+### **SI-3: Vector Database (ChromaDB)**
 - Stores embeddings for:
-  - Skills
-  - Career knowledge base
-  - Course descriptions
+  - Career knowledge base (advisory RAG)
+  - Course catalog (roadmap matching)
+  - Assessment scenario corpus (few-shot augmentation)
 
-### **SI-4: LLM API (OpenAI, Anthropic)**
+### **SI-4: LLM API (Hosted Gemini)**
 - Used for:
-  - Skill assessment
-  - Roadmap generation
-  - Chat advisory
-  - Text embedding generation
+  - Staged skill assessment generation and evaluation
+  - Roadmap copy personalization
+  - Advisory chat responses
+  - Job skill extraction
+- Accessed exclusively through `GemmaClient`; local Ollama is an emergency fallback only
 
 ### **SI-5: Job Websites**
 - External job boards for scraping

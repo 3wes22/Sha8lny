@@ -13,7 +13,7 @@ from time import monotonic, sleep
 from typing import Any, Iterable, Optional
 
 from apps.core.ai_contracts import AIInvocationMetadata
-from apps.core.ai_logging import build_ai_metadata
+from apps.core.ai_logging import build_ai_metadata, log_ai_invocation
 from apps.core.ai_settings import (
     AI_PROVIDER,
     GEMINI_API_BASE_URL,
@@ -266,17 +266,16 @@ class GemmaClient:
             model=self.model,
             provider=self.provider_name,
         )
-        logger.info(
-            "LLM request completed",
-            extra={
-                "provider": self.provider_name,
-                "model": self.model,
-                "task_type": self.task_type,
-                "latency_ms": metadata.processing_time_ms,
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-                "trace_id": metadata.trace_id,
-            },
+        log_ai_invocation(
+            trace_id=metadata.trace_id,
+            feature=self.task_type,
+            provider=self.provider_name,
+            model=self.model,
+            latency_ms=metadata.processing_time_ms,
+            input_tokens=prompt_tokens or 0,
+            output_tokens=completion_tokens or 0,
+            validation_success=payload is not None,
+            task_type=self.task_type,
         )
         return GemmaResponse(
             text=text,

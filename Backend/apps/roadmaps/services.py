@@ -23,6 +23,41 @@ from apps.courses.models import Course
 from apps.notifications.signals import roadmap_generated, roadmap_updated
 
 
+# ---------------------------------------------------------------------------
+# Roadmap sizing heuristics (stated assumptions, not empirically validated)
+# ---------------------------------------------------------------------------
+# These constants drive the deterministic fallback blueprint. They are design
+# heuristics chosen to produce a realistic part-time study plan, not learning
+# science with measured outcomes — documented here so each number has an
+# explicit, defensible rationale rather than being an inline "magic number".
+#
+# Baseline study hours by starting proficiency. Anchored to a ~10-12 week
+# part-time plan at the default weekly study load (see MIN_PLAN_WEEKS): a
+# beginner needs more total hours to reach job-readiness than an advanced
+# learner who is mostly closing targeted gaps.
+BASE_HOURS_BY_LEVEL = {
+    'beginner': 96,
+    'intermediate': 72,
+    'advanced': 54,
+}
+DEFAULT_BASE_HOURS = 72  # used when the current level is unknown
+
+# Extra study hours budgeted per assessment-flagged focus item (priority skill
+# or gap). Each focus item adds roughly one short course/practice unit.
+HOURS_PER_FOCUS_ITEM = 10
+
+# Lower bound on plan length so a roadmap always spans a meaningful horizon
+# even when computed hours are small (avoids a 1-2 week "plan").
+MIN_PLAN_WEEKS = 8
+
+# Fraction of total weeks allocated to each of the three phases
+# (foundation / gap-closing / portfolio+job-search). Sums to 1.0.
+PHASE_WEEK_SPLIT = (0.30, 0.40, 0.30)
+
+# Minimum weeks per phase so no phase collapses to zero.
+MIN_PHASE_WEEKS = 2
+
+
 class RoadmapTemplateService:
     """Service for roadmap template management"""
 
@@ -575,13 +610,9 @@ class RoadmapService:
     ) -> List[Dict[str, Any]]:
         """Create a deterministic, assessment-aware roadmap structure."""
         total_focus_items = max(1, len(priority_skills) + len(gaps))
-        base_hours = {
-            'beginner': 96,
-            'intermediate': 72,
-            'advanced': 54,
-        }.get(current_level, 72)
-        total_hours = base_hours + (total_focus_items * 10)
-        estimated_weeks = max(8, math.ceil(total_hours / max(weekly_hours, 1)))
+        base_hours = BASE_HOURS_BY_LEVEL.get(current_level, DEFAULT_BASE_HOURS)
+        total_hours = base_hours + (total_focus_items * HOURS_PER_FOCUS_ITEM)
+        estimated_weeks = max(MIN_PLAN_WEEKS, math.ceil(total_hours / max(weekly_hours, 1)))
 
         first_skill = priority_skills[0] if priority_skills else (top_skills[0] if top_skills else target_career)
         second_skill = priority_skills[1] if len(priority_skills) > 1 else first_skill
@@ -589,14 +620,21 @@ class RoadmapService:
         second_gap = gaps[1] if len(gaps) > 1 else 'project execution'
         lead_strength = strengths[0] if strengths else 'your strongest skills'
 
+        foundation_weeks = max(MIN_PHASE_WEEKS, math.ceil(estimated_weeks * PHASE_WEEK_SPLIT[0]))
+        gap_weeks = max(MIN_PHASE_WEEKS, math.ceil(estimated_weeks * PHASE_WEEK_SPLIT[1]))
+        # Third phase takes the remainder (may fall below the floor); the guard
+        # below then borrows from the gap phase so the three phases still sum to
+        # ``estimated_weeks``. Clamping here instead would make the guard dead
+        # code and silently overshoot the planned duration.
         phase_weeks = [
-            max(2, math.ceil(estimated_weeks * 0.3)),
-            max(2, math.ceil(estimated_weeks * 0.4)),
-            max(2, estimated_weeks - max(2, math.ceil(estimated_weeks * 0.3)) - max(2, math.ceil(estimated_weeks * 0.4))),
+            foundation_weeks,
+            gap_weeks,
+            estimated_weeks - foundation_weeks - gap_weeks,
         ]
-        if phase_weeks[2] < 2:
-            phase_weeks[1] = max(2, phase_weeks[1] - (2 - phase_weeks[2]))
-            phase_weeks[2] = 2
+        if phase_weeks[2] < MIN_PHASE_WEEKS:
+            deficit = MIN_PHASE_WEEKS - phase_weeks[2]
+            phase_weeks[1] = max(MIN_PHASE_WEEKS, phase_weeks[1] - deficit)
+            phase_weeks[2] = MIN_PHASE_WEEKS
 
         return [
             {
@@ -683,7 +721,7 @@ class RoadmapService:
                     status='not_started',
                     is_required=True,
                     skills=milestone_data.get('skills', []),
-                    resources=[],
+                    resources=milestone_data.get('resources', []),
                 )
 
     @staticmethod
@@ -821,14 +859,37 @@ class RoadmapService:
             roadmap.template = template
         roadmap.save(update_fields=['ai_processing_status', 'ai_processing_error', 'metadata', 'template', 'updated_at'])
 
-        phases_data = RoadmapService._build_personalized_phase_blueprint(
+        from apps.core.ai_logging import log_ai_invocation
+        from apps.roadmaps.assembler import RoadmapAssembler
+
+        phases_data, provenance = RoadmapAssembler.assemble(
+            user=roadmap.user,
             target_career=roadmap.target_career,
+            assessment_result=assessment,
             current_level=roadmap.current_level,
-            strengths=strengths,
-            gaps=gaps,
-            priority_skills=priority_skills,
-            top_skills=top_skills,
             weekly_hours=roadmap.weekly_hours_commitment,
+            priority_skills=priority_skills,
+            gaps=gaps,
+            strengths=strengths,
+            top_skills=top_skills,
+        )
+        generation['provenance'] = provenance.to_dict()
+        log_ai_invocation(
+            trace_id=generation.get('trace_id') or roadmap.id.hex,
+            feature="roadmap_assembly",
+            provider="deterministic",
+            model=None,
+            latency_ms=0,
+            input_tokens=0,
+            output_tokens=0,
+            validation_success=True,
+            fallback_used=provenance.fallback_used,
+            task_type="roadmap_structure",
+            extra={
+                "structure_source": provenance.structure_source,
+                "retrieval_chunk_count": provenance.retrieval_chunk_count,
+                "retrieved_doc_count": len(provenance.retrieved_doc_ids),
+            },
         )
         estimated_duration_weeks = sum(phase['weeks'] for phase in phases_data)
         default_summary = (
@@ -850,13 +911,14 @@ class RoadmapService:
 
         roadmap.phases.all().delete()
         RoadmapService._create_personalized_structure(roadmap, personalization.phases)
+        RoadmapService.match_courses_for_roadmap(roadmap)
 
         generation.update(
             {
                 'status': 'completed',
                 'runtime_version': personalization.metadata.version,
                 'trace_id': personalization.metadata.trace_id,
-                'fallback_used': personalization.metadata.fallback_used,
+                'fallback_used': personalization.metadata.fallback_used or provenance.fallback_used,
                 'error_code': personalization.metadata.error_code,
                 'provider': personalization.metadata.provider,
             }
@@ -904,6 +966,65 @@ class RoadmapService:
         return roadmap
 
     @staticmethod
+    def _milestone_search_query(milestone: RoadmapMilestone, roadmap: Roadmap) -> str:
+        """Build the embedding search query from milestone skills and roadmap context."""
+        skills = milestone.skills if isinstance(milestone.skills, list) else []
+        skill_text = ", ".join(str(item) for item in skills[:5])
+        return f"{roadmap.target_career} {milestone.title} {skill_text}".strip()
+
+    @staticmethod
+    def match_courses_for_milestone(
+        milestone: RoadmapMilestone,
+        roadmap: Roadmap,
+        *,
+        top_k: Optional[int] = None,
+    ) -> None:
+        """Link embedding-matched courses to a milestone (no LLM call)."""
+        from apps.core.ai_settings import COURSE_INDEX_TOP_K
+        from apps.courses.course_index import CourseIndex
+
+        if milestone.milestone_type != RoadmapMilestone.COURSE:
+            return
+
+        query = RoadmapService._milestone_search_query(milestone, roadmap)
+        matches = CourseIndex.search(query, top_k=top_k or COURSE_INDEX_TOP_K)
+        if not matches:
+            return
+
+        linked_course_ids = set(milestone.courses.values_list("course_id", flat=True))
+        order = milestone.courses.count()
+
+        for match in matches:
+            course_id = match.get("course_id")
+            if not course_id or course_id in linked_course_ids:
+                continue
+            try:
+                course = Course.objects.get(id=course_id, is_deleted=False)
+            except Course.DoesNotExist:
+                continue
+
+            order += 1
+            score = Decimal(str(round(float(match.get("score", 0)) * 100, 2)))
+            RoadmapService.add_course_to_milestone(
+                milestone=milestone,
+                course=course,
+                order=order,
+                is_primary=order == 1,
+                match_score=score,
+                recommendation_reason=(
+                    f"Embedding similarity match ({score}%) for {milestone.title}."
+                ),
+            )
+            linked_course_ids.add(course_id)
+
+    @staticmethod
+    def match_courses_for_roadmap(roadmap: Roadmap) -> None:
+        """Attach embedding-matched courses to all course-type milestones on a roadmap."""
+        for phase in roadmap.phases.filter(is_deleted=False).prefetch_related("milestones"):
+            for milestone in phase.milestones.filter(is_deleted=False):
+                RoadmapService.match_courses_for_milestone(milestone, roadmap)
+
+    @staticmethod
     def record_generation_failure(
         roadmap: Roadmap,
         *,
@@ -931,8 +1052,8 @@ class RoadmapService:
         """
         Generate AI-powered personalized roadmap.
 
-        This method will be integrated with OpenAI/Claude API for roadmap generation.
-        For now, it creates a skeleton roadmap that can be populated.
+        Delegates to ``create_ai_roadmap_shell`` and ``populate_ai_roadmap`` which
+        use the shared Gemini runtime with deterministic fallbacks.
 
         Args:
             user: User instance

@@ -4,6 +4,7 @@ Assessment API views with staged-skills rollout and legacy compatibility.
 
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -39,10 +40,19 @@ from apps.core.ai_throttles import AIBurstThrottle, AISustainedThrottle
 from apps.core.health_checks import get_ai_runtime_health
 
 
+logger = logging.getLogger(__name__)
+
+
 def dispatch_assessment_task(task, eager_runner, assessment_id: str):
     if getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):
         task_id = uuid4().hex
-        eager_runner(assessment_id, task_id=task_id)
+        try:
+            eager_runner(assessment_id, task_id=task_id)
+        except Exception:
+            logger.exception(
+                "Assessment generation failed in eager mode for assessment %s",
+                assessment_id,
+            )
         return SimpleNamespace(id=task_id)
     return task.delay(assessment_id)
 
@@ -76,21 +86,28 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
 
         assessment = serializer.save()
-        if assessment.is_staged:
-            task = dispatch_assessment_task(
-                generate_stage_one_task,
-                run_generate_stage_one,
-                str(assessment.id),
+        try:
+            if assessment.is_staged:
+                task = dispatch_assessment_task(
+                    generate_stage_one_task,
+                    run_generate_stage_one,
+                    str(assessment.id),
+                )
+            else:
+                task = dispatch_assessment_task(
+                    generate_assessment_questions_task,
+                    run_generate_assessment_questions,
+                    str(assessment.id),
+                )
+            assessment.ai_task_id = getattr(task, "id", "") or ""
+            assessment.save(update_fields=["ai_task_id", "updated_at"])
+        except Exception:
+            logger.exception(
+                "Failed to queue assessment generation for assessment %s",
+                assessment.id,
             )
-        else:
-            task = dispatch_assessment_task(
-                generate_assessment_questions_task,
-                run_generate_assessment_questions,
-                str(assessment.id),
-            )
-        assessment.ai_task_id = getattr(task, "id", "") or ""
-        assessment.save(update_fields=["ai_task_id", "updated_at"])
 
+        assessment.refresh_from_db()
         return Response(AssessmentSerializer(assessment).data, status=status.HTTP_201_CREATED)
 
     def list(self, request, *args, **kwargs):
@@ -130,7 +147,7 @@ class AssessmentViewSet(viewsets.ModelViewSet):
             require_live_llm = bool(require_live_llm)
 
         role_graph = load_role_graph(resolve_role_key(target_career))
-        questions, metadata = AssessmentAIService.generate_stage_one(role_graph.role_key, role_graph)
+        questions, metadata, retrieval_info = AssessmentAIService.generate_stage_one(role_graph.role_key, role_graph)
         client_questions = AssessmentService._normalize_staged_questions(questions)
         runtime_health = get_ai_runtime_health()
 

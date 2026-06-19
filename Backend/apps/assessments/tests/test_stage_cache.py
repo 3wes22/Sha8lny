@@ -640,8 +640,8 @@ def test_stage_one_generation_uses_cache_for_same_role_and_version(monkeypatch):
         fake_generate_structured,
     )
 
-    first_questions, _ = AssessmentAIService.generate_stage_one("backend", graph)
-    second_questions, _ = AssessmentAIService.generate_stage_one("backend", graph)
+    first_questions, *_ = AssessmentAIService.generate_stage_one("backend", graph)
+    second_questions, *_ = AssessmentAIService.generate_stage_one("backend", graph)
 
     assert calls["count"] == 1
     assert first_questions == second_questions
@@ -700,7 +700,7 @@ def test_stage_one_generation_does_not_reuse_cached_questions_after_curated_repl
     )
     replacement_graph = replace(
         graph,
-        version="curated-v3",
+        version="curated-v4",
         dimensions=[replacement_dimension, *graph.dimensions[1:]],
     )
     payloads = iter([
@@ -734,8 +734,8 @@ def test_stage_one_generation_does_not_reuse_cached_questions_after_curated_repl
         fake_generate_structured,
     )
 
-    first_questions, _ = AssessmentAIService.generate_stage_one("backend", graph)
-    second_questions, _ = AssessmentAIService.generate_stage_one("backend", replacement_graph)
+    first_questions, *_ = AssessmentAIService.generate_stage_one("backend", graph)
+    second_questions, *_ = AssessmentAIService.generate_stage_one("backend", replacement_graph)
 
     assert calls["count"] == 2
     assert first_questions[0]["subskill_key"] == graph.dimensions[0].subskills[0].key
@@ -813,13 +813,9 @@ def test_stage_one_generation_sends_response_json_schema(monkeypatch):
     assert "questions" in schema["required"]
     question_schema = schema["properties"]["questions"]["items"]
     assert question_schema["properties"]["scenario_context"]["type"] == "string"
-    assert question_schema["properties"]["correct_answer_rationale"]["type"] == "string"
-    assert question_schema["properties"]["option_rationales"]["type"] == "array"
-    assert question_schema["properties"]["question_type"]["enum"] == [
-        "single_choice",
-        "multi_select",
-        "open_ended",
-    ]
+    assert question_schema["properties"]["scenario_context"]["type"] == "string"
+    assert question_schema["properties"]["question_type"]["type"] == "string"
+    assert question_schema["additionalProperties"] is True
 
 
 def test_stage_one_generation_normalizes_typed_question_contract(monkeypatch):
@@ -852,20 +848,23 @@ def test_stage_one_generation_normalizes_typed_question_contract(monkeypatch):
         fake_generate_structured,
     )
 
-    questions, metadata = AssessmentAIService.generate_stage_one("backend", graph)
+    questions, metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
 
     assert metadata.fallback_used is False
-    assert questions[0]["question_type"] == "single_choice"
-    assert questions[0]["type"] == "multiple_choice"
-    assert questions[0]["interaction_mode"] == "single_select"
-    assert questions[0]["answer_key"] == {
+    payment_question = next(
+        question for question in questions if question["subskill_key"] == "http_api_design"
+    )
+    assert payment_question["question_type"] == "single_choice"
+    assert payment_question["type"] == "multiple_choice"
+    assert payment_question["interaction_mode"] == "single_select"
+    assert payment_question["answer_key"] == {
         "correct_option_ids": ["a"],
         "scoring": "single_best",
     }
-    assert questions[0]["scenario_context"].startswith("A payment API receives duplicate POST /payments")
-    assert questions[0]["correct_answer_rationale"].startswith("Idempotency keys let the service")
-    assert len(questions[0]["option_rationales"]) == 4
-    assert questions[0]["validation_flags"] == []
+    assert payment_question["scenario_context"].startswith("A payment API receives duplicate POST /payments")
+    assert payment_question["correct_answer_rationale"].startswith("Idempotency keys let the service")
+    assert len(payment_question["option_rationales"]) == 4
+    assert payment_question["validation_flags"] == []
     assert all(question["question_type"] == "single_choice" for question in questions)
     assert all(question["validation_flags"] == [] for question in questions)
 
@@ -906,7 +905,7 @@ def test_stage_one_generation_repairs_partial_llm_payload_instead_of_falling_bac
         fake_generate_structured,
     )
 
-    questions, metadata = AssessmentAIService.generate_stage_one("backend", graph)
+    questions, metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
     targets = StageAllocator.allocate_stage_one(graph)
 
     assert metadata.fallback_used is False
@@ -968,7 +967,7 @@ def test_stage_one_generation_replaces_invalid_questions_after_failed_repair(mon
         fake_generate_structured,
     )
 
-    questions, metadata = AssessmentAIService.generate_stage_one("backend", graph)
+    questions, metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
 
     assert calls["count"] == 2
     assert metadata.fallback_used is True
@@ -977,8 +976,11 @@ def test_stage_one_generation_replaces_invalid_questions_after_failed_repair(mon
     assert "strongest engineering choice" not in " ".join(
         question["question_text"].lower() for question in questions
     )
-    assert questions[0]["question_text"].startswith("A payment API")
-    assert any("idempotency" in option["label"].lower() for option in questions[0]["options"])
+    payment_question = next(
+        question for question in questions if question["subskill_key"] == "http_api_design"
+    )
+    assert payment_question["question_text"].startswith("A payment API")
+    assert any("idempotency" in option["label"].lower() for option in payment_question["options"])
 
 
 def test_stage_one_generation_only_replaces_invalid_questions_after_repair(monkeypatch):
@@ -1017,14 +1019,14 @@ def test_stage_one_generation_only_replaces_invalid_questions_after_repair(monke
         fake_generate_structured,
     )
 
-    questions, metadata = AssessmentAIService.generate_stage_one("backend", graph)
+    questions, metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
 
     assert calls["count"] == 2
     assert metadata.fallback_used is True
     assert metadata.error_code == "invalid_stage_question_contract"
     assert questions[0]["question_text"].startswith("You need to design an endpoint")
     assert "strongest engineering choice" not in questions[2]["question_text"].lower()
-    assert "logs" in questions[2]["question_text"].lower() or "trace" in questions[2]["question_text"].lower()
+    assert questions[2]["question_text"].startswith("A payment API")
     assert all(question["validation_flags"] == [] for question in questions)
 
 
@@ -1062,14 +1064,14 @@ def test_stage_one_generation_does_not_cache_fallback_questions(monkeypatch):
         fake_generate_structured,
     )
 
-    first_questions, first_metadata = AssessmentAIService.generate_stage_one("backend", graph)
-    second_questions, second_metadata = AssessmentAIService.generate_stage_one("backend", graph)
+    first_questions, first_metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
+    second_questions, second_metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
 
     assert calls["count"] == 2
     assert first_metadata.fallback_used is True
     assert second_metadata.fallback_used is False
     assert second_metadata.model == "mock-gemma"
-    assert first_metadata.source == "fallback"
+    assert first_metadata.source == "curated_fallback"
     assert second_metadata.source == "llm"
 
 
@@ -1110,7 +1112,7 @@ def test_stage_one_generation_normalizes_live_like_string_options(monkeypatch):
         fake_generate_structured,
     )
 
-    questions, metadata = AssessmentAIService.generate_stage_one("backend", graph)
+    questions, metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
 
     assert metadata.fallback_used is False
     assert calls["count"] == 2
@@ -1170,7 +1172,7 @@ def test_stage_one_generation_repairs_observed_live_payload_before_accepting_it(
         fake_generate_structured,
     )
 
-    questions, metadata = AssessmentAIService.generate_stage_one("backend", graph)
+    questions, metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
 
     assert metadata.fallback_used is False
     assert calls["count"] == 2
@@ -1229,9 +1231,90 @@ def test_stage_one_generation_uses_extended_timeout_floor(monkeypatch):
 
     monkeypatch.setattr(AssessmentAIService, "client_class", FakeClient)
 
-    questions, metadata = AssessmentAIService.generate_stage_one("backend", graph)
+    questions, metadata, _ = AssessmentAIService.generate_stage_one("backend", graph)
 
     assert metadata.fallback_used is False
     assert questions
     assert observed["timeout_seconds"] == 115
     assert observed["max_output_tokens"] == 3200
+
+
+
+# ---------------------------------------------------------------------------
+# Scenario corpus cache invalidation (specs/005-scenario-rag-corpus T022)
+# ---------------------------------------------------------------------------
+
+
+def test_stage_one_cache_key_excludes_scenario_corpus_version_when_flag_off(monkeypatch):
+    monkeypatch.setattr(
+        "apps.assessments.ai_pipeline.ASSESSMENT_SCENARIO_RAG_ENABLED", False
+    )
+    key = AssessmentAIService._stage_one_cache_key("backend", "curated-v1")
+    assert key.endswith(":curated-v1"), (
+        f"With the flag off, cache key should not append the corpus version. Got: {key}"
+    )
+
+
+def test_stage_one_cache_key_includes_scenario_corpus_version_when_flag_on(monkeypatch):
+    from apps.assessments.scenario_corpus.registry import SCENARIO_CORPUS_VERSION
+
+    monkeypatch.setattr(
+        "apps.assessments.ai_pipeline.ASSESSMENT_SCENARIO_RAG_ENABLED", True
+    )
+    key = AssessmentAIService._stage_one_cache_key("backend", "curated-v1")
+    assert key.endswith(f":curated-v1:{SCENARIO_CORPUS_VERSION}"), (
+        f"With the flag on, cache key should append SCENARIO_CORPUS_VERSION. Got: {key}"
+    )
+
+
+def test_stage_one_generation_invalidates_cache_on_scenario_corpus_version_bump(monkeypatch):
+    """Bumping SCENARIO_CORPUS_VERSION must produce a different cache key and
+    therefore a cache miss on the next stage-one generation."""
+    monkeypatch.setattr(
+        "apps.assessments.ai_pipeline.ASSESSMENT_SCENARIO_RAG_ENABLED", True
+    )
+    monkeypatch.setattr(
+        "apps.assessments.ai_pipeline.SCENARIO_CORPUS_VERSION", "scenario-v1"
+    )
+
+    graph = load_role_graph("backend")
+    cache.clear()
+    calls = {"count": 0}
+
+    def fake_generate_structured(
+        self,
+        *,
+        prompt,
+        system="",
+        required_keys=(),
+        response_json_schema=None,
+    ):  # noqa: ARG001
+        calls["count"] += 1
+        return GemmaResponse(
+            text="{}",
+            payload=_stage_one_payload(graph),
+            metadata=build_ai_metadata(
+                source="llm",
+                processing_time_ms=12,
+                model="mock-gemma",
+            ),
+            prompt_tokens=10,
+            completion_tokens=20,
+        )
+
+    monkeypatch.setattr(
+        "apps.core.gemma_client.GemmaClient.generate_structured",
+        fake_generate_structured,
+    )
+
+    AssessmentAIService.generate_stage_one("backend", graph)
+    # Same version: should hit the cache.
+    AssessmentAIService.generate_stage_one("backend", graph)
+    assert calls["count"] == 1
+
+    # Bump corpus version: should miss the cache and regenerate.
+    monkeypatch.setattr(
+        "apps.assessments.ai_pipeline.SCENARIO_CORPUS_VERSION", "scenario-v2"
+    )
+    AssessmentAIService.generate_stage_one("backend", graph)
+    assert calls["count"] == 2

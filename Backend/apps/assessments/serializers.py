@@ -114,6 +114,13 @@ class AssessmentSerializer(serializers.ModelSerializer):
             if obj.total_questions:
                 progress_ratio = round((obj.answered_questions / obj.total_questions) * 100, 2)
 
+            stage_meta = (obj.generation_metadata or {}).get(
+                'stage_one' if obj.stage == 'stage_1' else 'stage_two',
+                {},
+            )
+            if not isinstance(stage_meta, dict):
+                stage_meta = {}
+
             return {
                 'question_count': question_count,
                 'current_index': current_index,
@@ -122,6 +129,8 @@ class AssessmentSerializer(serializers.ModelSerializer):
                 'submission_state': submission_state,
                 'result_summary_available': obj.has_result,
                 'estimated_minutes': estimated_minutes,
+                'question_source': stage_meta.get('source'),
+                'question_fallback_used': bool(stage_meta.get('fallback_used')),
             }
 
         submission_state = 'draft'

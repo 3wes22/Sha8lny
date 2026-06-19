@@ -6,7 +6,7 @@ Implements AI chatbot serializers for career guidance.
 SRS References:
 - FR-13: AI Chatbot Interface
 - FR-14: Context-Aware Responses
-- FR-15: RAG Pipeline (Pinecone)
+- FR-15: RAG Pipeline (ChromaDB)
 """
 
 from rest_framework import serializers

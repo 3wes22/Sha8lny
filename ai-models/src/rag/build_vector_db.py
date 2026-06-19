@@ -21,6 +21,8 @@ from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
+from .chunking import chunk_markdown
+from .corpus_validation import dedupe_chunks, validate_file
 from .runtime_settings import get_chroma_persist_dir, get_embedding_model
 
 # ---------------------------------------------------------------------------
@@ -33,29 +35,7 @@ ROADMAP_DIR = DATA_DIR / "roadmap-sh-data" / "src" / "data"
 ONET_DIR = DATA_DIR / "onet_data" / "db_30_1_text"
 VECTOR_DB_DIR = DATA_DIR / "vector_db"
 
-CHUNK_SIZE = 500       # characters per chunk
-CHUNK_OVERLAP = 50
 BATCH_SIZE = 100       # documents per batch for embedding
-
-
-# ---------------------------------------------------------------------------
-# Chunking
-# ---------------------------------------------------------------------------
-
-def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
-    """Split text into overlapping chunks."""
-    if len(text) <= chunk_size:
-        return [text] if text.strip() else []
-
-    chunks = []
-    start = 0
-    while start < len(text):
-        end = start + chunk_size
-        chunk = text[start:end]
-        if chunk.strip():
-            chunks.append(chunk.strip())
-        start = end - overlap
-    return chunks
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +83,7 @@ def process_kb_md(file_path: Path) -> List[Dict]:
                             "section": title,
                             "subsection": h3_title,
                             "file": file_path.name,
+                            "quality_tier": "curated",
                         },
                     })
         else:
@@ -115,6 +96,7 @@ def process_kb_md(file_path: Path) -> List[Dict]:
                     "category": _categorize(title, ""),
                     "section": title,
                     "file": file_path.name,
+                    "quality_tier": "curated",
                 },
             })
 
@@ -133,6 +115,63 @@ def _categorize(title: str, subsection: str) -> str:
     if any(w in combined for w in ["skill", "assess", "gap", "develop"]):
         return "skill_development"
     return "general"
+
+
+# ---------------------------------------------------------------------------
+# Source 1b: fetched corpus subdirectories (bls_ooh/, mdn/)
+# Files carry a provenance header comment written by fetch_corpus_sources.py.
+# ---------------------------------------------------------------------------
+
+FETCHED_SOURCES = {
+    # dir name -> (source label, quality tier, id prefix)
+    "bls_ooh": ("bls_ooh", "official", "bls"),
+    "mdn": ("mdn", "established", "mdn"),
+    "egypt_official": ("egypt_official", "official", "egy"),
+    "tech_trends": ("tech_trends", "established", "sot"),
+}
+
+
+def process_fetched_md(file_path: Path, source: str, quality_tier: str, id_prefix: str) -> List[Dict]:
+    """Process a fetched corpus file into structure-aware chunks.
+
+    Files failing the corpus validation layer are skipped with a warning —
+    junk must not silently enter the collection.
+    """
+    issues = validate_file(file_path)
+    if issues:
+        print(f"⚠️  validation failed, skipping {file_path.name}: {'; '.join(issues)}")
+        return []
+
+    try:
+        content = file_path.read_text(encoding="utf-8")
+    except Exception:
+        return []
+
+    url = ""
+    header_match = re.match(r"\A<!--(.*?)-->\s*", content, flags=re.DOTALL)
+    if header_match:
+        url_match = re.search(r"url:\s*(\S+)", header_match.group(1))
+        url = url_match.group(1) if url_match else ""
+        content = content[header_match.end():]
+
+    # Drop markdown links' targets (keep text) and bare nav artifacts
+    clean = re.sub(r"\[([^\]]*)\]\([^)]+\)", r"\1", content)
+    clean = re.sub(r"\n{3,}", "\n\n", clean)
+
+    path_hash = hashlib.md5(str(file_path).encode()).hexdigest()[:8]
+    chunks = chunk_markdown(clean, base_metadata={
+        "source": source,
+        "file": file_path.name,
+        "url": url,
+        "quality_tier": quality_tier,
+    })
+
+    documents = []
+    for i, chunk in enumerate(chunks):
+        chunk["id"] = f"{id_prefix}_{path_hash}_{i}"
+        chunk["metadata"]["chunk_index"] = i
+        documents.append(chunk)
+    return documents
 
 
 # ---------------------------------------------------------------------------
@@ -158,38 +197,45 @@ def process_roadmap_md(file_path: Path) -> List[Dict]:
             break
     category = parts[roadmap_idx + 1] if roadmap_idx and roadmap_idx + 1 < len(parts) else "general"
 
-    # Clean content
+    # Strip astro/YAML frontmatter, then clean links/mentions but keep
+    # headings — the chunker uses them for structure
+    content = re.sub(r"\A---\r?\n.*?\r?\n---\r?\n", "", content, flags=re.DOTALL)
     clean = re.sub(r"\[@[^\]]+\]\([^)]+\)", "", content)
     clean = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", clean)
-    clean = re.sub(r"#+ ", "", clean)
     clean = re.sub(r"\n{3,}", "\n\n", clean)
 
-    chunks = chunk_text(clean)
     path_hash = hashlib.md5(str(file_path).encode()).hexdigest()[:8]
+    chunks = chunk_markdown(clean, base_metadata={
+        "source": "roadmap.sh",
+        "category": category,
+        "title": title,
+        "file": file_path.name,
+        "url": f"https://roadmap.sh/{category}",
+        "quality_tier": "dev_fallback",  # personal-use license — never a defended source
+    })
 
-    return [
-        {
-            "id": f"rm_{category}_{path_hash}_{i}",
-            "content": chunk,
-            "metadata": {
-                "source": "roadmap.sh",
-                "category": category,
-                "title": title,
-                "file": file_path.name,
-                "chunk_index": i,
-            },
-        }
-        for i, chunk in enumerate(chunks)
-    ]
+    documents = []
+    for i, chunk in enumerate(chunks):
+        chunk["id"] = f"rm_{category}_{path_hash}_{i}"
+        chunk["metadata"]["chunk_index"] = i
+        documents.append(chunk)
+    return documents
 
 
 # ---------------------------------------------------------------------------
 # Source 3: O*NET occupation data
 # ---------------------------------------------------------------------------
 
+# Exact stems only. The previous substring whitelist also matched crosswalk
+# files like "Abilities to Work Activities", exploding the collection to
+# ~359k near-identical numeric rows that drowned all prose (see baseline eval
+# and DATASET_REGISTRY.md). Numeric rating files (Skills, Knowledge,
+# Abilities, Work Activities) are excluded from RAG by registry decision —
+# they stay on disk for structured lookups (onet_mapper.py).
 KEY_ONET_FILES = [
-    "Skills", "Knowledge", "Abilities", "Occupation Data",
-    "Task Statements", "Technology Skills", "Work Activities",
+    "Occupation Data",      # titles + rich descriptions — retrievable prose
+    "Task Statements",      # real task sentences per occupation
+    "Technology Skills",    # tool/software names per occupation
 ]
 
 
@@ -205,8 +251,8 @@ def process_onet_file(file_path: Path) -> List[Dict]:
     if len(lines) < 2:
         return []
 
-    # Only process key files
-    if not any(kf in file_name for kf in KEY_ONET_FILES):
+    # Only process whitelisted files (exact stem match)
+    if file_name not in KEY_ONET_FILES:
         return []
 
     headers = lines[0].split("\t")
@@ -229,6 +275,7 @@ def process_onet_file(file_path: Path) -> List[Dict]:
                     "file": file_path.name,
                     "category": file_name.replace("_", " "),
                     "row_index": i,
+                    "quality_tier": "official",
                 },
             })
 
@@ -251,6 +298,17 @@ def collect_all_documents() -> Generator[Dict, None, None]:
                 yield doc
     else:
         print(f"⚠️  Knowledge base not found at {KB_DIR}, skipping.")
+
+    # 1b. Fetched sources (BLS OOH, MDN)
+    for dir_name, (source, tier, prefix) in FETCHED_SOURCES.items():
+        source_dir = KB_DIR / dir_name
+        if source_dir.exists():
+            print(f"\n📚 Processing {source} documents...")
+            for file_path in tqdm(sorted(source_dir.glob("*.md")), desc=source):
+                for doc in process_fetched_md(file_path, source, tier, prefix):
+                    yield doc
+        else:
+            print(f"⚠️  {source} not found at {source_dir}, skipping.")
 
     # 2. Roadmap.sh
     if ROADMAP_DIR.exists():
@@ -314,7 +372,9 @@ def build_vector_database():
     # Collect
     print("\n📄 Collecting documents...")
     all_docs = list(collect_all_documents())
-    print(f"\n✅ Total documents collected: {len(all_docs)}")
+    all_docs, duplicates_dropped = dedupe_chunks(all_docs)
+    print(f"\n✅ Total documents collected: {len(all_docs)} "
+          f"({duplicates_dropped} exact duplicates dropped)")
 
     if not all_docs:
         print("❌ No documents found — check that data/ directories have content.")
@@ -356,18 +416,21 @@ def build_vector_database():
     for src, count in sorted(sources.items()):
         print(f"  - {src}: {count}")
 
-    # Quick test query
+    # Quick test query (non-fatal — index may already be complete)
     print("\n🧪 Testing with sample query...")
-    test_query = "What skills do I need to become a backend developer?"
-    test_embedding = model.encode([test_query]).tolist()
-    results = collection.query(query_embeddings=test_embedding, n_results=3)
+    try:
+        test_query = "What skills do I need to become a backend developer?"
+        test_embedding = model.encode([test_query]).tolist()
+        results = collection.query(query_embeddings=test_embedding, n_results=3)
 
-    print(f"Query: '{test_query}'")
-    print("Top 3 results:")
-    for i, (doc, meta) in enumerate(
-        zip(results["documents"][0], results["metadatas"][0])
-    ):
-        print(f"  {i+1}. [{meta['source']}] {doc[:100]}...")
+        print(f"Query: '{test_query}'")
+        print("Top 3 results:")
+        for i, (doc, meta) in enumerate(
+            zip(results["documents"][0], results["metadatas"][0])
+        ):
+            print(f"  {i+1}. [{meta['source']}] {doc[:100]}...")
+    except Exception as error:
+        print(f"⚠️  Post-build smoke query failed (index may still be usable): {error}")
 
     return collection
 

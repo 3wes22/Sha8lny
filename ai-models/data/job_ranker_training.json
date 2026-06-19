@@ -1,0 +1,1022 @@
+[
+  {
+    "id": "b6283296-bbe9-4d6f-a701-c990e394f328",
+    "title": "Backend Developer (Python/Django)",
+    "description": "Instabug is hiring a Backend Developer (Python/Django) in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-06-01",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-43"
+  },
+  {
+    "id": "edd67081-1540-43c7-8666-d89b2c19b700",
+    "title": "Django REST API Developer",
+    "description": "Odoo Egypt is hiring a Django REST API Developer in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-06-01",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-22"
+  },
+  {
+    "id": "f6a0abfa-4889-4e7b-8dc6-725db1c44395",
+    "title": "Backend Developer (Python/Django)",
+    "description": "Vodafone Egypt is hiring a Backend Developer (Python/Django) in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-06-01",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-1"
+  },
+  {
+    "id": "a8d514ab-aa22-4467-bd8a-7993feb4035e",
+    "title": "Senior React Engineer",
+    "description": "Vezeeta is hiring a Senior React Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-31",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-44"
+  },
+  {
+    "id": "2d259d1e-026c-4542-8ade-d198d3225c19",
+    "title": "Frontend Engineer",
+    "description": "Sprints is hiring a Frontend Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-31",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-23"
+  },
+  {
+    "id": "d94249e7-c1ac-4ab7-83f6-358d68f4d7c2",
+    "title": "Senior React Engineer",
+    "description": "Fawry is hiring a Senior React Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-31",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-2"
+  },
+  {
+    "id": "407ac4a8-702b-47ea-bd1a-b7c6f87395cb",
+    "title": "ML Engineer Intern",
+    "description": "Yassir is hiring a ML Engineer Intern in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-30",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-45"
+  },
+  {
+    "id": "75825886-c0b8-4fd5-9277-d92da008ccdc",
+    "title": "Business Intelligence Analyst",
+    "description": "Robusta is hiring a Business Intelligence Analyst in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-30",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-24"
+  },
+  {
+    "id": "435a19b1-55aa-41a3-895f-a5434722c0d4",
+    "title": "Python Data Engineer",
+    "description": "Swvl is hiring a Python Data Engineer in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-30",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-3"
+  },
+  {
+    "id": "1549fa3d-8b0d-480a-9e40-5443910173c2",
+    "title": "Django REST API Developer",
+    "description": "Odoo Egypt is hiring a Django REST API Developer in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-05-29",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-46"
+  },
+  {
+    "id": "1eb57986-126c-4186-8599-bf3cdd78da12",
+    "title": "Backend Developer (Python/Django)",
+    "description": "Vodafone Egypt is hiring a Backend Developer (Python/Django) in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-05-29",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-25"
+  },
+  {
+    "id": "261fc013-203a-4d00-9a2a-b8228e987d44",
+    "title": "Django REST API Developer",
+    "description": "Paymob is hiring a Django REST API Developer in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-05-29",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-4"
+  },
+  {
+    "id": "39afd198-784c-4db9-8d53-ff306684ef2e",
+    "title": "Frontend Engineer",
+    "description": "Sprints is hiring a Frontend Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-28",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-47"
+  },
+  {
+    "id": "068618b3-4169-4998-af0b-78bab6422240",
+    "title": "Senior React Engineer",
+    "description": "Fawry is hiring a Senior React Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-28",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-26"
+  },
+  {
+    "id": "ded333c8-cbb2-4058-bbc3-9e421cf44ce1",
+    "title": "Frontend Engineer",
+    "description": "Rabbit is hiring a Frontend Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-28",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-5"
+  },
+  {
+    "id": "2360460e-48f9-4a01-820b-ae803d1b4304",
+    "title": "Python Data Engineer",
+    "description": "Robusta is hiring a Python Data Engineer in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-27",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-48"
+  },
+  {
+    "id": "2a2d12e9-b5f3-4b3c-917f-3b955424dab1",
+    "title": "Junior Data Scientist",
+    "description": "Swvl is hiring a Junior Data Scientist in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-27",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-27"
+  },
+  {
+    "id": "f481563e-9bb2-4ccd-8e10-48195ec5243e",
+    "title": "Data Analyst",
+    "description": "Breadfast is hiring a Data Analyst in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-27",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-6"
+  },
+  {
+    "id": "3da3ca29-8210-4679-a907-b1bfd938a1c9",
+    "title": "Backend Developer (Python/Django)",
+    "description": "Vodafone Egypt is hiring a Backend Developer (Python/Django) in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-05-26",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-49"
+  },
+  {
+    "id": "61a53275-5972-477c-a7e1-e8e025d07e99",
+    "title": "Django REST API Developer",
+    "description": "Paymob is hiring a Django REST API Developer in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-05-26",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-28"
+  },
+  {
+    "id": "5f7a44b8-2d00-4608-99b8-4de6997cec68",
+    "title": "Backend Developer (Python/Django)",
+    "description": "Instabug is hiring a Backend Developer (Python/Django) in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-05-26",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-7"
+  },
+  {
+    "id": "a7129111-c5c0-4a7d-a069-d50a09911126",
+    "title": "Senior React Engineer",
+    "description": "Fawry is hiring a Senior React Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-25",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-50"
+  },
+  {
+    "id": "7f48106c-487a-4454-9a4e-eb4c0ac63d4a",
+    "title": "Frontend Engineer",
+    "description": "Rabbit is hiring a Frontend Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-25",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-29"
+  },
+  {
+    "id": "61a6e837-bd02-4cf8-8e39-0b2590799c13",
+    "title": "Senior React Engineer",
+    "description": "Vezeeta is hiring a Senior React Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-25",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-8"
+  },
+  {
+    "id": "7234a8b7-e4a0-4ec6-915c-f6fe84b4c5b7",
+    "title": "Data Analyst",
+    "description": "Swvl is hiring a Data Analyst in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-24",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-51"
+  },
+  {
+    "id": "3bf14871-f261-4168-a833-d60f84236fb0",
+    "title": "ML Engineer Intern",
+    "description": "Breadfast is hiring a ML Engineer Intern in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-24",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-30"
+  },
+  {
+    "id": "7b93d06b-8d76-4a53-adbb-897c7091a90d",
+    "title": "Business Intelligence Analyst",
+    "description": "Yassir is hiring a Business Intelligence Analyst in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-24",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-9"
+  },
+  {
+    "id": "42b42460-eb89-4b85-9a3c-8e900d67b327",
+    "title": "Django REST API Developer",
+    "description": "Paymob is hiring a Django REST API Developer in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-05-23",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-52"
+  },
+  {
+    "id": "a0266bb9-615b-4616-b3e6-2f11f1602a07",
+    "title": "Backend Developer (Python/Django)",
+    "description": "Instabug is hiring a Backend Developer (Python/Django) in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-05-23",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-31"
+  },
+  {
+    "id": "3bf4b73c-e743-4d79-8b92-8560eeadd0be",
+    "title": "Django REST API Developer",
+    "description": "Odoo Egypt is hiring a Django REST API Developer in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-05-23",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-10"
+  },
+  {
+    "id": "73bdf885-6450-47bc-9052-937c51bd9e0e",
+    "title": "Frontend Engineer",
+    "description": "Rabbit is hiring a Frontend Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-22",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-53"
+  },
+  {
+    "id": "78d76194-6cdb-458f-8f96-f6bc2fe888e9",
+    "title": "Senior React Engineer",
+    "description": "Vezeeta is hiring a Senior React Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-22",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-32"
+  },
+  {
+    "id": "a9e6ea5b-0f6f-4e9d-93c3-54952c2b3c08",
+    "title": "Frontend Engineer",
+    "description": "Sprints is hiring a Frontend Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-22",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-11"
+  },
+  {
+    "id": "97147ab8-f063-4b97-b2c4-30f8ca2a11d1",
+    "title": "Business Intelligence Analyst",
+    "description": "Breadfast is hiring a Business Intelligence Analyst in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-21",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-54"
+  },
+  {
+    "id": "878bf3f7-6f58-4f1f-a6d3-2f8d4dab8fdf",
+    "title": "Python Data Engineer",
+    "description": "Yassir is hiring a Python Data Engineer in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-21",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-33"
+  },
+  {
+    "id": "3551200c-ad82-42bd-9849-955905e3af50",
+    "title": "Junior Data Scientist",
+    "description": "Robusta is hiring a Junior Data Scientist in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-21",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-12"
+  },
+  {
+    "id": "88ef882e-49d9-4ca3-b001-26ee365816a9",
+    "title": "Backend Developer (Python/Django)",
+    "description": "Instabug is hiring a Backend Developer (Python/Django) in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-05-20",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-55"
+  },
+  {
+    "id": "e6313419-27e0-4dae-b52e-1f1a4a79cc4a",
+    "title": "Django REST API Developer",
+    "description": "Odoo Egypt is hiring a Django REST API Developer in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-05-20",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-34"
+  },
+  {
+    "id": "fa43b489-8d82-44c9-be67-03e63a84c676",
+    "title": "Backend Developer (Python/Django)",
+    "description": "Vodafone Egypt is hiring a Backend Developer (Python/Django) in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-05-20",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-13"
+  },
+  {
+    "id": "1cd29fb1-9ed4-4dcc-9cc6-f0369c464f12",
+    "title": "Senior React Engineer",
+    "description": "Vezeeta is hiring a Senior React Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-19",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-56"
+  },
+  {
+    "id": "5180678f-1176-4dbd-bca2-3cb95c4a8253",
+    "title": "Frontend Engineer",
+    "description": "Sprints is hiring a Frontend Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-19",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-35"
+  },
+  {
+    "id": "c7e60a5c-ad85-4611-aedf-13bc99c59bfd",
+    "title": "Senior React Engineer",
+    "description": "Fawry is hiring a Senior React Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-19",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-14"
+  },
+  {
+    "id": "426add7b-998f-41db-895c-61002121ae44",
+    "title": "Junior Data Scientist",
+    "description": "Yassir is hiring a Junior Data Scientist in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-18",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-57"
+  },
+  {
+    "id": "d4dcf134-b071-42b1-a194-71ff67e2e1ad",
+    "title": "Data Analyst",
+    "description": "Robusta is hiring a Data Analyst in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-18",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-36"
+  },
+  {
+    "id": "e709b315-ba32-4a4c-a3da-188c17b11cd7",
+    "title": "ML Engineer Intern",
+    "description": "Swvl is hiring a ML Engineer Intern in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-18",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-15"
+  },
+  {
+    "id": "a5639ea6-a3aa-4b81-9396-49172cabc767",
+    "title": "Django REST API Developer",
+    "description": "Odoo Egypt is hiring a Django REST API Developer in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-05-17",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-58"
+  },
+  {
+    "id": "376c818c-bc6c-4f94-ac49-68621876592c",
+    "title": "Backend Developer (Python/Django)",
+    "description": "Vodafone Egypt is hiring a Backend Developer (Python/Django) in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-05-17",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-37"
+  },
+  {
+    "id": "efb6d385-c7f7-4bfc-b16b-2ec1b19c246c",
+    "title": "Django REST API Developer",
+    "description": "Paymob is hiring a Django REST API Developer in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-05-17",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-16"
+  },
+  {
+    "id": "a0e04bb0-1346-4c1e-bf7b-e00b30b1bb9a",
+    "title": "Frontend Engineer",
+    "description": "Sprints is hiring a Frontend Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-16",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-59"
+  },
+  {
+    "id": "2bfa842f-9f79-4ec3-a241-869da7ea6246",
+    "title": "Senior React Engineer",
+    "description": "Fawry is hiring a Senior React Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-16",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-38"
+  },
+  {
+    "id": "1dde55ae-4137-4466-b0a7-79cf6d6482a9",
+    "title": "Frontend Engineer",
+    "description": "Rabbit is hiring a Frontend Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-16",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-17"
+  },
+  {
+    "id": "72b75367-1cf5-4ea1-9c23-5f0f5d7227cd",
+    "title": "ML Engineer Intern",
+    "description": "Robusta is hiring a ML Engineer Intern in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-15",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-60"
+  },
+  {
+    "id": "fe039be4-77c5-46b4-baea-2fdab9047695",
+    "title": "Business Intelligence Analyst",
+    "description": "Swvl is hiring a Business Intelligence Analyst in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-15",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-39"
+  },
+  {
+    "id": "357178cf-816b-427d-b76a-4864acc8856a",
+    "title": "Python Data Engineer",
+    "description": "Breadfast is hiring a Python Data Engineer in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-15",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-18"
+  },
+  {
+    "id": "ce7ae788-53ce-4a0f-b538-54b3eafd29be",
+    "title": "Django REST API Developer",
+    "description": "Paymob is hiring a Django REST API Developer in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-05-14",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-40"
+  },
+  {
+    "id": "bb638671-f565-4943-b300-e8bd511549e0",
+    "title": "Backend Developer (Python/Django)",
+    "description": "Instabug is hiring a Backend Developer (Python/Django) in Egypt.",
+    "requirements": "Python, Django, PostgreSQL, REST API, Docker",
+    "experience_level": "entry",
+    "posted_date": "2026-05-14",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Django",
+      "Docker",
+      "PostgreSQL",
+      "Python",
+      "REST API"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-19"
+  },
+  {
+    "id": "c4841136-9216-448e-8c68-be9a03c3ce1a",
+    "title": "Frontend Engineer",
+    "description": "Rabbit is hiring a Frontend Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-13",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-41"
+  },
+  {
+    "id": "260ed86c-cdef-4515-abbc-0ae9b67953b5",
+    "title": "Senior React Engineer",
+    "description": "Vezeeta is hiring a Senior React Engineer in Egypt.",
+    "requirements": "JavaScript, React, TypeScript, CSS, Git",
+    "experience_level": "mid",
+    "posted_date": "2026-05-13",
+    "location_country": "Egypt",
+    "required_skills": [
+      "CSS",
+      "Git",
+      "JavaScript",
+      "React",
+      "TypeScript"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-20"
+  },
+  {
+    "id": "c35a40e4-d9c1-41a7-bcaf-2f7609dfaf89",
+    "title": "Junior Data Scientist",
+    "description": "Breadfast is hiring a Junior Data Scientist in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-12",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-42"
+  },
+  {
+    "id": "088cb906-5209-47ad-b490-5cca7cf531c4",
+    "title": "Data Analyst",
+    "description": "Yassir is hiring a Data Analyst in Egypt.",
+    "requirements": "Python, SQL, Pandas, Data Analysis, Machine Learning",
+    "experience_level": "senior",
+    "posted_date": "2026-05-12",
+    "location_country": "Egypt",
+    "required_skills": [
+      "Data Analysis",
+      "Machine Learning",
+      "Python",
+      "SQL",
+      "pandas"
+    ],
+    "external_url": "https://wuzzuf.net/jobs/p/eg-tech-21"
+  }
+]

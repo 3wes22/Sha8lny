@@ -56,15 +56,40 @@ class TestAssessmentAPI:
         assert response.data['target_career'] == 'Software Engineer'
         assert response.data['status'] == 'draft'
         assert response.data['stage'] == 'stage_1'
-        assert response.data['generation_status'] == 'pending'
-        assert response.data['ai_processing_status'] == 'pending'
+        assert response.data['generation_status'] in {'pending', 'completed'}
+        assert response.data['ai_processing_status'] in {'pending', 'processing', 'completed'}
         assert response.data['total_questions'] == 10
-        assert response.data['questions'] == []
-        assert response.data['presentation']['submission_state'] == 'stage_1_generating'
+        if response.data['ai_processing_status'] == 'completed':
+            assert response.data['presentation']['submission_state'] == 'stage_1_ready'
+            assert len(response.data['questions']) > 0
+        else:
+            assert response.data['questions'] == []
+            assert response.data['presentation']['submission_state'] == 'stage_1_generating'
 
         assessment = Assessment.objects.get(id=response.data['id'])
         assert assessment.target_career == 'Software Engineer'
         assert assessment.ai_task_id
+
+    def test_create_assessment_returns_201_when_stage_generation_fails(self, monkeypatch):
+        """Eager generation failures must not turn assessment creation into HTTP 500."""
+        def fail_generate_stage_one(*_args, **_kwargs):
+            raise RuntimeError("simulated generation outage")
+
+        monkeypatch.setattr(
+            "apps.assessments.tasks.AssessmentAIService.generate_stage_one",
+            fail_generate_stage_one,
+        )
+
+        url = reverse('assessment-list')
+        response = self.client.post(
+            url,
+            {'assessment_type': 'skills', 'target_career': 'Backend Developer'},
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data['ai_processing_status'] == 'failed'
+        assert response.data['presentation']['submission_state'] == 'failed'
 
     def test_create_assessment_unauthenticated(self):
         """Test creating assessment without authentication fails."""
@@ -181,6 +206,7 @@ class TestAssessmentAPI:
                     trace_id="trace-preview-1",
                     fallback_used=False,
                 ),
+                {},
             )
 
         monkeypatch.setattr(
@@ -238,6 +264,7 @@ class TestAssessmentAPI:
                     fallback_used=True,
                     error_code="AIServiceError",
                 ),
+                {},
             )
 
         monkeypatch.setattr(

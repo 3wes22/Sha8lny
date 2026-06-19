@@ -90,8 +90,12 @@ export default function JobDetailPage() {
               </Button>
               {job.external_action_available ? (
                 <Button asChild className="gradient-primary">
-                  <a href={job.external_url} rel="noreferrer" target="_blank">
-                    Apply externally
+                  <a
+                    href={job.external_apply_url || job.external_url}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {job.external_apply_label || "Apply externally"}
                     <ExternalLink className="ml-2 h-4 w-4" />
                   </a>
                 </Button>

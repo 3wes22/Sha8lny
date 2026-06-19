@@ -76,10 +76,11 @@ def run_generate_stage_one(assessment_id: str, *, task_id: str = "") -> str:
 
     try:
         graph = load_role_graph(resolve_role_key(assessment.target_career))
-        questions, metadata = AssessmentAIService.generate_stage_one(graph.role_key, graph)
+        questions, metadata, retrieval_info = AssessmentAIService.generate_stage_one(graph.role_key, graph)
     except (SoftTimeLimitExceeded, Exception) as error:
         _mark_assessment_failed(assessment_id, error, task_id)
-        raise
+        logger.exception("Stage one generation failed for assessment %s", assessment_id)
+        return str(assessment_id)
 
     assessment.stage = "stage_1"
     assessment.stage_one_questions = questions
@@ -103,6 +104,7 @@ def run_generate_stage_one(assessment_id: str, *, task_id: str = "") -> str:
             "error_code": metadata.error_code,
             "version": graph.version,
             "ready_at": timezone.now().isoformat(),
+            **(retrieval_info or {}),
         },
     )
     assessment.save(
@@ -127,7 +129,19 @@ def run_process_stage_one_submission(assessment_id: str, *, task_id: str = "") -
     try:
         role_graph = load_role_graph(resolve_role_key(assessment.target_career))
         gap_profile = AssessmentAIService.build_gap_profile(assessment, role_graph)
-        questions, metadata = AssessmentAIService.generate_stage_two(gap_profile, role_graph)
+        questions, metadata, retrieval_info = AssessmentAIService.generate_stage_two(
+            gap_profile,
+            role_graph,
+            stage_one_questions=assessment.stage_one_questions or [],
+        )
+        from apps.assessments.coverage import CoverageTracker
+        from apps.core import ai_settings as core_ai_settings
+
+        if core_ai_settings.ASSESSMENT_COVERAGE_STRICT:
+            CoverageTracker.from_role_graph(role_graph).assert_assessment_complete(
+                assessment.stage_one_questions or [],
+                questions,
+            )
     except (SoftTimeLimitExceeded, Exception) as error:
         _mark_assessment_failed(assessment_id, error, task_id)
         raise
@@ -154,6 +168,7 @@ def run_process_stage_one_submission(assessment_id: str, *, task_id: str = "") -
             "processing_time_ms": metadata.processing_time_ms,
             "error_code": metadata.error_code,
             "ready_at": timezone.now().isoformat(),
+            **(retrieval_info or {}),
         },
     )
     assessment.save(
@@ -183,6 +198,7 @@ def run_process_final_evaluation(assessment_id: str, *, task_id: str = "") -> st
         _mark_assessment_failed(assessment_id, error, task_id)
         raise
 
+    roadmap_signal_payload = asdict(evaluation.roadmap_signal)
     AssessmentResultService.create_assessment_result(
         assessment=assessment,
         overall_score=evaluation.analysis.overall_score,
@@ -198,8 +214,12 @@ def run_process_final_evaluation(assessment_id: str, *, task_id: str = "") -> st
         llm_completion_tokens=evaluation.completion_tokens,
         processing_time_seconds=evaluation.analysis.metadata.processing_time_ms / 1000,
         version=evaluation.analysis.metadata.version or "staged-v1",
-        roadmap_signal=asdict(evaluation.roadmap_signal),
+        roadmap_signal=roadmap_signal_payload,
     )
+
+    from apps.users.assessment_skills import AssessmentSkillService
+
+    AssessmentSkillService.sync_from_roadmap_signal(assessment.user, roadmap_signal_payload)
 
     assessment.stage = "completed"
     assessment.status = "completed"
