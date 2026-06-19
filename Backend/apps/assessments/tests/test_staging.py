@@ -8,6 +8,7 @@ from apps.assessments.scenario_corpus.staging import (
     promote_to_module,
     read_drafts,
     staging_path,
+    write_drafts,
 )
 
 
@@ -96,3 +97,13 @@ def test_promote_into_nonempty_module_stays_valid_python(tmp_path, monkeypatch):
     ast.parse(text)
     assert "backend.decorators.s1.single_choice.gen-x" in text
     assert "'doc_id': 'x'" in text  # the pre-existing entry is preserved
+
+
+def test_write_drafts_overwrites_and_can_drain(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "apps.assessments.scenario_corpus.staging._STAGING_DIR", tmp_path
+    )
+    append_drafts("backend", [_doc(), _doc()])
+    assert len(read_drafts("backend")) == 2
+    write_drafts("backend", [])  # drain
+    assert read_drafts("backend") == []

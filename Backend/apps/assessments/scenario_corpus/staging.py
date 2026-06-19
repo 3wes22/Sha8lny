@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import pprint
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,7 @@ _STAGING_DIR = _CORPUS_DIR / "_staging"
 
 
 def staging_path(role_key: str) -> Path:
+    """Canonical JSONL staging file path for a role."""
     return _STAGING_DIR / f"{role_key}.jsonl"
 
 
@@ -52,10 +54,13 @@ def write_drafts(role_key: str, docs: list[dict[str, Any]]) -> None:
 
 
 def format_scenario_literal(doc: dict[str, Any]) -> str:
-    """Render one scenario as a black-compatible dict literal with trailing comma.
-    `corpus_version` is emitted as a plain string value (not the symbol)."""
+    """Render one scenario as a Python dict literal with a trailing comma so it
+    can be spliced into a SCENARIOS list. The promote workflow runs ``black``
+    afterward to normalise formatting; this only needs to emit valid, evenly
+    indented Python. ``corpus_version`` is emitted as a plain string value."""
     body = pprint.pformat(dict(doc), width=88, sort_dicts=False)
-    return f"    {body},\n"
+    indented = textwrap.indent(body, "    ")
+    return f"{indented},\n"
 
 
 def promote_to_module(role_key: str, docs: list[dict[str, Any]]) -> int:
@@ -63,6 +68,8 @@ def promote_to_module(role_key: str, docs: list[dict[str, Any]]) -> int:
     the opening ``[``). Head-insertion avoids having to find the matching
     closing ``]`` in a file whose scenario literals contain many ``]`` of their
     own; scenario order is irrelevant to the registry, so this is safe."""
+    if not docs:
+        return 0
     module_path = _CORPUS_DIR / f"{role_key}.py"
     source = module_path.read_text(encoding="utf-8")
     open_marker = "SCENARIOS: list[ScenarioDocument] = ["
