@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import logging
 import re
 from statistics import mean
 from typing import Any
 
 from apps.assessments.role_graph import CoreDimension, RoleGraph, SubSkill
 from apps.core.ai_contracts import GapProfile, SubSkillEvidence
+
+
+logger = logging.getLogger(__name__)
 
 
 def _dimension_weight_map(role_graph: RoleGraph) -> dict[str, float]:
@@ -293,11 +297,102 @@ class AnswerScorer:
                 f1_score = (2 * precision * recall) / (precision + recall)
             return round(1.0 + (4.0 * f1_score), 2), 0.84
 
+        if question_type == "open_ended":
+            score, confidence, _method = cls.score_open_ended(question, answer)
+            return score, confidence
+
+        return cls._legacy_score_answer(question, answer)
+
+    @classmethod
+    def score_answer_with_method(
+        cls, question: dict[str, Any], answer: Any
+    ) -> tuple[float, float, str]:
+        """Score an answer and report the scoring method used.
+
+        Open-ended answers route through :meth:`score_open_ended` (LLM rubric
+        when enabled, else keyword coverage); closed items are deterministic.
+        """
+        if str(question.get("question_type") or "").strip() == "open_ended":
+            return cls.score_open_ended(question, answer)
+        score, confidence = cls._score_answer(question, answer)
+        return score, confidence, "deterministic"
+
+    @classmethod
+    def score_open_ended(
+        cls, question: dict[str, Any], answer: Any
+    ) -> tuple[float, float, str]:
+        """Score an open-ended answer, preferring an LLM rubric when available.
+
+        When ``ASSESSMENT_RUBRIC_LLM_ENABLED`` is set and the item carries
+        ``expected_concepts``, Gemini grades the answer 1-5 against a rubric
+        prompt. Any failure (disabled flag, missing key, API/parse error) falls
+        back to the deterministic keyword-coverage scorer — the demo never
+        breaks on a dead ``GEMINI_API_KEY``. Returns ``(score, confidence,
+        scoring_method)`` where ``scoring_method`` is ``"llm_rubric"`` or
+        ``"keyword_coverage"``.
+        """
+        from apps.core import ai_settings
+
+        answer_key = question.get("answer_key") if isinstance(question.get("answer_key"), dict) else {}
+        normalized_answer = cls._normalize_text(answer)
+
+        if (
+            normalized_answer
+            and ai_settings.ASSESSMENT_RUBRIC_LLM_ENABLED
+            and answer_key.get("expected_concepts")
+        ):
+            try:
+                score, confidence = cls._score_open_ended_llm_rubric(question, answer)
+                return score, confidence, "llm_rubric"
+            except Exception as error:  # pragma: no cover - exercised via mocked failure
+                logger.warning("LLM rubric scoring failed, using keyword fallback: %s", error)
+
+        score, confidence = cls._score_open_ended_keyword(question, answer)
+        return score, confidence, "keyword_coverage"
+
+    @classmethod
+    def _score_open_ended_llm_rubric(
+        cls, question: dict[str, Any], answer: Any
+    ) -> tuple[float, float]:
+        """Grade an open-ended answer 1-5 with Gemini against expected concepts."""
+        from apps.core.gemma_client import GemmaClient
+
+        answer_key = question.get("answer_key") if isinstance(question.get("answer_key"), dict) else {}
+        expected = [str(c).strip() for c in answer_key.get("expected_concepts", []) if str(c).strip()]
+        forbidden = [str(c).strip() for c in answer_key.get("forbidden_concepts", []) if str(c).strip()]
+        stem = str(question.get("stem") or question.get("question_text") or question.get("question") or "").strip()
+
+        prompt = (
+            "Grade the candidate's answer to a technical assessment question on a 1-5 scale.\n"
+            "5 = covers all key concepts correctly; 3 = partial coverage; 1 = off-topic or wrong.\n\n"
+            f"Question: {stem}\n"
+            f"Expected concepts: {', '.join(expected) or 'n/a'}\n"
+            f"Concepts that indicate a misconception: {', '.join(forbidden) or 'none'}\n\n"
+            f"Candidate answer: {str(answer).strip()}\n\n"
+            'Return JSON: {"score": <int 1-5>, "reasoning": "<one sentence>"}.'
+        )
+
+        result = GemmaClient(task_type="career_matching", max_output_tokens=200).generate_structured(
+            prompt=prompt,
+            system="You are a strict but fair technical grader. Output only the requested JSON.",
+            required_keys=("score",),
+        )
+        payload = result.payload if isinstance(result.payload, dict) else {}
+        raw_score = payload.get("score")
+        score = max(1.0, min(5.0, float(raw_score)))
+        return round(score, 2), 0.85
+
+    @classmethod
+    def _score_open_ended_keyword(
+        cls, question: dict[str, Any], answer: Any
+    ) -> tuple[float, float]:
+        """Deterministic open-ended scoring: rubric dimensions or concept coverage."""
+        answer_key = question.get("answer_key") if isinstance(question.get("answer_key"), dict) else {}
         rubric = question.get("rubric")
-        if question_type == "open_ended" and isinstance(rubric, dict) and rubric.get("scoring_dimensions"):
+        if isinstance(rubric, dict) and rubric.get("scoring_dimensions"):
             return cls._score_open_ended_with_rubric(question, answer, rubric)
 
-        if question_type == "open_ended" and answer_key.get("expected_concepts"):
+        if answer_key.get("expected_concepts"):
             normalized_answer = cls._normalize_text(answer)
             if not normalized_answer:
                 return 0.0, 0.45
@@ -403,10 +498,18 @@ class AnswerScorer:
 
         for question in questions:
             subskill = subskills[question["subskill_key"]]
-            observed_level, confidence = AnswerScorer._score_answer(
+            observed_level, confidence, scoring_method = AnswerScorer.score_answer_with_method(
                 question,
                 response_map.get(str(question.get("id"))),
             )
+            # Record how open-ended answers were graded (llm_rubric vs
+            # keyword_coverage) on the question's persisted metadata.
+            if str(question.get("question_type") or "").strip() == "open_ended":
+                generation_metadata = question.get("generation_metadata")
+                if not isinstance(generation_metadata, dict):
+                    generation_metadata = {}
+                    question["generation_metadata"] = generation_metadata
+                generation_metadata["scoring_method"] = scoring_method
             stage = int(question.get("stage") or 1)
             if stage == 2:
                 confidence = min(0.95, confidence + 0.08)
