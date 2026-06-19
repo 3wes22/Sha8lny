@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import pytest
-
 from apps.assessments.scenario_corpus.eval.retrieval_eval import (
     RetrievalEvalResult,
     evaluate_role,
 )
 
 
-@pytest.mark.django_db
 def test_evaluate_role_returns_coverage_and_precision_fields():
     result = evaluate_role("backend")
     assert isinstance(result, RetrievalEvalResult)

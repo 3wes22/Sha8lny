@@ -24,16 +24,25 @@ class RetrievalEvalResult:
 
 
 def evaluate_role(role_key: str) -> RetrievalEvalResult:
-    blueprints = tier1_blueprints(role_key)
+    # tier1_blueprints emits TIER1_STAGE1_SINGLE_CHOICE_MIN copies per
+    # (subskill, stage, question_type) cell; measure once per unique cell.
+    seen: set[tuple[str, int, str]] = set()
     returned = 0
     subskill_hits = 0
-    for bp in blueprints:
+    for bp in tier1_blueprints(role_key):
+        cell = (bp.subskill_key, bp.stage, bp.question_type)
+        if cell in seen:
+            continue
+        seen.add(cell)
         docs = ScenarioRetriever.retrieve_for_blueprint(
             role_key=role_key,
             blueprint={
                 "question_type": bp.question_type,
                 "subskill_key": bp.subskill_key,
                 "competency": bp.competency,
+                # Eval uses the competency label here; the production path passes
+                # a richer scenario-context string, so these numbers are a lower
+                # bound on real-world retrieval fidelity.
                 "focus": bp.competency,
             },
             stage=bp.stage,
@@ -42,10 +51,10 @@ def evaluate_role(role_key: str) -> RetrievalEvalResult:
             returned += 1
             if any(d.get("subskill_key") == bp.subskill_key for d in docs):
                 subskill_hits += 1
-    n = len(blueprints) or 1
+    n = len(seen) or 1  # guard: no Tier-1 cells -> avoid ZeroDivisionError
     return RetrievalEvalResult(
         role_key=role_key,
-        blueprint_count=len(blueprints),
+        blueprint_count=len(seen),
         coverage=returned / n,
         subskill_precision=(subskill_hits / returned) if returned else 0.0,
     )
