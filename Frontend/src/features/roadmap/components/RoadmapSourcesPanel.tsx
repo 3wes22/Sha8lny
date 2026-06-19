@@ -16,6 +16,7 @@ type RoadmapProvenance = {
   structure_source?: string;
   retrieved_urls?: string[];
   fallback_used?: boolean;
+  structure_license_tier?: string;
   phase_sources?: PhaseSource[];
 };
 
@@ -36,9 +37,15 @@ export function RoadmapSourcesPanel({ roadmap }: RoadmapSourcesPanelProps) {
 
   if (provenance.fallback_used) {
     return (
-      <div className="panel-paper rounded-[1.25rem] p-4 text-sm text-muted-foreground">
-        This roadmap was generated using a standard template. Connect the career knowledge base
-        and re-run generation to attach roadmap.sh references.
+      <div className="panel-paper rounded-[1.25rem] p-4">
+        <span className="inline-flex items-center rounded-full border border-border/60 bg-muted/40 px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+          Deterministic template
+        </span>
+        <p className="mt-2 text-sm text-muted-foreground">
+          This roadmap was generated from an internally authored template (no external sources
+          retrieved). Connect the career knowledge base and re-run generation to attach roadmap.sh
+          references.
+        </p>
       </div>
     );
   }
@@ -61,6 +68,12 @@ export function RoadmapSourcesPanel({ roadmap }: RoadmapSourcesPanelProps) {
       <p className="mt-2 text-sm text-muted-foreground">
         Structure retrieved from {provenance.structure_source ?? "roadmap.sh"} at generation time.
       </p>
+      {provenance.structure_license_tier === "dev_only" ? (
+        <p className="mt-1 text-xs text-muted-foreground/80">
+          roadmap.sh is used as a development-only reference (personal-use license) — not
+          redistributed as part of the defended corpus.
+        </p>
+      ) : null}
       <div className="mt-4 space-y-4">
         {visiblePhases.map((phase) => {
           const phaseTitle =
