@@ -7,8 +7,6 @@ const mocks = vi.hoisted(() => ({
   listPortfolios: vi.fn(),
   optimizeAts: vi.fn(),
   improveResume: vi.fn(),
-  getResume: vi.fn(),
-  updateResume: vi.fn(),
   createResume: vi.fn(),
   uploadResume: vi.fn(),
   deleteResume: vi.fn(),
@@ -24,8 +22,6 @@ vi.mock("@/lib/api", () => ({
     listPortfolios: mocks.listPortfolios,
     optimizeAts: mocks.optimizeAts,
     improveResume: mocks.improveResume,
-    getResume: mocks.getResume,
-    updateResume: mocks.updateResume,
     createResume: mocks.createResume,
     uploadResume: mocks.uploadResume,
     deleteResume: mocks.deleteResume,
@@ -87,12 +83,6 @@ beforeEach(() => {
     missing_keywords: ["CI/CD", "Kubernetes"],
     recommendations: ["Lead with measurable impact."],
   });
-  mocks.getResume.mockResolvedValue({
-    id: "r1",
-    title: "Software Engineer CV",
-    personal_info: { name: "Mo", summary: "Old summary." },
-  });
-  mocks.updateResume.mockResolvedValue({ id: "r1" });
   mocks.uploadResume.mockResolvedValue({
     id: "r2",
     title: "uploaded-cv",
@@ -134,8 +124,9 @@ describe("CareerToolsPage", () => {
     expect(screen.getByText("CI/CD")).toBeInTheDocument();
   });
 
-  it("applies the AI summary and re-scores", async () => {
+  it("copies all AI suggestions to the clipboard", async () => {
     const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, "writeText");
     render(<CareerToolsPage />);
 
     await screen.findByText("Software Engineer CV");
@@ -143,18 +134,18 @@ describe("CareerToolsPage", () => {
     await act(async () => {
       await user.click(screen.getByRole("button", { name: /improve with ai/i }));
     });
-    const applyButton = await screen.findByRole("button", { name: /apply summary/i });
+    const copyAll = await screen.findByRole("button", { name: /copy all suggestions/i });
 
     await act(async () => {
-      await user.click(applyButton);
+      await user.click(copyAll);
     });
 
     await waitFor(() => {
-      expect(mocks.updateResume).toHaveBeenCalledWith("r1", {
-        personal_info: { name: "Mo", summary: "Results-driven engineer who cut latency by 40%." },
-      });
-      expect(mocks.optimizeAts).toHaveBeenCalledWith("r1");
+      expect(writeText).toHaveBeenCalled();
     });
+    const copied = writeText.mock.calls[0][0] as string;
+    expect(copied).toContain("Results-driven engineer who cut latency by 40%.");
+    expect(copied).toContain("CI/CD");
   });
 
   it("uploads a CV file from the upload tab", async () => {

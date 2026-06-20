@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ArrowRight,
   CheckCircle2,
+  Copy,
   FileText,
   Globe,
   Loader2,
@@ -25,7 +25,6 @@ import {
   getApiErrorMessage,
   type AtsResult,
   type PortfolioListItem,
-  type Resume,
   type ResumeImprovement,
   type ResumeListItem,
 } from "@/lib/api";
@@ -43,16 +42,41 @@ const gradeTone = (grade?: string) => {
   }
 };
 
+const copyText = async (label: string, text: string) => {
+  if (!text.trim()) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success(`${label} copied to clipboard`);
+  } catch {
+    toast.error("Couldn't copy to clipboard");
+  }
+};
+
+const buildSuggestionText = (improvement: ResumeImprovement): string => {
+  const parts: string[] = [];
+  if (improvement.improved_summary) {
+    parts.push(`SUMMARY\n${improvement.improved_summary}`);
+  }
+  if (improvement.strengthened_bullets.length) {
+    parts.push(`STRONGER BULLETS\n${improvement.strengthened_bullets.map((b) => `• ${b}`).join("\n")}`);
+  }
+  if (improvement.missing_keywords.length) {
+    parts.push(`MISSING KEYWORDS\n${improvement.missing_keywords.join(", ")}`);
+  }
+  if (improvement.recommendations.length) {
+    parts.push(`RECOMMENDATIONS\n${improvement.recommendations.map((r) => `• ${r}`).join("\n")}`);
+  }
+  return parts.join("\n\n");
+};
+
 const ResumeCard: React.FC<{
   resume: ResumeListItem;
   ats?: AtsResult;
   improvement?: ResumeImprovement;
-  currentSummary?: string;
   busy: boolean;
   onImprove: () => void;
-  onApplySummary: () => void;
   onDelete: () => void;
-}> = ({ resume, ats, improvement, currentSummary, busy, onImprove, onApplySummary, onDelete }) => {
+}> = ({ resume, ats, improvement, busy, onImprove, onDelete }) => {
   const score = improvement ? improvement.ats_score : ats ? ats.ats_score : Number(resume.ats_score);
   const grade = improvement ? improvement.ats_grade : ats ? ats.ats_grade : resume.ats_grade;
 
@@ -96,23 +120,28 @@ const ResumeCard: React.FC<{
             <p className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
               AI is offline right now — showing a deterministic checklist instead.
             </p>
-          ) : null}
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Suggestions only — copy what you like into your CV. Nothing here changes your saved resume.
+            </p>
+          )}
 
           {improvement.improved_summary ? (
             <div className="space-y-2">
-              <p className="type-kicker text-[0.6rem]">Suggested summary</p>
-              {currentSummary ? (
-                <p className="rounded-lg border border-border/60 bg-muted/40 p-2 text-xs text-muted-foreground line-through decoration-muted-foreground/40">
-                  {currentSummary}
-                </p>
-              ) : null}
+              <div className="flex items-center justify-between gap-2">
+                <p className="type-kicker text-[0.6rem]">Suggested summary</p>
+                <button
+                  className="transition-smooth flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+                  onClick={() => void copyText("Summary", improvement.improved_summary)}
+                  type="button"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  Copy
+                </button>
+              </div>
               <p className="rounded-lg border border-primary/30 bg-primary/5 p-2 text-foreground">
                 {improvement.improved_summary}
               </p>
-              <Button className="gradient-primary" disabled={busy} onClick={onApplySummary} size="sm">
-                {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-1 h-4 w-4" />}
-                Apply summary
-              </Button>
             </div>
           ) : null}
 
@@ -159,6 +188,16 @@ const ResumeCard: React.FC<{
               </ul>
             </div>
           ) : null}
+
+          <Button
+            className="w-full"
+            onClick={() => void copyText("All suggestions", buildSuggestionText(improvement))}
+            size="sm"
+            variant="outline"
+          >
+            <Copy className="mr-1 h-4 w-4" />
+            Copy all suggestions
+          </Button>
         </div>
       ) : null}
 
@@ -234,7 +273,6 @@ const CareerToolsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [atsResults, setAtsResults] = useState<Record<string, AtsResult>>({});
   const [improvements, setImprovements] = useState<Record<string, ResumeImprovement>>({});
-  const [resumeDetails, setResumeDetails] = useState<Record<string, Resume>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [newResumeTitle, setNewResumeTitle] = useState("");
   const [newPortfolioTitle, setNewPortfolioTitle] = useState("");
@@ -325,11 +363,7 @@ const CareerToolsPage: React.FC = () => {
   const handleImprove = async (id: string) => {
     try {
       setBusyId(id);
-      const [detail, improvement] = await Promise.all([
-        careerToolsApi.getResume(id),
-        careerToolsApi.improveResume(id),
-      ]);
-      setResumeDetails((prev) => ({ ...prev, [id]: detail }));
+      const improvement = await careerToolsApi.improveResume(id);
       setImprovements((prev) => ({ ...prev, [id]: improvement }));
       toast.success(
         improvement.ai_used
@@ -338,33 +372,6 @@ const CareerToolsPage: React.FC = () => {
       );
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Failed to improve resume"));
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const handleApplySummary = async (id: string) => {
-    const improvement = improvements[id];
-    if (!improvement?.improved_summary) return;
-    try {
-      setBusyId(id);
-      const detail = resumeDetails[id];
-      const personalInfo = {
-        ...((detail?.personal_info as Record<string, unknown>) ?? {}),
-        summary: improvement.improved_summary,
-      };
-      await careerToolsApi.updateResume(id, { personal_info: personalInfo });
-      const result = await careerToolsApi.optimizeAts(id);
-      setAtsResults((prev) => ({ ...prev, [id]: result }));
-      setImprovements((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
-      await refreshResumes();
-      toast.success(`Summary applied — ATS score ${Math.round(result.ats_score)} (${result.ats_grade})`);
-    } catch (error) {
-      toast.error(getApiErrorMessage(error, "Failed to apply summary"));
     } finally {
       setBusyId(null);
     }
@@ -523,12 +530,8 @@ const CareerToolsPage: React.FC = () => {
                   <ResumeCard
                     ats={atsResults[resume.id]}
                     busy={busyId === resume.id}
-                    currentSummary={
-                      (resumeDetails[resume.id]?.personal_info as { summary?: string } | undefined)?.summary
-                    }
                     improvement={improvements[resume.id]}
                     key={resume.id}
-                    onApplySummary={() => void handleApplySummary(resume.id)}
                     onDelete={() => void handleDeleteResume(resume.id)}
                     onImprove={() => void handleImprove(resume.id)}
                     resume={resume}
