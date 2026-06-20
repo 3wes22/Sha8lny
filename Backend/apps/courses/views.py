@@ -90,7 +90,7 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'])
     def recommended(self, request):
         """Return popular published courses (roadmap course matching uses course_index)."""
-        courses = self.get_queryset().order_by('-rating', '-number_of_students')[:10]
+        courses = self.get_queryset().order_by('-rating', '-total_enrollments')[:10]
         serializer = CourseListSerializer(courses, many=True)
         return Response(serializer.data)
 

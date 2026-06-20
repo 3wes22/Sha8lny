@@ -215,3 +215,68 @@ def test_roadmap_stats_read_does_not_persist_progress_or_emit_completion(
     roadmap.refresh_from_db()
     assert roadmap.status == Roadmap.DRAFT
     assert roadmap.completion_percentage == Decimal("0.00")
+
+
+@pytest.fixture
+def published_course(db):
+    from apps.courses.models import Course, CoursePlatform
+
+    platform = CoursePlatform.objects.create(
+        name="Demo Platform",
+        slug="progress-demo-platform",
+        website_url="https://example.com",
+        integration_type=CoursePlatform.MANUAL,
+    )
+    return Course.objects.create(
+        platform=platform,
+        external_id="progress-course-1",
+        title="Python for Progress Tests",
+        slug="python-progress-tests",
+        description="Course used by progress API tests",
+        url="https://example.com/progress-course",
+        is_published=True,
+        total_enrollments=500,
+        rating=Decimal("4.50"),
+    )
+
+
+@pytest.mark.django_db
+def test_post_completion_accepts_published_course(api_client, progress_user, published_course):
+    api_client.force_authenticate(user=progress_user)
+    started_at = timezone.now() - timedelta(days=7)
+    completed_at = timezone.now()
+
+    response = api_client.post(
+        reverse("progress:completion-list"),
+        {
+            "course_id": str(published_course.id),
+            "started_at": started_at.isoformat(),
+            "completed_at": completed_at.isoformat(),
+            "time_spent_hours": "5.00",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["course"]["id"] == str(published_course.id)
+
+
+@pytest.mark.django_db
+def test_post_timelog_with_published_course(api_client, progress_user, published_course):
+    api_client.force_authenticate(user=progress_user)
+    started_at = timezone.now() - timedelta(hours=2)
+    ended_at = timezone.now()
+
+    response = api_client.post(
+        reverse("progress:timelog-list"),
+        {
+            "course_id": str(published_course.id),
+            "started_at": started_at.isoformat(),
+            "ended_at": ended_at.isoformat(),
+            "activity_type": "course",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert str(response.data["course"]) == str(published_course.id)
