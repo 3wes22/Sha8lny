@@ -10,7 +10,7 @@ This report is the defense-facing roll-up of the per-component evals.
 | Job ranker | Leave-one-group-out NDCG/MAP vs baselines | ndcg@5 **0.589** vs 0.560 overlap / 0.160 random; MAP ties overlap | `ai-models/models/custom/job_ranker_eval.json` |
 | Source credibility | Deterministic tier fraction | scorer + tests green | `ai-models/src/rag/credibility.py` |
 | Assessment (open-ended) | Expert review packet (blind, 3 reviewers) | packet + analysis tooling ready; human session pending | `EXPERT_REVIEW_PACKET.md`, `analyze_expert_review.py` |
-| Faithfulness | LLM-judge (Gemini) | judge wired; pilot set committed; operator run on fresh key | `eval_faithfulness.py`, `faithfulness_pilot.json` |
+| Faithfulness | LLM-judge (Gemini) | pilot **0.33** on 3 items (below 0.85 target; expand set) | `eval_faithfulness.py`, `faithfulness_pilot.json`, `eval_results/faithfulness/pilot_summary.json` |
 
 ---
 
@@ -90,7 +90,7 @@ running the session is an operator step. The instrument is positioned as
 | Precision@5 > 0.70 | ❌ 0.22 — documented miss + root cause |
 | Ranker beats overlap & random baselines | 🟡 ndcg@5 beats overlap slightly and random strongly; MAP ties overlap; embedding disabled |
 | Credibility scorer deterministic + tested | ✅ |
-| Faithfulness > 0.85 (LLM judge) | ⏳ scaffolded, Gemini-gated (operator run) |
+| Faithfulness > 0.85 (LLM judge) | 🟡 pilot 0.33/3 items — below target; expand eval set |
 | Expert-review agreement | ⏳ packet ready, session is operator step |
 
 ## Reproduce

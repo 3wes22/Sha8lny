@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
@@ -23,6 +24,30 @@ from typing import Any, Callable, Iterable
 Judge = Callable[[str, list[str]], float]
 
 _CACHE_DIR = Path(__file__).resolve().parents[1] / "eval_results" / "faithfulness"
+_BACKEND_ENV = Path(__file__).resolve().parents[2] / "Backend" / ".env"
+
+
+def _load_backend_env() -> None:
+    """Load Backend/.env so GEMINI_API_KEY is available outside Django."""
+    if not _BACKEND_ENV.exists():
+        return
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(_BACKEND_ENV, override=False)
+        return
+    except ImportError:
+        pass
+
+    for line in _BACKEND_ENV.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 def _item_key(answer: str, passages: list[str]) -> str:
@@ -66,10 +91,9 @@ def score_faithfulness(
 
 def _gemini_judge(answer: str, passages: list[str]) -> float:  # pragma: no cover - operator path
     """Production judge — calls Gemini when ``GEMINI_API_KEY`` is set."""
-    import os
-
     import httpx
 
+    _load_backend_env()
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError(
@@ -110,6 +134,7 @@ def _gemini_judge(answer: str, passages: list[str]) -> float:  # pragma: no cove
 
 
 if __name__ == "__main__":  # pragma: no cover
+    _load_backend_env()
     parser = argparse.ArgumentParser(description="Faithfulness eval (LLM judge).")
     parser.add_argument("--items", type=Path, help="JSON list of {answer, passages}.")
     args = parser.parse_args()

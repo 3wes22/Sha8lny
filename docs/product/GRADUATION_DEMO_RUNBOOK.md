@@ -221,11 +221,14 @@ These complete claims **C3** / **C11** after the code/docs remediation PRs.
 
 ### Faithfulness (LLM judge, fresh Gemini key)
 
+**`.env` format:** use `GEMINI_API_KEY=AIzaSy...` on a single line with **no space after `=`**
+and no commented duplicate on the next line — `source .env` treats `KEY= value` as an empty
+key plus a shell command.
+
 ```bash
 cd ai-models
-export GEMINI_API_KEY=<fresh-key>
 python scripts/eval_faithfulness.py --items data/eval/faithfulness_pilot.json
-# cached per item under eval_results/faithfulness/
+# loads Backend/.env automatically; cached per item under eval_results/faithfulness/
 ```
 
 Target: mean faithfulness **> 0.85** on the pilot set; expand to a larger logged
