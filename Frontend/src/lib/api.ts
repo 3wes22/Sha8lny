@@ -1142,3 +1142,252 @@ export const assessmentApi = {
     return apiClient.get<AssessmentListItem[]>(`/assessment/history/?${searchParams.toString()}`);
   },
 };
+
+// ============================================================================
+// Courses
+// ============================================================================
+
+export type CourseLevel = "beginner" | "intermediate" | "advanced" | "all_levels";
+
+export interface CoursePlatform {
+  id: string;
+  name: string;
+  slug: string;
+  website_url?: string;
+  logo_url?: string;
+  is_active: boolean;
+}
+
+export interface CourseListItem {
+  id: string;
+  title: string;
+  platform_name?: string;
+  price: string | number;
+  currency: string;
+  rating: string | number;
+  level: CourseLevel;
+  thumbnail_url?: string;
+}
+
+export interface Course extends Omit<CourseListItem, "platform_name"> {
+  description: string;
+  platform: CoursePlatform | null;
+  instructor?: string;
+  course_url: string;
+  discount_price?: string | number | null;
+  number_of_reviews?: number;
+  number_of_students?: number;
+  duration_hours?: string | number;
+  language?: string;
+  has_certificate: boolean;
+  is_active: boolean;
+  last_updated?: string;
+  created_at: string;
+}
+
+export interface CourseSearchParams {
+  query?: string;
+  platform?: string;
+  difficulty?: CourseLevel;
+  min_rating?: number;
+  is_free?: boolean;
+  has_certificate?: boolean;
+  language?: string;
+  page?: number;
+}
+
+export const courseApi = {
+  list: (params: CourseSearchParams = {}) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        searchParams.append(key, String(value));
+      }
+    });
+    const query = searchParams.toString();
+    return apiClient.get<PaginatedResponse<CourseListItem>>(
+      `/courses/courses/${query ? `?${query}` : ""}`,
+    );
+  },
+
+  search: (params: CourseSearchParams = {}) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        searchParams.append(key, String(value));
+      }
+    });
+    const query = searchParams.toString();
+    return apiClient.get<PaginatedResponse<CourseListItem>>(
+      `/courses/courses/search/${query ? `?${query}` : ""}`,
+    );
+  },
+
+  recommended: () => apiClient.get<CourseListItem[]>("/courses/courses/recommended/"),
+
+  get: (id: string) => apiClient.get<Course>(`/courses/courses/${id}/`),
+
+  platforms: () => apiClient.get<PaginatedResponse<CoursePlatform>>("/courses/platforms/"),
+};
+
+// ============================================================================
+// Progress
+// ============================================================================
+
+export interface ProgressStats {
+  total_learning_hours: string | number;
+  total_courses_completed: number;
+  total_milestones_achieved: number;
+  current_streak_days: number;
+  longest_streak_days: number;
+  roadmaps_in_progress: number;
+  roadmaps_completed: number;
+  average_daily_hours: string | number;
+  this_week_hours: string | number;
+  last_activity_date: string | null;
+}
+
+export interface UserProgressListItem {
+  id: string;
+  roadmap: string;
+  roadmap_title?: string;
+  overall_completion_percentage: string | number;
+  completion_display?: string;
+  phases_completed: number;
+  milestones_completed: number;
+  courses_completed: number;
+  current_streak_days: number;
+  streak_display?: string;
+  total_learning_hours: string | number;
+  hours_display?: string;
+  last_activity_date?: string | null;
+  on_track?: boolean;
+}
+
+export interface CourseCompletionListItem {
+  id: string;
+  course: string;
+  course_title?: string;
+  started_at?: string;
+  completed_at?: string;
+  time_spent_hours?: string | number;
+  completion_percentage?: string | number;
+  user_rating?: number | null;
+  rating_display?: string;
+  has_certificate?: boolean;
+}
+
+export interface MilestoneAchievementListItem {
+  id: string;
+  milestone: string;
+  milestone_title?: string;
+  achieved_at?: string;
+  time_to_complete_days?: number | null;
+  completion_speed_display?: string;
+  badge_awarded?: boolean;
+  badge_type?: string;
+}
+
+export const progressApi = {
+  getStats: () => apiClient.get<ProgressStats>("/progress/stats/"),
+
+  list: () => apiClient.get<PaginatedResponse<UserProgressListItem>>("/progress/progress/"),
+
+  completions: () =>
+    apiClient.get<PaginatedResponse<CourseCompletionListItem>>("/progress/completions/"),
+
+  achievements: () =>
+    apiClient.get<PaginatedResponse<MilestoneAchievementListItem>>("/progress/achievements/"),
+
+  recentAchievements: () =>
+    apiClient.get<MilestoneAchievementListItem[]>("/progress/achievements/recent/"),
+};
+
+// ============================================================================
+// Career Tools
+// ============================================================================
+
+export interface ResumeListItem {
+  id: string;
+  title: string;
+  template_name?: string;
+  is_primary: boolean;
+  is_ats_optimized: boolean;
+  ats_score: string | number;
+  ats_grade?: string;
+  completeness: number;
+  version?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Resume extends ResumeListItem {
+  personal_info?: Record<string, unknown>;
+  work_experience?: unknown[];
+  education?: unknown[];
+  skills?: unknown[];
+  certifications?: unknown[];
+  projects?: unknown[];
+  languages?: unknown[];
+  ats_suggestions?: Record<string, unknown>;
+  has_files?: boolean;
+  available_formats?: string;
+}
+
+export interface ResumeCreateRequest {
+  title: string;
+  template_name?: string;
+  is_primary?: boolean;
+}
+
+export interface AtsResult {
+  message: string;
+  ats_score: number;
+  ats_grade: string;
+  suggestions: string[];
+}
+
+export interface PortfolioListItem {
+  id: string;
+  title: string;
+  custom_url_slug?: string;
+  is_public: boolean;
+  view_count: number;
+  theme?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PortfolioCreateRequest {
+  title: string;
+  description?: string;
+  theme?: string;
+}
+
+export const careerToolsApi = {
+  listResumes: () => apiClient.get<PaginatedResponse<ResumeListItem>>("/career-tools/resumes/"),
+
+  getResume: (id: string) => apiClient.get<Resume>(`/career-tools/resumes/${id}/`),
+
+  createResume: (data: ResumeCreateRequest) =>
+    apiClient.post<Resume>("/career-tools/resumes/", data),
+
+  deleteResume: (id: string) => apiClient.delete<void>(`/career-tools/resumes/${id}/`),
+
+  optimizeAts: (id: string) =>
+    apiClient.post<AtsResult>(`/career-tools/resumes/${id}/optimize_ats/`, {}),
+
+  listPortfolios: () =>
+    apiClient.get<PaginatedResponse<PortfolioListItem>>("/career-tools/portfolios/"),
+
+  createPortfolio: (data: PortfolioCreateRequest) =>
+    apiClient.post<PortfolioListItem>("/career-tools/portfolios/", data),
+
+  publishPortfolio: (id: string) =>
+    apiClient.post<{ message: string; public_url: string; slug: string }>(
+      `/career-tools/portfolios/${id}/publish/`,
+      {},
+    ),
+
+  deletePortfolio: (id: string) => apiClient.delete<void>(`/career-tools/portfolios/${id}/`),
+};
