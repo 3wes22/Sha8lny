@@ -12,7 +12,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.core.management import call_command
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
@@ -20,7 +20,7 @@ from apps.assessments.models import Assessment, AssessmentResult
 from apps.courses.models import Course, CoursePlatform
 from apps.progress.models import TimeLog, UserProgress
 from apps.progress.services import CourseCompletionService, MilestoneService, ProgressService, TimeLogService
-from apps.roadmaps.models import Roadmap, RoadmapTemplate
+from apps.roadmaps.models import Roadmap, RoadmapMilestone, RoadmapPhase
 from apps.roadmaps.services import RoadmapService
 from apps.users.models import User
 
@@ -259,186 +259,146 @@ class Command(BaseCommand):
         user: User,
         assessment_result: AssessmentResult,
     ) -> tuple[Roadmap, UserProgress]:
-        template = RoadmapTemplate.objects.filter(
-            slug="backend-developer-roadmap",
-            is_deleted=False,
-        ).first()
-        if template is None:
-            raise CommandError("Backend Developer roadmap template is missing after seeding.")
-
-        roadmap = RoadmapService.create_roadmap_from_template(
-            user=user,
-            template=template,
-            customizations={"weekly_hours": 8},
+        # Generate the roadmap through the real assessment -> AI ladder pipeline
+        # (create_ai_roadmap_shell + populate_ai_roadmap) so the demo account
+        # showcases assessment-derived "already mastered" greying: bands below the
+        # learner's assessed level are pre-completed from the assessment, the rest
+        # is the live plan. Gemini personalizes the copy when reachable and falls
+        # back to the deterministic ladder offline.
+        current_level = RoadmapService.derive_current_level_from_assessment(assessment_result)
+        target_career = (
+            RoadmapService.derive_target_career_from_assessment(assessment_result)
+            or "Backend Developer"
         )
+
+        roadmap = RoadmapService.create_ai_roadmap_shell(
+            user=user,
+            assessment=assessment_result,
+            target_career=target_career,
+            current_level=current_level,
+            target_level="job-ready",
+            weekly_hours=8,
+        )
+        RoadmapService.populate_ai_roadmap(roadmap)
+        roadmap.refresh_from_db()
 
         now = timezone.now()
-        roadmap.assessment = assessment_result
+        metadata = roadmap.metadata if isinstance(roadmap.metadata, dict) else {}
+        metadata["demo_seed"] = {
+            "profile": "returning_user",
+            "seeded_at": now.isoformat(),
+        }
+        roadmap.metadata = metadata
         roadmap.description = (
-            "A focused backend roadmap derived from the latest assessment, already showing real "
-            "progress in the fundamentals phase and a clear next milestone."
+            "A focused roadmap generated from the latest assessment. Earlier bands "
+            "are already marked complete from the assessment, with real progress "
+            "continuing in the current phase."
         )
+        existing_insights = roadmap.ai_insights if isinstance(roadmap.ai_insights, dict) else {}
         roadmap.ai_insights = {
-            "coach_note": "Keep the roadmap narrow: finish SQL fundamentals, then move into Django APIs."
+            **existing_insights,
+            "coach_note": "Foundations are behind you - keep momentum on the current phase.",
         }
-        roadmap.metadata = {
-            "generation": {
-                "source": "graduation-demo-seed",
-                "provider": "seed",
-                "runtime_version": "graduation-demo-v1",
-                "fallback_used": False,
-                "trace_id": "demo-roadmap-trace",
-            },
-            "demo_seed": {
-                "profile": "returning_user",
-                "seeded_at": now.isoformat(),
-            },
-        }
-        roadmap.llm_model_used = "graduation-demo-roadmap-v1"
-        roadmap.ai_processed_at = now - timedelta(days=17)
-        roadmap.processing_time_seconds = Decimal("1.80")
         roadmap.started_at = now - timedelta(days=21)
+        roadmap.ai_processed_at = now - timedelta(days=17)
         roadmap.save(
             update_fields=[
-                "assessment",
+                "metadata",
                 "description",
                 "ai_insights",
-                "metadata",
-                "llm_model_used",
-                "ai_processed_at",
-                "processing_time_seconds",
                 "started_at",
+                "ai_processed_at",
                 "updated_at",
             ]
         )
 
+        # Layer real (non-assessment) progress on top of the greyed baseline by
+        # working the current active band, so the account also shows live courses,
+        # a completion, and a streak alongside the assessment-derived greying.
         phases = list(roadmap.phases.order_by("order").prefetch_related("milestones"))
-        fundamentals_phase = phases[0]
-        fundamentals_milestones = list(fundamentals_phase.milestones.order_by("order"))
-        python_milestone = fundamentals_milestones[0]
-        project_milestone = fundamentals_milestones[1]
-        git_milestone = fundamentals_milestones[2]
-        sql_milestone = fundamentals_milestones[3]
+        current_phase = next(
+            (phase for phase in phases if phase.status != RoadmapPhase.COMPLETED),
+            phases[-1],
+        )
+        active_milestones = [
+            milestone
+            for milestone in current_phase.milestones.order_by("order")
+            if milestone.status != RoadmapMilestone.COMPLETED
+        ]
+        band_label = current_phase.title.split(":")[0].strip() or "Current phase"
 
         platform = self._ensure_demo_course_platform()
-        python_course = self._upsert_demo_course(
-            platform=platform,
-            external_id="python-backend-foundations",
-            title="Python Backend Foundations",
-            short_description="Sharpen syntax, OOP, and backend problem-solving with short projects.",
-            url="https://demo.sha8alny.local/courses/python-backend-foundations",
-            duration_hours=Decimal("18.00"),
-            level="beginner",
-        )
-        git_course = self._upsert_demo_course(
-            platform=platform,
-            external_id="git-workflows-team-projects",
-            title="Git Workflows for Team Projects",
-            short_description="Practice branching, pull requests, and review-ready commits.",
-            url="https://demo.sha8alny.local/courses/git-workflows-team-projects",
-            duration_hours=Decimal("6.00"),
-            level="beginner",
-        )
-        sql_course = self._upsert_demo_course(
-            platform=platform,
-            external_id="sql-for-backend-developers",
-            title="SQL for Backend Developers",
-            short_description="Use schema design and query tuning in a backend context.",
-            url="https://demo.sha8alny.local/courses/sql-for-backend-developers",
-            duration_hours=Decimal("10.00"),
-            level="intermediate",
-        )
 
-        python_roadmap_course = RoadmapService.add_course_to_milestone(
-            python_milestone,
-            python_course,
-            order=1,
-            is_primary=True,
-            match_score=Decimal("94.00"),
-            recommendation_reason="Best match for building a strong Python baseline quickly.",
-        )
-        git_roadmap_course = RoadmapService.add_course_to_milestone(
-            git_milestone,
-            git_course,
-            order=1,
-            is_primary=True,
-            match_score=Decimal("90.00"),
-            recommendation_reason="Supports better collaboration and cleaner portfolio history.",
-        )
-        sql_roadmap_course = RoadmapService.add_course_to_milestone(
-            sql_milestone,
-            sql_course,
-            order=1,
-            is_primary=True,
-            match_score=Decimal("88.00"),
-            recommendation_reason="Keeps the current phase moving toward backend database fluency.",
-        )
+        if active_milestones:
+            first_milestone = active_milestones[0]
+            primary_course = self._upsert_demo_course(
+                platform=platform,
+                external_id="demo-current-phase-deep-dive",
+                title=f"{band_label} Deep Dive",
+                short_description="Hands-on practice mapped to your current roadmap phase.",
+                url="https://demo.sha8alny.local/courses/current-phase-deep-dive",
+                duration_hours=Decimal("12.00"),
+                level="intermediate",
+            )
+            primary_roadmap_course = RoadmapService.add_course_to_milestone(
+                first_milestone,
+                primary_course,
+                order=1,
+                is_primary=True,
+                match_score=Decimal("92.00"),
+                recommendation_reason="Best match for your current roadmap milestone.",
+            )
+            CourseCompletionService.mark_course_complete(
+                user=user,
+                course=primary_course,
+                roadmap_course=primary_roadmap_course,
+                time_spent_hours=Decimal("12.00"),
+                user_rating=5,
+                user_review="Exactly the push needed to clear this milestone.",
+                would_recommend=True,
+            )
+            primary_roadmap_course.is_enrolled = True
+            primary_roadmap_course.is_completed = True
+            primary_roadmap_course.enrolled_at = now - timedelta(days=6)
+            primary_roadmap_course.completed_at = now - timedelta(days=2)
+            primary_roadmap_course.save(
+                update_fields=["is_enrolled", "is_completed", "enrolled_at", "completed_at", "updated_at"]
+            )
+            # Real, in-plan completion (completed_from_assessment stays False).
+            MilestoneService.achieve_milestone(user, first_milestone)
 
-        CourseCompletionService.mark_course_complete(
-            user=user,
-            course=python_course,
-            roadmap_course=python_roadmap_course,
-            time_spent_hours=Decimal("18.00"),
-            user_rating=5,
-            user_review="Strong refresher before moving deeper into backend work.",
-            would_recommend=True,
-        )
-        CourseCompletionService.mark_course_complete(
-            user=user,
-            course=git_course,
-            roadmap_course=git_roadmap_course,
-            time_spent_hours=Decimal("6.00"),
-            user_rating=4,
-            user_review="Helped clean up the project workflow and commit history.",
-            would_recommend=True,
-        )
-
-        now = timezone.now()
-        python_roadmap_course.is_enrolled = True
-        python_roadmap_course.is_completed = True
-        python_roadmap_course.enrolled_at = now - timedelta(days=16)
-        python_roadmap_course.completed_at = now - timedelta(days=12)
-        python_roadmap_course.save(
-            update_fields=["is_enrolled", "is_completed", "enrolled_at", "completed_at", "updated_at"]
-        )
-        git_roadmap_course.is_enrolled = True
-        git_roadmap_course.is_completed = True
-        git_roadmap_course.enrolled_at = now - timedelta(days=10)
-        git_roadmap_course.completed_at = now - timedelta(days=7)
-        git_roadmap_course.save(
-            update_fields=["is_enrolled", "is_completed", "enrolled_at", "completed_at", "updated_at"]
-        )
-        sql_roadmap_course.is_enrolled = True
-        sql_roadmap_course.enrolled_at = now - timedelta(days=2)
-        sql_roadmap_course.save(update_fields=["is_enrolled", "enrolled_at", "updated_at"])
-
-        MilestoneService.achieve_milestone(user, python_milestone)
-        MilestoneService.achieve_milestone(user, project_milestone)
-        MilestoneService.achieve_milestone(user, git_milestone)
-
-        sql_milestone.status = "in_progress"
-        sql_milestone.completed_at = None
-        sql_milestone.save(update_fields=["status", "completed_at", "updated_at"])
+        if len(active_milestones) > 1:
+            next_milestone = active_milestones[1]
+            next_course = self._upsert_demo_course(
+                platform=platform,
+                external_id="demo-next-milestone-primer",
+                title=f"{band_label} Next Steps",
+                short_description="A primer that keeps momentum into the next milestone.",
+                url="https://demo.sha8alny.local/courses/next-milestone-primer",
+                duration_hours=Decimal("8.00"),
+                level="intermediate",
+            )
+            next_roadmap_course = RoadmapService.add_course_to_milestone(
+                next_milestone,
+                next_course,
+                order=1,
+                is_primary=True,
+                match_score=Decimal("88.00"),
+                recommendation_reason="Keeps momentum into the next milestone.",
+            )
+            next_roadmap_course.is_enrolled = True
+            next_roadmap_course.enrolled_at = now - timedelta(days=1)
+            next_roadmap_course.save(
+                update_fields=["is_enrolled", "enrolled_at", "updated_at"]
+            )
+            next_milestone.status = RoadmapMilestone.IN_PROGRESS
+            next_milestone.save(update_fields=["status", "updated_at"])
 
         progress = ProgressService.update_progress_metrics(user, roadmap)
 
         seed_created_at = now - timedelta(days=21)
         UserProgress.all_objects.filter(id=progress.id).update(created_at=seed_created_at)
         progress.refresh_from_db()
-
-        progress.current_streak_days = 3
-        progress.longest_streak_days = 4
-        progress.last_activity_date = timezone.now().date() - timedelta(days=1)
-        progress.total_learning_hours = Decimal("5.50")
-        progress.save(
-            update_fields=[
-                "current_streak_days",
-                "longest_streak_days",
-                "last_activity_date",
-                "total_learning_hours",
-                "updated_at",
-            ]
-        )
 
         historical_logs = [
             (
