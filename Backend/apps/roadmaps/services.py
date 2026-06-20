@@ -50,10 +50,6 @@ HOURS_PER_FOCUS_ITEM = 10
 # even when computed hours are small (avoids a 1-2 week "plan").
 MIN_PLAN_WEEKS = 8
 
-# Fraction of total weeks allocated to each of the three phases
-# (foundation / gap-closing / portfolio+job-search). Sums to 1.0.
-PHASE_WEEK_SPLIT = (0.30, 0.40, 0.30)
-
 # Minimum weeks per phase so no phase collapses to zero.
 MIN_PHASE_WEEKS = 2
 
