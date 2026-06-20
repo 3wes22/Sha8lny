@@ -93,6 +93,17 @@ def test_generate_rejects_invalid_format(authenticated_client, user):
 
 
 @pytest.mark.django_db
+def test_create_resume_endpoint_assigns_user(authenticated_client, user):
+    response = authenticated_client.post(
+        f"{BASE}/resumes/", {"title": "API Created Resume"}, format="json"
+    )
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["title"] == "API Created Resume"
+    resume = Resume.objects.get(id=response.data["id"])
+    assert resume.user == user
+
+
+@pytest.mark.django_db
 def test_resume_list_is_scoped_to_user(authenticated_client, user, another_user):
     mine = _complete_resume(user)
     ResumeService.create_resume(user=another_user, title="Someone else's resume")
@@ -105,6 +116,17 @@ def test_resume_list_is_scoped_to_user(authenticated_client, user, another_user)
 
 
 # --- Portfolio publish + public view (regression: was referencing .slug) ----
+
+
+@pytest.mark.django_db
+def test_create_portfolio_endpoint_assigns_user(authenticated_client, user):
+    response = authenticated_client.post(
+        f"{BASE}/portfolios/", {"title": "API Created Portfolio"}, format="json"
+    )
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["title"] == "API Created Portfolio"
+    portfolio = Portfolio.objects.get(id=response.data["id"])
+    assert portfolio.user == user
 
 
 @pytest.mark.django_db

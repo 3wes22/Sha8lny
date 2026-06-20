@@ -125,7 +125,7 @@ describe("AssessmentResultsPage", () => {
 
     await waitFor(() => {
       expect(mocks.createAI).toHaveBeenCalledWith({ assessment_id: "result-1" });
-      expect(mocks.navigate).toHaveBeenCalledWith("/roadmap");
+      expect(mocks.navigate).toHaveBeenCalledWith("/roadmap", { state: { roadmapId: "roadmap-1" } });
       expect(screen.getByRole("button", { name: /generate personalized roadmap/i })).not.toBeDisabled();
     });
   });

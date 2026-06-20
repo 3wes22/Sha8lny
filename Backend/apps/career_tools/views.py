@@ -55,6 +55,10 @@ class ResumeViewSet(viewsets.ModelViewSet):
             return ResumeListSerializer
         return ResumeSerializer
 
+    def perform_create(self, serializer):
+        """Assign the resume to the requesting user (``user`` is read-only)."""
+        serializer.save(user=self.request.user)
+
     @action(detail=True, methods=['post'])
     def generate(self, request, pk=None):
         """
@@ -152,6 +156,10 @@ class PortfolioViewSet(viewsets.ModelViewSet):
         if self.action == 'list':
             return PortfolioListSerializer
         return PortfolioSerializer
+
+    def perform_create(self, serializer):
+        """Assign the portfolio to the requesting user (``user`` is read-only)."""
+        serializer.save(user=self.request.user)
 
     @action(detail=True, methods=['post'])
     def publish(self, request, pk=None):
