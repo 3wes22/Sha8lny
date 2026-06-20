@@ -25,10 +25,45 @@ def _run_seed(**kwargs):
         call_command("seed_graduation_demo", **kwargs)
 
 
+def _seed_course_catalog():
+    """Minimal real-shape catalog so course matching attaches a course during
+    seeding (the deterministic matcher needs role-tagged courses to rank)."""
+    from apps.courses.matching import CourseCatalog
+    from apps.courses.models import Course, CoursePlatform
+
+    platform = CoursePlatform.objects.create(
+        name="Coursera",
+        slug="coursera",
+        website_url="https://www.coursera.org",
+        integration_type=CoursePlatform.SCRAPING,
+    )
+    for index, (title, skills) in enumerate(
+        [
+            ("Databases and SQL for Backend Engineers", ["SQL", "Database Design", "PostgreSQL"]),
+            ("Building REST APIs with Python", ["REST API", "Python", "Backend"]),
+        ]
+    ):
+        Course.objects.create(
+            platform=platform,
+            external_id=f"learn/backend-{index}",
+            title=title,
+            slug=f"backend-{index}",
+            description="Hands-on backend coursework.",
+            url=f"https://www.coursera.org/learn/backend-{index}",
+            level="intermediate",
+            rating=Decimal("4.70"),
+            total_enrollments=10000,
+            is_published=True,
+            metadata={"skills": skills, "roles": ["backend"]},
+        )
+    CourseCatalog.reset()  # avoid cross-test staleness from the module-level cache
+
+
 @pytest.mark.django_db
 def test_seed_graduation_demo_creates_evaluator_accounts():
     stdout = StringIO()
 
+    _seed_course_catalog()
     _run_seed(stdout=stdout)
 
     new_user = User.objects.get(email=NEW_USER_EMAIL)
@@ -77,6 +112,7 @@ def test_seed_graduation_demo_creates_evaluator_accounts():
 
 @pytest.mark.django_db
 def test_seed_graduation_demo_is_idempotent():
+    _seed_course_catalog()
     _run_seed()
     _run_seed()
 

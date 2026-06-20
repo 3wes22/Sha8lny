@@ -125,9 +125,12 @@ def match_courses(
         if skill_hits == 0 and title_hits == 0 and not role_match:
             continue
 
-        raw = (3.0 * skill_hits) + (1.0 * title_hits)
+        # Curated-skill overlap is the strongest signal and must be able to beat a
+        # role-only match (so a Docker course outranks a generic backend capstone
+        # for a "Containerization with Docker" milestone).
+        raw = (4.0 * skill_hits) + (1.5 * title_hits)
         if role_match:
-            raw += 4.0
+            raw += 2.0
         if target_level and entry["level"] in _LEVEL_RANK and target_level in _LEVEL_RANK:
             distance = abs(_LEVEL_RANK[entry["level"]] - _LEVEL_RANK[target_level])
             raw += 2.0 if distance == 0 else (1.0 if distance == 1 else 0.0)

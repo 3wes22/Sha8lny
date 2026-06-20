@@ -17,7 +17,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.assessments.models import Assessment, AssessmentResult
-from apps.courses.models import Course, CoursePlatform
 from apps.progress.models import TimeLog, UserProgress
 from apps.progress.services import CourseCompletionService, MilestoneService, ProgressService, TimeLogService
 from apps.roadmaps.models import Roadmap, RoadmapMilestone, RoadmapPhase
@@ -433,87 +432,3 @@ class Command(BaseCommand):
         progress = ProgressService.update_progress_metrics(user, roadmap)
 
         return roadmap, progress
-
-    def _ensure_demo_course_platform(self) -> CoursePlatform:
-        platform = CoursePlatform.all_objects.filter(slug="sha8alny-demo-library").first()
-
-        if platform is None:
-            return CoursePlatform.objects.create(
-                name="Sha8alny Demo Library",
-                slug="sha8alny-demo-library",
-                website_url="https://demo.sha8alny.local/library",
-                description="Manual demo platform for evaluator-ready roadmap recommendations.",
-                integration_type=CoursePlatform.MANUAL,
-                is_active=True,
-                total_courses=0,
-            )
-
-        platform.name = "Sha8alny Demo Library"
-        platform.website_url = "https://demo.sha8alny.local/library"
-        platform.description = "Manual demo platform for evaluator-ready roadmap recommendations."
-        platform.integration_type = CoursePlatform.MANUAL
-        platform.is_active = True
-        platform.is_deleted = False
-        platform.deleted_at = None
-        platform.save(
-            update_fields=[
-                "name",
-                "website_url",
-                "description",
-                "integration_type",
-                "is_active",
-                "is_deleted",
-                "deleted_at",
-                "updated_at",
-            ]
-        )
-        return platform
-
-    def _upsert_demo_course(
-        self,
-        *,
-        platform: CoursePlatform,
-        external_id: str,
-        title: str,
-        short_description: str,
-        url: str,
-        duration_hours: Decimal,
-        level: str,
-    ) -> Course:
-        course = Course.all_objects.filter(platform=platform, external_id=external_id).first()
-        course_defaults = {
-            "title": title,
-            "slug": external_id,
-            "description": short_description,
-            "short_description": short_description,
-            "url": url,
-            "level": level,
-            "course_type": Course.VIDEO,
-            "language": "English",
-            "is_free": True,
-            "duration_hours": duration_hours,
-            "rating": Decimal("4.70"),
-            "total_reviews": 120,
-            "total_enrollments": 2400,
-            "has_certificate": False,
-            "is_published": True,
-            "learning_outcomes": [
-                "Turn roadmap milestones into concrete practice",
-                "Build portfolio-ready evidence for backend roles",
-            ],
-            "metadata": {"source": "graduation-demo-seed"},
-        }
-
-        if course is None:
-            return Course.objects.create(
-                platform=platform,
-                external_id=external_id,
-                **course_defaults,
-            )
-
-        for field, value in course_defaults.items():
-            setattr(course, field, value)
-        course.is_deleted = False
-        course.deleted_at = None
-        course.save(update_fields=[*course_defaults.keys(), "is_deleted", "deleted_at", "updated_at"])
-        return course
