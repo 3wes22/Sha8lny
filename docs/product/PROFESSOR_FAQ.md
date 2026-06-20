@@ -11,7 +11,8 @@ none contradicts the registers ([`CLAIMS_REGISTER.md`](CLAIMS_REGISTER.md),
 The contribution is the **retrieval and grounding layer around** the LLM, built
 and measured stage-by-stage — not the API call. Structure-aware chunking, hybrid
 BM25+dense with RRF fusion, cross-encoder re-ranking, citations + confidence
-tiers, and an abstention floor together moved recall@5 from 0.118 to 0.627 (×5.2)
+tiers, and an abstention floor together moved recall@5 from 0.118 to **0.609** on
+the final pipeline (rerank peak **0.627**; ×5.2 over baseline).
 over a locked baseline. A bare API call has none of this, hallucinates sources,
 and never abstains.
 *Evidence:* [`RAG_ARCHITECTURE.md`](RAG_ARCHITECTURE.md),
@@ -88,8 +89,8 @@ registers and reports.
 ### "How do I verify any of this myself?"
 
 ```bash
-cd Backend && pytest                 # 333 backend tests
-cd Frontend && npm run build         # clean build
+cd Backend && pytest -q                # 382 backend tests
+cd Frontend && npm run test:run        # 74 frontend tests
 cd Backend && python manage.py scenario_corpus_audit --tier 1   # 8/8 roles
 cd ai-models && ../Backend/venv/bin/python -m pytest tests/test_credibility.py -q
 ```

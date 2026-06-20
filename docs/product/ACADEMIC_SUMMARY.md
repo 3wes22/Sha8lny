@@ -22,7 +22,8 @@ a **shared, license-clean retrieval layer**. The thesis contribution is **not**
    chunking → hybrid BM25+dense with reciprocal rank fusion → cross-encoder
    re-ranking → per-source citations with confidence tiers and an abstention
    floor. Built and **measured stage-by-stage** against a locked baseline:
-   recall@5 **×5.2**, MRR **×5.0** ([`RAG_RETRIEVAL_EVAL.md`](RAG_RETRIEVAL_EVAL.md),
+   final-pipeline recall@5 **0.609** (×5.2; rerank peak 0.627), MRR **0.544**
+   (×5.0; rerank peak 0.553) ([`RAG_RETRIEVAL_EVAL.md`](RAG_RETRIEVAL_EVAL.md),
    [`RAG_ARCHITECTURE.md`](RAG_ARCHITECTURE.md)).
 2. **Grounding with honest abstention.** Every answer carries visible sources;
    off-topic queries return *no* answer (`no_retrieval_context`) instead of a
@@ -31,9 +32,11 @@ a **shared, license-clean retrieval layer**. The thesis contribution is **not**
    per-dimension weights and a partial O\*NET 30.1 crosswalk, deterministic
    weighted scoring (the LLM's self-score is never trusted), and an optional LLM
    rubric with a keyword fallback ([`ROLE_GRAPH_METHODOLOGY.md`](ROLE_GRAPH_METHODOLOGY.md)).
-4. **A custom learning-to-rank job model** (LightGBM) evaluated by leave-one-group-out
+4. **A LightGBM-capable job ranking pipeline** evaluated by leave-one-group-out
    NDCG/MAP against skill-overlap and random baselines — a transparent
-   weak-supervision *demonstrator*, not a black box (`EVAL_REPORT.md`).
+   weak-supervision *demonstrator*, not a black box. The binary ranker is not
+   committed in the current repo, so runtime falls back to overlap ordering when
+   no local `job_ranker.lgb` exists (`EVAL_REPORT.md`).
 5. **Data provenance discipline:** every source is license-screened with a USE /
    REJECT / dev-only decision *before* ingestion
    ([`DATASET_REGISTRY.md`](DATASET_REGISTRY.md)); roadmap.sh is used only as a
@@ -53,10 +56,12 @@ key or missing vector store.
 
 | Result | Value | Source |
 |---|---|---|
-| Retrieval recall@5 (baseline → final) | 0.118 → 0.627 (×5.2) | `eval_results/retrieval/*.json` |
-| Retrieval MRR | 0.109 → 0.553 (×5.0) | `RAG_RETRIEVAL_EVAL.md` |
+| Retrieval recall@5 (baseline → final pipeline) | 0.118 → 0.609 (×5.2); rerank peak 0.627 | `eval_results/retrieval/*.json` |
+| Retrieval MRR (baseline → final pipeline) | 0.109 → 0.544 (×5.0); rerank peak 0.553 | `RAG_RETRIEVAL_EVAL.md` |
 | Job ranker ndcg@5 vs overlap / random | 0.589 / 0.560 / 0.160 | `job_ranker_eval.json` |
-| Backend test suite | 333 passing | `cd Backend && pytest` |
+| Backend test suite | 382 passing | `cd Backend && pytest -q` |
+| Frontend test suite | 74 passing | `cd Frontend && npm run test:run` |
+| Application stack (backend + frontend) | 456 passing | sum of the two suites above |
 | Scenario corpus | 8/8 roles, Tier-1 audit passes | `scenario_corpus_audit --tier 1` |
 
 ## Honest limitations (stated, not hidden)

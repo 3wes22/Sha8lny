@@ -6,8 +6,8 @@ This report is the defense-facing roll-up of the per-component evals.
 
 | Component | Method | Headline result | Artifact |
 |---|---|---|---|
-| RAG retrieval | 55-query eval set, doc-level ground truth | recall@5 0.118 → **0.627** (×5.2) | `ai-models/eval_results/retrieval/*.json` |
-| Job ranker | Leave-one-group-out NDCG/MAP vs baselines | ndcg@5 **0.589** vs 0.560 overlap / 0.160 random | `ai-models/models/custom/job_ranker_eval.json` |
+| RAG retrieval | 55-query eval set, doc-level ground truth | recall@5 0.118 → **0.609** final pipeline (rerank peak **0.627**; ×5.2) | `ai-models/eval_results/retrieval/*.json` |
+| Job ranker | Leave-one-group-out NDCG/MAP vs baselines | ndcg@5 **0.589** vs 0.560 overlap / 0.160 random; MAP ties overlap | `ai-models/models/custom/job_ranker_eval.json` |
 | Source credibility | Deterministic tier fraction | scorer + tests green | `ai-models/src/rag/credibility.py` |
 | Assessment (open-ended) | Expert review packet (blind, 3 reviewers) | packet ready; session is an operator step | `docs/product/EXPERT_REVIEW_PACKET.md` |
 | Faithfulness | LLM-judge (Gemini) | scaffolded; Gemini-quota-gated | `ai-models/scripts/eval_faithfulness.py` |
@@ -34,7 +34,8 @@ diagnosis: [`RAG_RETRIEVAL_EVAL.md`](RAG_RETRIEVAL_EVAL.md).
 documented miss.** Root cause (diagnosed, not assumed): doc-level matchers
 under-credit multiple relevant chunks from one annotated source, and 16/55
 queries — concentrated in roadmap-category bleed — still miss in the top-10. The
-*relative* gains (×5.2 recall@5, ×5.0 MRR) are the defensible story; the absolute
+*relative* gains (final pipeline recall@5 ×5.2 to 0.609, MRR ×5.0 to 0.544; rerank
+peak recall@5 0.627 / MRR 0.553) are the defensible story; the absolute
 precision target is honest future work (per-source quotas, multilingual corpus).
 
 ## 2. Job ranker
@@ -49,13 +50,16 @@ precision target is honest future work (per-source quotas, multilingual corpus).
 | ndcg@10 | 0.5755 | 0.5601 | 0.2118 |
 | map | 0.3750 | 0.3750 | 0.1589 |
 
-The learned ranker beats overlap (+0.029 ndcg@5) and crushes random; the
-embedding feature was **disabled** in this run (sentence-transformers
-unavailable in the training env), so the lift is a **lower bound**. This is a
-weak-supervision *demonstrator* — the real-data upgrade path (ingest ≥100 real
-Egyptian postings → retrain with embeddings → re-eval) is documented in
-[`DATASET_REGISTRY.md`](DATASET_REGISTRY.md) and `EVAL_REPORT.md`, and is an
-operator step (no live network in this environment).
+The learned ranker shows a small ndcg@5 lift over overlap (+0.029) and a large
+lift over random, while **MAP ties the overlap baseline**. The embedding feature
+was **disabled** in this run (sentence-transformers unavailable in the training
+env), so this should be defended as a weak-supervision *methodology
+demonstrator*, not as a market-validated production model. The current
+repository commits eval artifacts, not `job_ranker.lgb`; runtime falls back to
+skill-overlap ordering when no local model file exists. The real-data upgrade
+path (ingest ≥100 real Egyptian postings → retrain with embeddings → re-eval)
+is documented in [`DATASET_REGISTRY.md`](DATASET_REGISTRY.md) and
+`EVAL_REPORT.md`, and is an operator step (no live network in this environment).
 
 ## 3. Source credibility (deterministic)
 
@@ -84,7 +88,7 @@ running the session is an operator step. The instrument is positioned as
 |---|---|
 | Retrieval recall@5 lift over baseline | ✅ ×5.2 |
 | Precision@5 > 0.70 | ❌ 0.22 — documented miss + root cause |
-| Ranker beats overlap & random baselines | ✅ (lower bound; embedding disabled) |
+| Ranker beats overlap & random baselines | 🟡 ndcg@5 beats overlap slightly and random strongly; MAP ties overlap; embedding disabled |
 | Credibility scorer deterministic + tested | ✅ |
 | Faithfulness > 0.85 (LLM judge) | ⏳ scaffolded, Gemini-gated (operator run) |
 | Expert-review agreement | ⏳ packet ready, session is operator step |

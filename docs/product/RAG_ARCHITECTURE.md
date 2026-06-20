@@ -88,8 +88,10 @@ missing Chroma volume.
 
 ## Measured impact
 
-Cumulative over the locked baseline: **recall@5 ×5.2, MRR ×5.0, precision@5 ×4.0**
-(`RAG_RETRIEVAL_EVAL.md`, every number traced to a committed
+Cumulative over the locked baseline on the **final abstention-floor pipeline**:
+**recall@5 ×5.2 (0.609), MRR ×5.0 (0.544), precision@5 ×4.0 (0.218)**. The rerank
+peak stage reaches recall@5 **0.627** / MRR **0.553** before diversity/abstention
+trade-offs (`RAG_RETRIEVAL_EVAL.md`, every number traced to a committed
 `ai-models/eval_results/retrieval/*.json`).
 
 ## Honest limitations
