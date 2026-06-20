@@ -170,3 +170,127 @@ def test_serializer_exposes_assessment_baseline_fields():
     data = RoadmapPhaseSerializer(phase).data
     assert data["milestones"][0]["completed_from_assessment"] is True
     assert data["baseline_from_assessment"] is True
+
+
+@pytest.mark.django_db
+def test_phase_baseline_false_when_no_milestones():
+    from apps.roadmaps.models import Roadmap, RoadmapPhase
+    from apps.roadmaps.serializers import RoadmapPhaseSerializer
+    from apps.users.models import User
+
+    user = User.objects.create_user(
+        auth0_id="sc2", email="sc2@example.com", username="sc2",
+        full_name="SC2", date_of_birth="1997-01-01",
+    )
+    roadmap = Roadmap.objects.create(
+        user=user, title="R", target_career="Backend Developer",
+        current_level="advanced", target_level="job-ready",
+        estimated_duration_weeks=12, status=Roadmap.DRAFT,
+    )
+    phase = RoadmapPhase.objects.create(
+        roadmap=roadmap, title="Foundations", description="", order=1,
+        estimated_duration_weeks=4, status="not_started",
+    )
+
+    data = RoadmapPhaseSerializer(phase).data
+    assert data["milestones"] == []
+    assert data["baseline_from_assessment"] is False
+
+
+@pytest.mark.django_db
+def test_phase_baseline_false_when_a_completed_milestone_is_not_from_assessment():
+    from decimal import Decimal
+    from apps.roadmaps.models import Roadmap, RoadmapMilestone, RoadmapPhase
+    from apps.roadmaps.serializers import RoadmapPhaseSerializer
+    from apps.users.models import User
+
+    user = User.objects.create_user(
+        auth0_id="sc3", email="sc3@example.com", username="sc3",
+        full_name="SC3", date_of_birth="1997-01-01",
+    )
+    roadmap = Roadmap.objects.create(
+        user=user, title="R", target_career="Backend Developer",
+        current_level="advanced", target_level="job-ready",
+        estimated_duration_weeks=12, status=Roadmap.DRAFT,
+    )
+    phase = RoadmapPhase.objects.create(
+        roadmap=roadmap, title="Foundations", description="", order=1,
+        estimated_duration_weeks=4, status="completed",
+    )
+    RoadmapMilestone.objects.create(
+        phase=phase, title="Learn HTTP", description="", order=1,
+        estimated_duration_hours=Decimal("10.00"), status="completed",
+        completed_from_assessment=True,
+    )
+    RoadmapMilestone.objects.create(
+        phase=phase, title="Learn REST", description="", order=2,
+        estimated_duration_hours=Decimal("10.00"), status="completed",
+        completed_from_assessment=False,
+    )
+
+    data = RoadmapPhaseSerializer(phase).data
+    assert len(data["milestones"]) == 2
+    assert data["baseline_from_assessment"] is False
+
+
+@pytest.mark.django_db
+def test_phase_baseline_false_when_only_in_progress_milestones():
+    from decimal import Decimal
+    from apps.roadmaps.models import Roadmap, RoadmapMilestone, RoadmapPhase
+    from apps.roadmaps.serializers import RoadmapPhaseSerializer
+    from apps.users.models import User
+
+    user = User.objects.create_user(
+        auth0_id="sc4", email="sc4@example.com", username="sc4",
+        full_name="SC4", date_of_birth="1997-01-01",
+    )
+    roadmap = Roadmap.objects.create(
+        user=user, title="R", target_career="Backend Developer",
+        current_level="advanced", target_level="job-ready",
+        estimated_duration_weeks=12, status=Roadmap.DRAFT,
+    )
+    phase = RoadmapPhase.objects.create(
+        roadmap=roadmap, title="Foundations", description="", order=1,
+        estimated_duration_weeks=4, status="in_progress",
+    )
+    RoadmapMilestone.objects.create(
+        phase=phase, title="Learn HTTP", description="", order=1,
+        estimated_duration_hours=Decimal("10.00"), status="in_progress",
+        completed_from_assessment=False,
+    )
+
+    data = RoadmapPhaseSerializer(phase).data
+    assert len(data["milestones"]) == 1
+    assert data["baseline_from_assessment"] is False
+
+
+@pytest.mark.django_db
+def test_milestone_list_serializer_exposes_completed_from_assessment():
+    from decimal import Decimal
+    from apps.roadmaps.models import Roadmap, RoadmapMilestone, RoadmapPhase
+    from apps.roadmaps.serializers import RoadmapMilestoneListSerializer
+    from apps.users.models import User
+
+    user = User.objects.create_user(
+        auth0_id="sc5", email="sc5@example.com", username="sc5",
+        full_name="SC5", date_of_birth="1997-01-01",
+    )
+    roadmap = Roadmap.objects.create(
+        user=user, title="R", target_career="Backend Developer",
+        current_level="advanced", target_level="job-ready",
+        estimated_duration_weeks=12, status=Roadmap.DRAFT,
+    )
+    phase = RoadmapPhase.objects.create(
+        roadmap=roadmap, title="Foundations", description="", order=1,
+        estimated_duration_weeks=4, status="completed",
+    )
+    milestone = RoadmapMilestone.objects.create(
+        phase=phase, title="Learn HTTP", description="", order=1,
+        estimated_duration_hours=Decimal("10.00"), status="completed",
+        completed_from_assessment=True,
+    )
+
+    data = RoadmapMilestoneListSerializer(milestone).data
+    assert "completed_from_assessment" in data
+    assert data["completed_from_assessment"] == milestone.completed_from_assessment
+    assert data["completed_from_assessment"] is True
