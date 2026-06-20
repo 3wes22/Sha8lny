@@ -6,9 +6,15 @@ Security-focused configuration.
 """
 
 from .base import *
+from django.core.exceptions import ImproperlyConfigured
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
+
+if SECRET_KEY == INSECURE_DEV_SECRET_KEY:
+    raise ImproperlyConfigured(
+        "SECRET_KEY must be set to a unique, secure value in production."
+    )
 
 # ALLOWED_HOSTS must be set from environment variable
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=lambda v: [s.strip() for s in v.split(',')])

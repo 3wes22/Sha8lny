@@ -45,6 +45,12 @@ class NotificationViewSet(viewsets.ModelViewSet):
     - GET /notifications/urgent/ - Get urgent notifications
     """
     permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['get', 'head', 'options', 'delete', 'post']
+
+    def get_permissions(self):
+        if self.action == 'create':
+            return [permissions.IsAdminUser()]
+        return super().get_permissions()
 
     def get_queryset(self):
         """Return notifications for current user only."""
@@ -131,7 +137,10 @@ class NotificationViewSet(viewsets.ModelViewSet):
             # Mark specific notifications as read
             marked_count = 0
             for notif_id in notification_ids:
-                notification = NotificationService.mark_as_read(str(notif_id))
+                notification = NotificationService.mark_as_read(
+                    str(notif_id),
+                    user=request.user,
+                )
                 if notification:
                     marked_count += 1
 

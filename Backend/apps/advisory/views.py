@@ -136,6 +136,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
     - DELETE /conversations/{id}/ - Delete conversation
     """
     permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['get', 'head', 'options', 'delete']
 
     def get_queryset(self):
         """Return conversations for current user only."""

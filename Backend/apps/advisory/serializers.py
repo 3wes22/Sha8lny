@@ -74,6 +74,7 @@ class ConversationSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id',
+            'user',
             'message_count',
             'total_tokens_used',
             'last_message_at',
