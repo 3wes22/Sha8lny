@@ -7,18 +7,30 @@ import re
 from pathlib import Path
 from typing import Mapping
 
-_VALID_PREFIX = "AIza"
+# Google is migrating from standard keys (AIza…) to authorization keys (AQ.).
+# Both work with ?key= on the Gemini REST API; accept either prefix.
+_KEY_PREFIXES = ("AIza", "AQ.")
 _MAX_NUMBERED_KEYS = 9
 _AIza_PATTERN = re.compile(r"AIza[0-9A-Za-z_-]+")
+_AQ_PATTERN = re.compile(r"AQ\.[0-9A-Za-z_-]+")
 
 
 def _is_valid_key(value: str) -> bool:
     candidate = str(value or "").strip()
-    if not candidate.startswith(_VALID_PREFIX):
+    if not any(candidate.startswith(prefix) for prefix in _KEY_PREFIXES):
         return False
     if candidate.startswith("your-") or candidate.endswith("-here"):
         return False
     return True
+
+
+def _extract_keys_from_text(text: str) -> list[str]:
+    found: list[str] = []
+    for match in _AIza_PATTERN.finditer(text):
+        _append_unique(found, match.group(0))
+    for match in _AQ_PATTERN.finditer(text):
+        _append_unique(found, match.group(0))
+    return found
 
 
 def _append_unique(keys: list[str], value: str) -> None:
@@ -62,13 +74,12 @@ def _keys_from_env_file(path: Path, *, include_commented: bool = True) -> list[s
         if body.startswith("GEMINI_API_KEY") and "=" in body:
             _append_unique(keys, body.split("=", 1)[1])
             continue
-        if body.startswith(_VALID_PREFIX):
+        if any(body.startswith(prefix) for prefix in _KEY_PREFIXES):
             _append_unique(keys, body)
             continue
 
-        match = _AIza_PATTERN.search(body)
-        if match:
-            _append_unique(keys, match.group(0))
+        for key in _extract_keys_from_text(body):
+            _append_unique(keys, key)
 
     return keys
 

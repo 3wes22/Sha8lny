@@ -223,7 +223,8 @@ These complete claims **C3** / **C11** after the code/docs remediation PRs.
 
 **`.env` format:** use `GEMINI_API_KEY=AIzaSy...` on a single line with **no space after `=`**.
 Add backup keys via `GEMINI_API_KEYS=key1,key2`, `GEMINI_API_KEY_2=...`, or commented
-`# AIzaSy...` lines — the runtime rotates to the next key automatically on **429** quota errors.
+`# AIzaSy...` / `# AQ....` lines — both Google's legacy **AIza** keys and newer **AQ.**
+authorization keys are supported; the runtime rotates on **429** quota errors.
 
 ```bash
 cd ai-models

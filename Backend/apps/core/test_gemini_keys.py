@@ -25,6 +25,17 @@ def test_collect_gemini_api_keys_from_mapping():
     ]
 
 
+def test_collect_gemini_api_keys_accepts_aq_auth_keys():
+    keys = collect_gemini_api_keys(
+        env={
+            "GEMINI_API_KEY": "AQ.TestAuthKeyExample_1234567890",
+            "GEMINI_API_KEYS": "AIzaSy-secondary-key",
+        }
+    )
+    assert keys[0].startswith("AQ.")
+    assert keys[1].startswith("AIza")
+
+
 def test_collect_gemini_api_keys_from_commented_env_file(tmp_path: Path):
     env_file = tmp_path / ".env"
     env_file.write_text(
@@ -32,6 +43,7 @@ def test_collect_gemini_api_keys_from_commented_env_file(tmp_path: Path):
             [
                 "GEMINI_API_KEY=AIzaSy-active-key",
                 "# AIzaSy-commented-backup-key",
+                "# AQ.CommentedAuthKeyExample_123",
                 "# GEMINI_API_KEY=AIzaSy-commented-assignment",
             ]
         )
@@ -40,6 +52,7 @@ def test_collect_gemini_api_keys_from_commented_env_file(tmp_path: Path):
     assert keys == [
         "AIzaSy-active-key",
         "AIzaSy-commented-backup-key",
+        "AQ.CommentedAuthKeyExample_123",
         "AIzaSy-commented-assignment",
     ]
 
