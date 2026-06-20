@@ -87,3 +87,22 @@ def test_does_not_mutate_input():
     phases = _phases()
     apply_assessment_baseline(phases, "advanced", gaps=[], mastered=[])
     assert "status" not in phases[0]["milestones"][0]
+
+
+def test_substring_collisions_do_not_match():
+    # beginner learner has mastered "Git" -- this must NOT pre-pass a milestone
+    # whose text merely contains "git" as a substring (e.g. "Digital").
+    phases = [
+        {
+            "title": "Foundations",
+            "milestones": [
+                {
+                    "title": "Digital marketing basics",
+                    "skills": ["digital-marketing"],
+                },
+            ],
+        },
+    ]
+    out = apply_assessment_baseline(phases, "beginner", gaps=[], mastered=["Git"])
+    milestone = out[0]["milestones"][0]
+    assert (milestone["status"], milestone["from_assessment"]) == ("not_started", False)

@@ -30,7 +30,7 @@ def _matches(labels: list[str], text: str) -> bool:
     lowered = text.lower()
     for label in labels:
         for tok in _tokens(label):
-            if tok in lowered:
+            if re.search(rf"\b{re.escape(tok)}\b", lowered):
                 return True
     return False
 
