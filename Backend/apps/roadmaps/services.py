@@ -956,6 +956,20 @@ class RoadmapService:
         query = RoadmapService._milestone_search_query(milestone, roadmap)
         matches = CourseIndex.search(query, top_k=top_k or COURSE_INDEX_TOP_K)
         if not matches:
+            # Embedding store unavailable/empty -> deterministic skill/role/level
+            # ranking over the real catalog (graceful, offline fallback).
+            from apps.assessments.role_graph import resolve_role_key
+            from apps.courses.matching import match_courses, target_level_for_order
+
+            matches = match_courses(
+                target_career=roadmap.target_career,
+                role_key=resolve_role_key(roadmap.target_career),
+                milestone_title=milestone.title,
+                milestone_skills=milestone.skills if isinstance(milestone.skills, list) else [],
+                target_level=target_level_for_order(milestone.phase.order),
+                top_k=top_k or COURSE_INDEX_TOP_K,
+            )
+        if not matches:
             return
 
         linked_course_ids = set(milestone.courses.values_list("course_id", flat=True))
