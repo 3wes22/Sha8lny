@@ -50,10 +50,6 @@ HOURS_PER_FOCUS_ITEM = 10
 # even when computed hours are small (avoids a 1-2 week "plan").
 MIN_PLAN_WEEKS = 8
 
-# Fraction of total weeks allocated to each of the three phases
-# (foundation / gap-closing / portfolio+job-search). Sums to 1.0.
-PHASE_WEEK_SPLIT = (0.30, 0.40, 0.30)
-
 # Minimum weeks per phase so no phase collapses to zero.
 MIN_PHASE_WEEKS = 2
 
@@ -608,94 +604,23 @@ class RoadmapService:
         top_skills: List[str],
         weekly_hours: int,
     ) -> List[Dict[str, Any]]:
-        """Create a deterministic, assessment-aware roadmap structure."""
-        total_focus_items = max(1, len(priority_skills) + len(gaps))
-        base_hours = BASE_HOURS_BY_LEVEL.get(current_level, DEFAULT_BASE_HOURS)
-        total_hours = base_hours + (total_focus_items * HOURS_PER_FOCUS_ITEM)
-        estimated_weeks = max(MIN_PLAN_WEEKS, math.ceil(total_hours / max(weekly_hours, 1)))
+        """Create the assessment-aware 5-band ladder blueprint."""
+        from apps.roadmaps.ladder import build_ladder_blueprint
 
-        first_skill = priority_skills[0] if priority_skills else (top_skills[0] if top_skills else target_career)
-        second_skill = priority_skills[1] if len(priority_skills) > 1 else first_skill
-        first_gap = gaps[0] if gaps else f'{target_career} fundamentals'
-        second_gap = gaps[1] if len(gaps) > 1 else 'project execution'
-        lead_strength = strengths[0] if strengths else 'your strongest skills'
-
-        foundation_weeks = max(MIN_PHASE_WEEKS, math.ceil(estimated_weeks * PHASE_WEEK_SPLIT[0]))
-        gap_weeks = max(MIN_PHASE_WEEKS, math.ceil(estimated_weeks * PHASE_WEEK_SPLIT[1]))
-        # Third phase takes the remainder (may fall below the floor); the guard
-        # below then borrows from the gap phase so the three phases still sum to
-        # ``estimated_weeks``. Clamping here instead would make the guard dead
-        # code and silently overshoot the planned duration.
-        phase_weeks = [
-            foundation_weeks,
-            gap_weeks,
-            estimated_weeks - foundation_weeks - gap_weeks,
-        ]
-        if phase_weeks[2] < MIN_PHASE_WEEKS:
-            deficit = MIN_PHASE_WEEKS - phase_weeks[2]
-            phase_weeks[1] = max(MIN_PHASE_WEEKS, phase_weeks[1] - deficit)
-            phase_weeks[2] = MIN_PHASE_WEEKS
-
-        return [
-            {
-                'title': f'Stabilize your {target_career} baseline',
-                'description': (
-                    f'Anchor the roadmap around your current {current_level} signal and '
-                    f'build repeatable confidence with {first_skill}.'
-                ),
-                'weeks': phase_weeks[0],
-                'objectives': [
-                    f'Clarify what job-ready {target_career} performance looks like.',
-                    f'Strengthen {first_skill} with deliberate practice.',
-                    'Create momentum before the heavier gap-closing work starts.',
-                ],
-                'milestones': [
-                    {'title': f'Audit your current {target_career} baseline', 'type': 'practice', 'hours': 6, 'skills': top_skills[:2] or [first_skill]},
-                    {'title': f'Strengthen {first_skill} foundations', 'type': 'course', 'hours': 14, 'skills': [first_skill]},
-                    {'title': f'Build a scoped practice project using {first_skill}', 'type': 'project', 'hours': 18, 'skills': [first_skill]},
-                ],
-            },
-            {
-                'title': 'Close the highest-priority gaps',
-                'description': (
-                    f'Turn the assessment gaps into explicit milestones so the roadmap stays '
-                    f'personal instead of generic.'
-                ),
-                'weeks': phase_weeks[1],
-                'objectives': [
-                    f'Close the {first_gap} gap with focused work.',
-                    f'Build working confidence with {second_skill}.',
-                    'Translate weak spots into visible progress.',
-                ],
-                'milestones': [
-                    {'title': f'Close the {first_gap} gap', 'type': 'practice', 'hours': 12, 'skills': [first_gap]},
-                    {'title': f'Build working confidence with {second_skill}', 'type': 'course', 'hours': 12, 'skills': [second_skill]},
-                    {'title': f'Apply {second_gap} in a guided project sprint', 'type': 'project', 'hours': 20, 'skills': [second_gap, second_skill]},
-                ],
-            },
-            {
-                'title': 'Ship proof and become job-ready',
-                'description': (
-                    f'Use {lead_strength} as an advantage while packaging your work for real '
-                    f'{target_career} opportunities.'
-                ),
-                'weeks': phase_weeks[2],
-                'objectives': [
-                    'Produce portfolio evidence that matches the target role.',
-                    'Turn project work into resume and interview stories.',
-                    'Run a focused job search with clear next actions.',
-                ],
-                'milestones': [
-                    {'title': RoadmapService._portfolio_project_title(target_career), 'type': 'project', 'hours': 24, 'skills': [first_skill, second_skill]},
-                    {'title': f'Turn {lead_strength} into resume-ready and interview-ready stories', 'type': 'practice', 'hours': 8, 'skills': strengths[:2] or [lead_strength]},
-                    {'title': f'Run a targeted {target_career} job search sprint', 'type': 'practice', 'hours': 8, 'skills': [target_career]},
-                ],
-            },
-        ]
+        return build_ladder_blueprint(
+            target_career=target_career,
+            current_level=current_level,
+            priority_skills=priority_skills,
+            gaps=gaps,
+            top_skills=top_skills,
+            strengths=strengths,
+            weekly_hours=weekly_hours,
+        )
 
     @staticmethod
     def _create_personalized_structure(roadmap: Roadmap, phases_data: List[Dict[str, Any]]) -> None:
-        """Persist the generated roadmap hierarchy."""
+        """Persist the generated roadmap hierarchy with assessment-derived statuses."""
+        now = timezone.now()
         for phase_idx, phase_data in enumerate(phases_data, start=1):
             phase = RoadmapPhase.objects.create(
                 roadmap=roadmap,
@@ -707,7 +632,10 @@ class RoadmapService:
                 objectives=phase_data.get('objectives', []),
             )
 
-            for milestone_idx, milestone_data in enumerate(phase_data.get('milestones', []), start=1):
+            milestones = phase_data.get('milestones', [])
+            for milestone_idx, milestone_data in enumerate(milestones, start=1):
+                m_status = milestone_data.get('status', 'not_started')
+                from_assessment = bool(milestone_data.get('from_assessment', False))
                 RoadmapMilestone.objects.create(
                     phase=phase,
                     title=milestone_data['title'],
@@ -718,11 +646,42 @@ class RoadmapService:
                     milestone_type=milestone_data['type'],
                     order=milestone_idx,
                     estimated_duration_hours=Decimal(str(milestone_data['hours'])),
-                    status='not_started',
+                    status=m_status,
+                    completed_from_assessment=from_assessment,
+                    completed_at=now if m_status == 'completed' else None,
                     is_required=True,
                     skills=milestone_data.get('skills', []),
                     resources=milestone_data.get('resources', []),
                 )
+
+            # Derive phase status/completion from its milestones (no signals fired).
+            total = len(milestones)
+            completed = sum(1 for m in milestones if m.get('status') == 'completed')
+            if total and completed == total:
+                phase.status = 'completed'
+                phase.completion_percentage = Decimal('100.00')
+                phase.completed_at = now
+                phase.started_at = now
+            elif completed:
+                phase.status = 'in_progress'
+                phase.completion_percentage = Decimal(str(round(completed / total * 100, 2)))
+                phase.started_at = now
+            else:
+                phase.status = 'not_started'
+                phase.completion_percentage = Decimal('0.00')
+            phase.save(update_fields=[
+                'status', 'completion_percentage', 'started_at', 'completed_at', 'updated_at',
+            ])
+
+    @staticmethod
+    def _baseline_completion_percentage(roadmap: Roadmap) -> Decimal:
+        """Roadmap completion from persisted milestone statuses (no side effects)."""
+        milestones = RoadmapMilestone.objects.filter(phase__roadmap=roadmap)
+        total = milestones.count()
+        if not total:
+            return Decimal('0.00')
+        completed = milestones.filter(status=RoadmapMilestone.COMPLETED).count()
+        return Decimal(str(round(completed / total * 100, 2)))
 
     @staticmethod
     def _build_generation_input_summary(
@@ -909,8 +868,14 @@ class RoadmapService:
             default_summary=default_summary,
         )
 
+        from apps.roadmaps.baseline import apply_assessment_baseline
+
+        mastered = RoadmapService._dedupe_preserve_order([*top_skills, *strengths])
+        baselined_phases = apply_assessment_baseline(
+            personalization.phases, roadmap.current_level, gaps, mastered,
+        )
         roadmap.phases.all().delete()
-        RoadmapService._create_personalized_structure(roadmap, personalization.phases)
+        RoadmapService._create_personalized_structure(roadmap, baselined_phases)
         RoadmapService.match_courses_for_roadmap(roadmap)
 
         generation.update(
@@ -941,6 +906,7 @@ class RoadmapService:
             'job_readiness_focus': roadmap.target_career,
             'coaching_notes': personalization.coaching_notes,
         }
+        roadmap.completion_percentage = RoadmapService._baseline_completion_percentage(roadmap)
         roadmap.save(
             update_fields=[
                 'description',
@@ -953,6 +919,7 @@ class RoadmapService:
                 'processing_time_seconds',
                 'ai_insights',
                 'metadata',
+                'completion_percentage',
                 'updated_at',
             ]
         )
@@ -988,6 +955,20 @@ class RoadmapService:
 
         query = RoadmapService._milestone_search_query(milestone, roadmap)
         matches = CourseIndex.search(query, top_k=top_k or COURSE_INDEX_TOP_K)
+        if not matches:
+            # Embedding store unavailable/empty -> deterministic skill/role/level
+            # ranking over the real catalog (graceful, offline fallback).
+            from apps.assessments.role_graph import resolve_role_key
+            from apps.courses.matching import match_courses, target_level_for_order
+
+            matches = match_courses(
+                target_career=roadmap.target_career,
+                role_key=resolve_role_key(roadmap.target_career),
+                milestone_title=milestone.title,
+                milestone_skills=milestone.skills if isinstance(milestone.skills, list) else [],
+                target_level=target_level_for_order(milestone.phase.order),
+                top_k=top_k or COURSE_INDEX_TOP_K,
+            )
         if not matches:
             return
 

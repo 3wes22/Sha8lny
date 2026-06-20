@@ -55,7 +55,9 @@ def test_generate_writes_only_valid_drafts_to_staging(tmp_path, monkeypatch):
         fake_generate_structured,
     )
 
-    call_command("generate_scenarios", "--role", "frontend", "--tier", "1", "--limit", "2", stdout=StringIO())
+    # Tier 1 is now fully seeded for every role; draft against the still-open
+    # Tier-2 (stage-2) frontend blueprints, whose first cells are single_choice.
+    call_command("generate_scenarios", "--role", "frontend", "--tier", "2", "--limit", "2", stdout=StringIO())
 
     drafts = read_drafts("frontend")
     assert len(drafts) == 2
@@ -113,8 +115,10 @@ def test_generate_skips_failed_generation_and_continues(tmp_path, monkeypatch):
         fake_generate_structured,
     )
 
+    # Tier 1 is now fully seeded; exercise the skip-and-continue path on the
+    # still-open Tier-2 frontend blueprints.
     call_command(
-        "generate_scenarios", "--role", "frontend", "--tier", "1", "--limit", "2",
+        "generate_scenarios", "--role", "frontend", "--tier", "2", "--limit", "2",
         stdout=StringIO(), stderr=StringIO(),
     )
 

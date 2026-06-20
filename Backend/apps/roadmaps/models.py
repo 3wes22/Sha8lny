@@ -622,6 +622,12 @@ class RoadmapMilestone(BaseModel):
     #     {"title": "Tutorial Video", "url": "https://...", "type": "video"}
     # ]
 
+    completed_from_assessment = models.BooleanField(
+        default=False,
+        help_text="True when this milestone was marked complete from the user's "
+                  "assessment baseline (already-mastered), not finished in-plan",
+    )
+
     completed_at = models.DateTimeField(
         null=True,
         blank=True,

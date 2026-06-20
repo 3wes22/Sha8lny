@@ -12,6 +12,7 @@ SRS References:
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser
 from django.http import HttpResponse
 
 from apps.career_tools.models import Resume, Portfolio
@@ -55,6 +56,39 @@ class ResumeViewSet(viewsets.ModelViewSet):
             return ResumeListSerializer
         return ResumeSerializer
 
+    def perform_create(self, serializer):
+        """Assign the resume to the requesting user (``user`` is read-only)."""
+        serializer.save(user=self.request.user)
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="upload",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def upload(self, request):
+        """
+        Upload a CV file (PDF, DOCX, or TXT), extract text, populate sections,
+        store the original file, and run ATS scoring.
+
+        POST /resumes/upload/
+        Form field: file
+        """
+        upload_file = request.FILES.get("file")
+        if not upload_file:
+            return Response(
+                {"error": "No file provided. Send multipart field 'file'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            resume = ResumeService.create_resume_from_upload(request.user, upload_file)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = ResumeSerializer(resume)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
     @action(detail=True, methods=['post'])
     def generate(self, request, pk=None):
         """
@@ -88,6 +122,21 @@ class ResumeViewSet(viewsets.ModelViewSet):
             'export_note': 'Downloadable file export (PDF/DOCX) is planned for v2.',
             'document': ResumeService.build_resume_document(resume),
         }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def improve(self, request, pk=None):
+        """
+        AI-improve the resume for ATS using the configured LLM.
+
+        POST /resumes/{id}/improve/
+
+        Returns a rewritten summary, stronger bullet suggestions, missing
+        keywords, and prioritized recommendations. Falls back to deterministic
+        suggestions (``ai_used: false``) when the LLM is unavailable.
+        """
+        resume = self.get_object()
+        result = ResumeService.improve_with_ai(resume)
+        return Response(result, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
     def optimize_ats(self, request, pk=None):
@@ -152,6 +201,10 @@ class PortfolioViewSet(viewsets.ModelViewSet):
         if self.action == 'list':
             return PortfolioListSerializer
         return PortfolioSerializer
+
+    def perform_create(self, serializer):
+        """Assign the portfolio to the requesting user (``user`` is read-only)."""
+        serializer.save(user=self.request.user)
 
     @action(detail=True, methods=['post'])
     def publish(self, request, pk=None):

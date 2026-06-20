@@ -96,10 +96,14 @@ class NotificationService:
         return Notification.objects.for_user(user).filter(is_read=False).count()
 
     @staticmethod
-    def mark_as_read(notification_id: str) -> Optional[Notification]:
-        """Mark a notification as read"""
+    def mark_as_read(notification_id: str, user: User) -> Optional[Notification]:
+        """Mark a notification as read for the owning user."""
         try:
-            notification = Notification.objects.get(id=notification_id)
+            notification = Notification.objects.get(
+                id=notification_id,
+                user=user,
+                is_deleted=False,
+            )
             notification.mark_as_read()
             return notification
         except Notification.DoesNotExist:

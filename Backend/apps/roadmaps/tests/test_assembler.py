@@ -73,7 +73,57 @@ class TestRoadmapAssembler:
 
         assert provenance.fallback_used is True
         assert provenance.structure_source == "deterministic_fallback"
-        assert len(phases) == 3
+        assert len(phases) == 5
+
+    @patch("apps.roadmaps.assembler.RoadmapPathRetriever.retrieve_path_chunks")
+    def test_provenance_contract_sourced_path(self, mock_retrieve, test_user):
+        """Task 2.4: sourced provenance carries the full honest contract."""
+        mock_retrieve.return_value = RETRIEVED_CHUNKS
+
+        _, provenance = RoadmapAssembler.assemble(
+            user=test_user,
+            target_career="Backend Developer",
+            assessment_result=None,
+            current_level="beginner",
+            weekly_hours=10,
+            priority_skills=["Python"],
+            gaps=["Authentication"],
+            strengths=["Git"],
+            top_skills=["Python"],
+        )
+
+        contract = provenance.to_dict()
+        for key in ("structure_source", "retrieved_urls", "onet_mappings", "fallback_used", "structure_license_tier"):
+            assert key in contract
+        assert contract["structure_source"] == "roadmap.sh"
+        assert contract["fallback_used"] is False
+        # roadmap.sh is personal-use-only — flagged dev-only, never the defended corpus.
+        assert contract["structure_license_tier"] == "dev_only"
+
+    @patch("apps.roadmaps.assembler.RoadmapPathRetriever.retrieve_path_chunks")
+    def test_provenance_contract_fallback_when_chroma_absent(self, mock_retrieve, test_user):
+        """Task 2.4: fallback_used is true and license tier is internal when retrieval yields nothing."""
+        mock_retrieve.return_value = []
+
+        _, provenance = RoadmapAssembler.assemble(
+            user=test_user,
+            target_career="Backend Developer",
+            assessment_result=None,
+            current_level="beginner",
+            weekly_hours=10,
+            priority_skills=[],
+            gaps=[],
+            strengths=[],
+            top_skills=[],
+        )
+
+        contract = provenance.to_dict()
+        for key in ("structure_source", "retrieved_urls", "onet_mappings", "fallback_used", "structure_license_tier"):
+            assert key in contract
+        assert contract["fallback_used"] is True
+        assert contract["structure_source"] == "deterministic_fallback"
+        assert contract["structure_license_tier"] == "internal"
+        assert contract["retrieved_urls"] == []
 
     @patch("apps.roadmaps.assembler.RoadmapPathRetriever.retrieve_path_chunks")
     def test_backend_onet_mappings_attached(self, mock_retrieve, test_user):

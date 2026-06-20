@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { Link } from "react-router-dom";
 
+import { ROUTES } from "@/app/routes";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { userApi, type UserPreferences } from "@/lib/api";
@@ -67,7 +69,11 @@ export default function SettingsPage() {
 
   return (
     <PageShell
-      actions={<Button variant="outline">Password reset handled via account recovery</Button>}
+      actions={
+        <Button asChild variant="outline">
+          <Link to={ROUTES.forgotPassword}>Account recovery (MVP stub)</Link>
+        </Button>
+      }
       description="Keep delivery and privacy settings explicit."
       eyebrow="Settings"
       title="Preferences"

@@ -39,11 +39,16 @@
 - Reuse `CHROMA_PERSIST_DIR` with a new collection named `assessment_scenarios`: rejected by user. Simpler at the process level (one Chroma client) but tangles two unrelated retrieval features into one operational artifact.
 - Use SQLite or a flat JSON file: rejected because semantic similarity over 384-dim embeddings is the whole point, and Chroma is already a dependency.
 
-## Decision 3: Retrieval is gated by a default-off feature flag
+## Decision 3: Retrieval is gated by a feature flag
+
+**As-built note (2026-06):** the implementation currently defaults
+`ASSESSMENT_SCENARIO_RAG_ENABLED` to `true` in `Backend/apps/core/ai_settings.py`.
+This remains reversible by environment override, and retrieval safely returns an
+empty list when no approved matching scenario exists.
 
 **Decision**: New setting `ASSESSMENT_SCENARIO_RAG_ENABLED` defaults to `False`. When false, `_build_stage_prompt()` produces a byte-identical prompt to today's behavior. Flag flip is the only rollout/rollback control.
 
-**Rationale**: Spec FR-002, SC-003, and SC-005 require reversibility via a single configuration change. Default-off keeps the merge risk at zero and lets staging/production opt in independently.
+**Rationale**: Spec FR-002, SC-003, and SC-005 require reversibility via a single configuration change. The original plan preferred default-off; the as-built system defaults on because empty retrieval is safe and environments can still opt out independently.
 
 **Alternatives considered**:
 

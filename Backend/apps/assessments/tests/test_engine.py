@@ -92,6 +92,95 @@ def test_stage_two_allocator_includes_priority_gaps_and_uncertain_areas():
     assert targets[1].key in target_keys
 
 
+def _open_ended_question() -> dict:
+    return {
+        "id": "s2_q1",
+        "stage": 2,
+        "subskill_key": "decorators",
+        "dimension_key": "python_fundamentals",
+        "question_type": "open_ended",
+        "stem": "Explain how functools.wraps preserves metadata.",
+        "answer_key": {
+            "expected_concepts": ["functools.wraps", "metadata", "signature"],
+            "required_concept_count": 2,
+            "forbidden_concepts": ["inline the logging"],
+            "scoring": "concept_coverage",
+        },
+    }
+
+
+def test_score_open_ended_uses_keyword_coverage_when_llm_disabled():
+    question = _open_ended_question()
+    # Default flag is off -> deterministic keyword coverage.
+    score, confidence, method = AnswerScorer.score_open_ended(
+        question, "functools.wraps copies the metadata and signature across."
+    )
+    assert method == "keyword_coverage"
+    assert 1.0 <= score <= 5.0
+    assert confidence > 0
+
+
+def test_score_open_ended_uses_llm_rubric_when_enabled(monkeypatch):
+    import apps.core.ai_settings as ai_settings
+    import apps.core.gemma_client as gemma_module
+
+    monkeypatch.setattr(ai_settings, "ASSESSMENT_RUBRIC_LLM_ENABLED", True, raising=False)
+
+    class _FakeResult:
+        payload = {"score": 4, "reasoning": "covers the key concepts"}
+
+    class _FakeGemmaClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def generate_structured(self, *args, **kwargs):
+            return _FakeResult()
+
+    monkeypatch.setattr(gemma_module, "GemmaClient", _FakeGemmaClient)
+
+    score, confidence, method = AnswerScorer.score_open_ended(
+        _open_ended_question(), "It keeps the wrapper's name and docstring."
+    )
+    assert method == "llm_rubric"
+    assert score == 4.0
+    assert confidence == 0.85
+
+
+def test_score_open_ended_falls_back_when_llm_raises(monkeypatch):
+    import apps.core.ai_settings as ai_settings
+    import apps.core.gemma_client as gemma_module
+
+    monkeypatch.setattr(ai_settings, "ASSESSMENT_RUBRIC_LLM_ENABLED", True, raising=False)
+
+    class _BoomGemmaClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def generate_structured(self, *args, **kwargs):
+            raise RuntimeError("gemini unavailable")
+
+    monkeypatch.setattr(gemma_module, "GemmaClient", _BoomGemmaClient)
+
+    score, _confidence, method = AnswerScorer.score_open_ended(
+        _open_ended_question(), "functools.wraps copies metadata and signature."
+    )
+    # On any LLM failure the deterministic keyword scorer takes over.
+    assert method == "keyword_coverage"
+    assert 1.0 <= score <= 5.0
+
+
+def test_score_stage_records_scoring_method_on_open_ended_metadata():
+    graph = load_role_graph("backend")
+    question = _open_ended_question()
+    question["subskill_key"] = StageAllocator.allocate_stage_one(graph)[0].key
+    question["dimension_key"] = StageAllocator.allocate_stage_one(graph)[0].dimension
+    responses = [{"question_id": "s2_q1", "answer": "functools.wraps copies metadata."}]
+
+    AnswerScorer.score_stage(graph, [question], responses)
+
+    assert question["generation_metadata"]["scoring_method"] == "keyword_coverage"
+
+
 def test_answer_scorer_uses_answer_keys_for_typed_stage_items():
     graph = load_role_graph("backend")
     targets = StageAllocator.allocate_stage_one(graph)

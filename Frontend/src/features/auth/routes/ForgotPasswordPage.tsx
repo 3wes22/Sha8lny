@@ -1,24 +1,19 @@
-import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { ROUTES } from "@/app/routes";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-
   return (
     <div className="min-h-screen px-4 py-6 md:px-8">
       <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
         <section className="poster-surface overflow-hidden rounded-[2rem] border border-border/70 px-6 py-8 md:px-10">
           <p className="type-kicker">Recovery</p>
-          <h1 className="mt-4 text-balance text-5xl font-bold md:text-7xl">Recover access without losing your place.</h1>
+          <h1 className="mt-4 text-balance text-5xl font-bold md:text-7xl">Account recovery is not wired yet.</h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground md:text-lg">
-            The account recovery flow can plug into the backend later. For now, keep the next step clear and low-friction.
+            Password reset is out of scope for the graduation MVP. Use your existing credentials or contact an
+            administrator if you are locked out of a demo account.
           </p>
         </section>
 
@@ -29,32 +24,22 @@ export default function ForgotPasswordPage() {
           </Link>
           <div className="mt-5 space-y-2">
             <p className="type-kicker">Reset password</p>
-            <h2 className="text-4xl font-bold">Recover access</h2>
+            <h2 className="text-4xl font-bold">Not available in MVP</h2>
           </div>
 
-          {submitted ? (
-            <div className="mt-6 rounded-[1.5rem] border border-primary/20 bg-primary/5 p-5 text-sm text-muted-foreground">
-              If an account exists for <span className="font-semibold text-foreground">{email}</span>, the recovery instructions can be connected here.
-            </div>
-          ) : (
-            <div className="mt-6 space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="reset-email">Email</Label>
-                <Input
-                  id="reset-email"
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="you@example.com"
-                  type="email"
-                  value={email}
-                />
-              </div>
-              <Button className="gradient-primary w-full" disabled={!email.trim()} onClick={() => setSubmitted(true)}>
-                Continue
-              </Button>
-            </div>
-          )}
+          <div className="mt-6 rounded-[1.5rem] border border-amber-500/30 bg-amber-500/5 p-5 text-sm text-muted-foreground">
+            <p className="font-semibold text-foreground">Backend endpoint not implemented</p>
+            <p className="mt-2">
+              There is no `/users/auth/password-reset/` flow in the current API. This page is kept as a route stub so
+              the login link does not 404, but no email is sent from here.
+            </p>
+          </div>
+
+          <Button asChild className="gradient-primary mt-6 w-full">
+            <Link to={ROUTES.login}>Return to sign in</Link>
+          </Button>
         </div>
       </div>
     </div>
   );
-}
+};

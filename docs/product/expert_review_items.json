@@ -1,0 +1,152 @@
+[
+  {
+    "id": "OE01",
+    "role": "backend",
+    "subskill": "service_decomposition",
+    "question_text": "When splitting a monolith into services, how do you decide where the boundaries go, and why?",
+    "answer_key": {
+      "expected_concepts": ["bounded context", "cohesion", "coupling", "business capability"]
+    },
+    "sample_answer": "Draw boundaries around cohesive business capabilities with low coupling between services. Bounded contexts from domain-driven design help avoid shared mutable models across teams."
+  },
+  {
+    "id": "OE02",
+    "role": "backend",
+    "subskill": "relational_modeling",
+    "question_text": "How would you model a many-to-many relationship, and what problems does that avoid?",
+    "answer_key": {
+      "expected_concepts": ["join table", "foreign keys", "update anomalies", "normalization"]
+    },
+    "sample_answer": "Use a join table with foreign keys to both entities instead of duplicating rows. This avoids update anomalies and keeps the schema normalized."
+  },
+  {
+    "id": "OE03",
+    "role": "backend",
+    "subskill": "http_api_design",
+    "question_text": "How would you make a create order endpoint safe to retry, and what status codes would you return?",
+    "answer_key": {
+      "expected_concepts": ["idempotency", "201 Created", "retry safety", "idempotency key"]
+    },
+    "sample_answer": "Accept an idempotency key so duplicate POSTs return the same order. Respond 201 Created on first success and 200 or 409 with the existing resource on retries."
+  },
+  {
+    "id": "OE04",
+    "role": "frontend",
+    "subskill": "hooks_effects",
+    "question_text": "Why might a React effect read a stale value, and how do you fix it?",
+    "answer_key": {
+      "expected_concepts": ["closure", "dependency array", "stale closure", "useEffect"]
+    },
+    "sample_answer": "Effects capture values from the render when they were created, so state can be stale. Fix it by listing dependencies in the dependency array or restructuring with refs."
+  },
+  {
+    "id": "OE05",
+    "role": "frontend",
+    "subskill": "component_composition",
+    "question_text": "When would you compose with children or render props instead of adding props or inheritance?",
+    "answer_key": {
+      "expected_concepts": ["composition over inheritance", "children", "render prop", "reuse"]
+    },
+    "sample_answer": "Use children or render props when multiple layouts share behavior but need different UI. Composition avoids prop drilling and is more flexible than class inheritance."
+  },
+  {
+    "id": "OE06",
+    "role": "data_science",
+    "subskill": "batch_vs_streaming",
+    "question_text": "For a fraud-scoring pipeline, what are the tradeoffs between batch and streaming, and which fits?",
+    "answer_key": {
+      "expected_concepts": ["latency", "throughput", "event time", "bounded vs unbounded"]
+    },
+    "sample_answer": "Batch gives higher throughput and simpler joins but higher latency. Streaming fits fraud because you need low latency on unbounded event streams."
+  },
+  {
+    "id": "OE07",
+    "role": "data_science",
+    "subskill": "star_schema",
+    "question_text": "When is a star schema preferable to a fully normalized model, and what do you trade away?",
+    "answer_key": {
+      "expected_concepts": ["denormalization", "fewer joins", "query speed", "redundancy"]
+    },
+    "sample_answer": "Star schemas speed analytic queries with fewer joins by denormalizing dimensions. You trade storage redundancy and update complexity for read performance."
+  },
+  {
+    "id": "OE08",
+    "role": "machine_learning_engineer",
+    "subskill": "training_serving_skew",
+    "question_text": "How does training/serving skew arise, and how do you prevent it?",
+    "answer_key": {
+      "expected_concepts": ["feature parity", "shared transformation", "serving-time", "data drift"]
+    },
+    "sample_answer": "Skew happens when training and serving use different feature code or data windows. Share the same transformation library and log serving features for monitoring."
+  },
+  {
+    "id": "OE09",
+    "role": "machine_learning_engineer",
+    "subskill": "bias_variance",
+    "question_text": "How would you diagnose overfitting, and what would you change to address it?",
+    "answer_key": {
+      "expected_concepts": ["train validation gap", "regularization", "more data", "model capacity"]
+    },
+    "sample_answer": "A large train/validation gap signals overfitting. Add regularization, gather more data, or reduce model capacity."
+  },
+  {
+    "id": "OE10",
+    "role": "devops",
+    "subskill": "dockerfile_best_practices",
+    "question_text": "How would you reduce a large production Docker image and speed up rebuilds?",
+    "answer_key": {
+      "expected_concepts": ["multi-stage build", "layer caching", "slim base image", "copy order"]
+    },
+    "sample_answer": "Use multi-stage builds, a slim base image, and order Dockerfile layers so dependencies cache before app code copies."
+  },
+  {
+    "id": "OE11",
+    "role": "devops",
+    "subskill": "iam_least_privilege",
+    "question_text": "How would you apply least privilege to a service that only reads one storage bucket?",
+    "answer_key": {
+      "expected_concepts": ["read-only", "scoped policy", "least privilege", "bucket ARN"]
+    },
+    "sample_answer": "Grant read-only IAM permissions scoped to that bucket ARN. Avoid wildcard actions or resources beyond what the service needs."
+  },
+  {
+    "id": "OE12",
+    "role": "android",
+    "subskill": "optimistic_updates",
+    "question_text": "How would you implement an optimistic like, and what happens if the server call fails?",
+    "answer_key": {
+      "expected_concepts": ["update UI first", "rollback", "reconcile", "server failure"]
+    },
+    "sample_answer": "Toggle the like in the UI immediately, then call the API. On failure, rollback the UI state and show an error."
+  },
+  {
+    "id": "OE13",
+    "role": "fullstack",
+    "subskill": "be_select_related_prefetch",
+    "question_text": "How would you detect and fix N+1 queries in a Django list view?",
+    "answer_key": {
+      "expected_concepts": ["select_related", "prefetch_related", "query count", "django debug toolbar"]
+    },
+    "sample_answer": "Use Django Debug Toolbar or logging to spot repeated queries, then add select_related for foreign keys or prefetch_related for many-to-many."
+  },
+  {
+    "id": "OE14",
+    "role": "ui_ux_designer",
+    "subskill": "usability_testing",
+    "question_text": "How would you run a session to find where users struggle in checkout?",
+    "answer_key": {
+      "expected_concepts": ["task-based test", "think aloud", "observation", "realistic scenario"]
+    },
+    "sample_answer": "Run task-based usability tests with realistic checkout scenarios, observe where users hesitate, and collect think-aloud notes."
+  },
+  {
+    "id": "OE15",
+    "role": "ui_ux_designer",
+    "subskill": "information_architecture",
+    "question_text": "How would you validate that your navigation grouping matches users' expectations?",
+    "answer_key": {
+      "expected_concepts": ["card sort", "mental model", "findability", "tree test"]
+    },
+    "sample_answer": "Run an open or closed card sort to see how users group labels, then validate findability with a tree test."
+  }
+]

@@ -1,3 +1,6 @@
+# Superpowers visual brainstorming companion
+.superpowers/
+
 # Python
 __pycache__/
 *.py[cod]

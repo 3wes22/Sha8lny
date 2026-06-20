@@ -44,6 +44,16 @@ def test_user(db):
 
 
 @pytest.fixture
+def loop_user(db):
+    from apps.users.models import User
+
+    return User.objects.create_user(
+        auth0_id="ladder_auth0", email="ladder@example.com", username="ladder_user",
+        full_name="Ladder User", date_of_birth="1997-01-01",
+    )
+
+
+@pytest.fixture
 def roadmap_template(db):
     """Create a roadmap template."""
     return RoadmapTemplate.objects.create(
@@ -197,6 +207,8 @@ class TestRoadmapCreationAPI:
         Forces the deterministic roadmap blueprint (LLM unavailable) so the assertions on
         assessment-derived structure are hermetic instead of depending on live Gemini output.
         """
+        from unittest.mock import patch
+
         monkeypatch.setattr(core_ai_settings, "GEMINI_API_KEY", "")
         api_client.force_authenticate(user=test_user)
 
@@ -232,11 +244,21 @@ class TestRoadmapCreationAPI:
             llm_model_used='assessment-mock-v1',
         )
 
-        response = api_client.post(
-            reverse('roadmaps:roadmap-list'),
-            {'assessment_id': str(assessment_result.id)},
-            format='json',
-        )
+        with (
+            patch(
+                "apps.roadmaps.assembler.RoadmapPathRetriever.retrieve_path_chunks",
+                return_value=[],
+            ),
+            patch(
+                "apps.roadmaps.ai_pipeline.GemmaClient.generate_structured",
+                side_effect=RuntimeError("offline"),
+            ),
+        ):
+            response = api_client.post(
+                reverse('roadmaps:roadmap-list'),
+                {'assessment_id': str(assessment_result.id)},
+                format='json',
+            )
 
         assert response.status_code == status.HTTP_202_ACCEPTED
         assert response.data['target_career'] == 'Backend Developer'
@@ -255,15 +277,26 @@ class TestRoadmapCreationAPI:
         assert roadmap.ai_insights['strengths']
         assert 'System design' in roadmap.ai_insights['gaps']
         assert roadmap.ai_insights['priority_skills'] == ['Django', 'PostgreSQL']
-        assert roadmap.phases.count() == 3
+        assert roadmap.phases.count() == 5
+
+        # Ladder blueprint (Task 3/4): authored band content replaces literal
+        # gap/skill-name insertion into milestone titles, so assert on the
+        # 5-band structure itself rather than gap/skill substrings.
+        phase_titles = list(
+            roadmap.phases.order_by('order').values_list('title', flat=True)
+        )
+        assert any('Foundations' in title for title in phase_titles)
+        assert any('Job-Ready' in title for title in phase_titles)
 
         milestone_titles = list(
             RoadmapMilestone.objects.filter(phase__roadmap=roadmap)
             .order_by('phase__order', 'order')
             .values_list('title', flat=True)
         )
+        # "Backend Developer" resolves to the "backend" role ladder
+        # (apps/roadmaps/ladder.py ROLE_LADDERS), whose band 1 always
+        # includes this authored topic — a stable, content-specific check.
         assert any('Django' in title for title in milestone_titles)
-        assert any('System design' in title for title in milestone_titles)
 
     def test_create_ai_roadmap_prefers_structured_roadmap_signal(self, api_client, test_user):
         """Test roadmap generation prefers structured roadmap_signal over legacy learning paths."""
@@ -721,3 +754,123 @@ class TestRoadmapListAPI:
         assert response.status_code == status.HTTP_200_OK
         # Should only see own roadmap
         assert len(response.data['results']) == 1
+
+
+@pytest.mark.django_db
+def test_generation_produces_five_band_ladder(loop_user):
+    from unittest.mock import patch
+
+    from apps.assessments.models import Assessment, AssessmentResult
+    from apps.roadmaps.models import Roadmap
+    from apps.roadmaps.services import RoadmapService
+
+    assessment = Assessment.objects.create(
+        user=loop_user, assessment_type="skills", target_career="Backend Developer",
+        questions=[], total_questions=0, status="completed", ai_processing_status="completed",
+    )
+    assessment_result = AssessmentResult.objects.create(
+        assessment=assessment, overall_score=40, skill_scores={"python": 40},
+        strengths=["Python"], areas_for_improvement=["System design"],
+        recommended_careers=[{"title": "Backend Developer", "match_score": 80}],
+        recommended_learning_paths=[], ai_insights="x", llm_model_used="mock", ai_confidence_score=0.7,
+    )
+    roadmap = Roadmap.objects.create(
+        user=loop_user, title="R", target_career="Backend Developer", assessment=assessment_result,
+        current_level="beginner", target_level="job-ready", estimated_duration_weeks=12,
+        weekly_hours_commitment=10, status=Roadmap.DRAFT, ai_processing_status="pending",
+    )
+    with patch("apps.roadmaps.assembler.RoadmapPathRetriever.retrieve_path_chunks", return_value=[]), \
+         patch("apps.roadmaps.ai_pipeline.GemmaClient.generate_structured", side_effect=RuntimeError("offline")):
+        RoadmapService.populate_ai_roadmap(roadmap)
+
+    phases = list(roadmap.phases.order_by("order"))
+    assert len(phases) == 5
+    assert "Foundations" in phases[0].title
+    assert "Job-Ready" in phases[4].title
+
+
+def _make_advanced_backend_roadmap(user):
+    from apps.assessments.models import Assessment, AssessmentResult
+    from apps.roadmaps.models import Roadmap
+
+    assessment = Assessment.objects.create(
+        user=user, assessment_type="skills", target_career="Backend Developer",
+        questions=[], total_questions=0, status="completed", ai_processing_status="completed",
+    )
+    # NOTE: Roadmap.assessment is a FK to AssessmentResult (apps/roadmaps/models.py:225-226),
+    # not Assessment, so we must capture and link the created AssessmentResult below.
+    result = AssessmentResult.objects.create(
+        assessment=assessment, overall_score=88, skill_scores={"python": 90},
+        strengths=["Python"], areas_for_improvement=["Observability"],
+        recommended_careers=[{"title": "Backend Developer", "match_score": 92}],
+        recommended_learning_paths=[], ai_insights="x", llm_model_used="mock", ai_confidence_score=0.9,
+    )
+    return Roadmap.objects.create(
+        user=user, title="R", target_career="Backend Developer", assessment=result,
+        current_level="advanced", target_level="job-ready", estimated_duration_weeks=12,
+        weekly_hours_commitment=10, status=Roadmap.DRAFT, ai_processing_status="pending",
+    )
+
+
+@pytest.mark.django_db
+def test_advanced_learner_greys_first_two_bands(loop_user):
+    from unittest.mock import patch
+    from apps.roadmaps.services import RoadmapService
+
+    roadmap = _make_advanced_backend_roadmap(loop_user)
+    with patch("apps.roadmaps.assembler.RoadmapPathRetriever.retrieve_path_chunks", return_value=[]), \
+         patch("apps.roadmaps.ai_pipeline.GemmaClient.generate_structured", side_effect=RuntimeError("offline")):
+        RoadmapService.populate_ai_roadmap(roadmap)
+
+    phases = list(roadmap.phases.order_by("order"))
+    # Foundations + Core fully passed from assessment.
+    for phase in phases[:2]:
+        assert phase.status == "completed"
+        assert all(m.status == "completed" and m.completed_from_assessment
+                   for m in phase.milestones.all())
+    # Intermediate band onward is active (not from assessment).
+    assert phases[2].status in {"not_started", "in_progress"}
+    assert any(not m.completed_from_assessment for m in phases[2].milestones.all())
+    # Headline completion reflects the assessment baseline.
+    assert float(roadmap.completion_percentage) > 0
+
+
+@pytest.mark.django_db
+def test_baseline_persist_fires_no_completion_notifications(loop_user):
+    from unittest.mock import patch
+    from apps.roadmaps.services import RoadmapService
+
+    roadmap = _make_advanced_backend_roadmap(loop_user)
+    with patch("apps.roadmaps.assembler.RoadmapPathRetriever.retrieve_path_chunks", return_value=[]), \
+         patch("apps.roadmaps.ai_pipeline.GemmaClient.generate_structured", side_effect=RuntimeError("offline")), \
+         patch("apps.progress.services.ProgressService.update_progress_metrics") as recompute:
+        RoadmapService.populate_ai_roadmap(roadmap)
+    # Generation must NOT route baseline through the progress recompute.
+    recompute.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_reopening_assessment_milestone_clears_flag(loop_user):
+    from decimal import Decimal
+    from apps.progress.services import MilestoneService
+    from apps.roadmaps.models import Roadmap, RoadmapMilestone, RoadmapPhase
+
+    roadmap = Roadmap.objects.create(
+        user=loop_user, title="R", target_career="Backend Developer",
+        current_level="advanced", target_level="job-ready",
+        estimated_duration_weeks=12, status=Roadmap.DRAFT,
+    )
+    phase = RoadmapPhase.objects.create(
+        roadmap=roadmap, title="Foundations", description="", order=1,
+        estimated_duration_weeks=4, status="completed",
+    )
+    milestone = RoadmapMilestone.objects.create(
+        phase=phase, title="Learn HTTP", description="", order=1,
+        estimated_duration_hours=Decimal("10.00"), status="completed",
+        completed_from_assessment=True,
+    )
+
+    MilestoneService.update_milestone_status(loop_user, milestone, "not_started")
+    milestone.refresh_from_db()
+    assert milestone.status == "not_started"
+    assert milestone.completed_from_assessment is False

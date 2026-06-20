@@ -23,7 +23,7 @@ job matching → AI career advisor**, end to end. It is a full-stack application
   without network or API quota.
 
 The platform's core flow works end to end and is covered by an automated test
-suite: **291 backend tests** and **105 AI-layer tests** passing.
+suite: **382 backend tests** and **112 AI-layer tests** passing (5 AI-layer skips).
 
 ---
 
@@ -216,8 +216,8 @@ cd ai-models
 python3 scripts/validate_corpus.py
 
 # Test suites
-cd ../Backend && env -u GEMINI_API_KEY ./venv/bin/python -m pytest -q   # 291 passing
-cd ../ai-models && ../Backend/venv/bin/python -m pytest -q              # 105 passing
+cd ../Backend && env -u GEMINI_API_KEY ./venv/bin/python -m pytest -q   # 382 passing
+cd ../ai-models && ../Backend/venv/bin/python -m pytest -q              # 112 passing, 5 skipped
 ```
 
 **Supporting documents:**

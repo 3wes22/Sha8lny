@@ -61,27 +61,44 @@ class Command(BaseCommand):
         updated_count = 0
 
         for skill_data in skills_data:
-            skill, created = Skill.objects.update_or_create(
-                name=skill_data['name'],
-                defaults={
-                    'slug': slugify(skill_data['name']),
-                    'category': skill_data['category'],
-                    'popularity_score': skill_data['popularity_score'],
-                    'description': f"Essential {skill_data['name']} skill for career growth",
-                    'is_active': True,
-                }
-            )
+            name = skill_data['name']
+            desired_slug = slugify(name)
+            defaults = {
+                'category': skill_data['category'],
+                'popularity_score': skill_data['popularity_score'],
+                'description': f"Essential {name} skill for career growth",
+                'is_active': True,
+                'is_deleted': False,
+                'deleted_at': None,
+            }
 
-            if created:
+            # Idempotent upsert that tolerates a pre-populated DB: match an
+            # existing skill by name (including soft-deleted rows), and only
+            # claim ``desired_slug`` when no *other* skill already holds it, so a
+            # re-run never trips the unique-slug constraint.
+            skill = Skill.all_objects.filter(name=name).first()
+            if skill is None:
+                slug = desired_slug
+                suffix = 2
+                while Skill.all_objects.filter(slug=slug).exists():
+                    slug = f"{desired_slug}-{suffix}"
+                    suffix += 1
+                skill = Skill.objects.create(name=name, slug=slug, **defaults)
                 created_count += 1
-                self.stdout.write(
-                    self.style.SUCCESS(f'Created skill: {skill.name}')
-                )
+                self.stdout.write(self.style.SUCCESS(f'Created skill: {skill.name}'))
             else:
-                updated_count += 1
-                self.stdout.write(
-                    self.style.WARNING(f'Updated skill: {skill.name}')
+                for field, value in defaults.items():
+                    setattr(skill, field, value)
+                slug_taken = (
+                    Skill.all_objects.filter(slug=desired_slug)
+                    .exclude(pk=skill.pk)
+                    .exists()
                 )
+                if not slug_taken:
+                    skill.slug = desired_slug
+                skill.save()
+                updated_count += 1
+                self.stdout.write(self.style.WARNING(f'Updated skill: {skill.name}'))
 
         self.stdout.write(
             self.style.SUCCESS(

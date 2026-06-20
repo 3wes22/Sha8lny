@@ -405,6 +405,69 @@ class CourseCompletionService:
         return completion
 
     @staticmethod
+    @transaction.atomic
+    def record_completion(
+        user: User,
+        course: Course,
+        started_at: datetime,
+        completed_at: datetime,
+        roadmap_course: Optional[RoadmapCourse] = None,
+        time_spent_hours: Optional[Decimal] = None,
+        user_rating: Optional[int] = None,
+        user_review: str = "",
+        would_recommend: Optional[bool] = None,
+        certificate_url: str = "",
+    ) -> CourseCompletion:
+        """Record a course completion with explicit start/end timestamps."""
+        existing = CourseCompletion.objects.filter(
+            user=user,
+            course=course,
+            is_deleted=False,
+        ).first()
+
+        if existing:
+            if user_rating is not None:
+                existing.user_rating = user_rating
+            if user_review:
+                existing.user_review = user_review
+            if would_recommend is not None:
+                existing.would_recommend = would_recommend
+            if certificate_url:
+                existing.certificate_url = certificate_url
+                existing.has_certificate = True
+            existing.save()
+            return existing
+
+        completion = CourseCompletion.objects.create(
+            user=user,
+            course=course,
+            roadmap_course=roadmap_course,
+            started_at=started_at,
+            completed_at=completed_at,
+            time_spent_hours=time_spent_hours,
+            completion_percentage=Decimal("100.00"),
+            user_rating=user_rating,
+            user_review=user_review,
+            would_recommend=would_recommend,
+            has_certificate=bool(certificate_url),
+            certificate_url=certificate_url,
+        )
+
+        if roadmap_course and roadmap_course.milestone:
+            roadmap = roadmap_course.milestone.phase.roadmap
+            ProgressService.update_progress_metrics(user, roadmap)
+            ProgressService.update_streak(user, roadmap)
+
+        course_completed.send(
+            sender=CourseCompletion,
+            instance=completion,
+            user=user,
+            course=course,
+        )
+
+        return completion
+
+    @staticmethod
     def get_user_completions(user: User) -> List[CourseCompletion]:
         """Get all course completions for user"""
         return list(CourseCompletion.objects.filter(
@@ -542,7 +605,12 @@ class MilestoneService:
         milestone.status = status
         if status == RoadmapMilestone.NOT_STARTED:
             milestone.completed_at = None
-        milestone.save(update_fields=["status", "completed_at", "updated_at"])
+        # Leaving "completed" means the learner is redoing it: drop the
+        # assessment-baseline marker so it reads as real in-plan work.
+        milestone.completed_from_assessment = False
+        milestone.save(update_fields=[
+            "status", "completed_at", "completed_from_assessment", "updated_at",
+        ])
 
         MilestoneAchievement.objects.filter(
             user=user,
@@ -570,6 +638,50 @@ class MilestoneService:
 
 class TimeLogService:
     """Service for time tracking"""
+
+    @staticmethod
+    def log_time(
+        user: User,
+        started_at: datetime,
+        ended_at: datetime,
+        activity_type: str,
+        course: Optional[Course] = None,
+        roadmap: Optional[Roadmap] = None,
+        duration_minutes: Optional[int] = None,
+    ) -> TimeLog:
+        """Create a time log entry from API payload."""
+        if duration_minutes is not None:
+            time_log = TimeLog.objects.create(
+                user=user,
+                course=course,
+                roadmap=roadmap,
+                started_at=started_at,
+                ended_at=ended_at,
+                duration_minutes=duration_minutes,
+                activity_type=activity_type,
+            )
+            if roadmap:
+                progress = ProgressService.update_streak(user, roadmap)
+                progress.total_learning_hours += Decimal(str(time_log.duration_hours))
+                if progress.last_activity_date and progress.created_at:
+                    weeks = max(
+                        1,
+                        (timezone.now().date() - progress.created_at.date()).days / 7,
+                    )
+                    progress.average_hours_per_week = (
+                        progress.total_learning_hours / Decimal(str(weeks))
+                    )
+                progress.save()
+            return time_log
+
+        return TimeLogService.log_learning_session(
+            user=user,
+            started_at=started_at,
+            ended_at=ended_at,
+            activity_type=activity_type,
+            course=course,
+            roadmap=roadmap,
+        )
 
     @staticmethod
     def log_learning_session(

@@ -364,9 +364,9 @@ npm run lint
 | Progress | 🟡 Working; light test coverage |
 | Notifications | 🟡 Models/API/signals; email/push stubbed |
 | Career Tools (resume/portfolio) | 🟡 CRUD works; generate/ATS return structured responses, PDF export is v2 |
-| Courses (embedding search) | 🟡 Built; URL route currently disabled |
+| Courses (embedding search) | 🟡 Built; route wired at `config/urls.py`, matcher runs during roadmap generation |
 
-Backend test suite: **274 tests passing**. Frontend builds clean.
+Backend test suite: **382 tests passing** (`cd Backend && pytest -q`, verified 2026-06-20). Frontend: **74 Vitest cases passing** (`cd Frontend && npm run test:run`).
 
 ## Current Known Issues
 

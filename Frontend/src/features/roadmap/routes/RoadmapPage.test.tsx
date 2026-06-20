@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   roadmapGet: vi.fn(),
   roadmapCreateFromTemplate: vi.fn(),
   roadmapActivate: vi.fn(),
+  roadmapUpdateProgress: vi.fn(),
   navigate: vi.fn(),
 }));
 
@@ -29,6 +30,7 @@ vi.mock("@/lib/api", () => ({
     get: mocks.roadmapGet,
     createFromTemplate: mocks.roadmapCreateFromTemplate,
     activate: mocks.roadmapActivate,
+    updateProgress: mocks.roadmapUpdateProgress,
   },
 }));
 
@@ -164,6 +166,64 @@ describe("RoadmapPage", () => {
     }, { timeout: 3000 });
 
     expect(await screen.findByText(/Personalized roadmap description/i)).toBeInTheDocument();
+  });
+
+  it("toggles a milestone in the trail and persists it via updateProgress", async () => {
+    const user = userEvent.setup();
+
+    mocks.roadmapList.mockResolvedValueOnce({
+      results: [{ id: "roadmap-trail-1", status: "in_progress" }],
+    });
+    mocks.roadmapGet.mockResolvedValue({
+      id: "roadmap-trail-1",
+      title: "Frontend Engineer",
+      description: "Trail roadmap description",
+      status: "in_progress",
+      ai_processing_status: "completed",
+      completion_percentage: "20",
+      total_phases: 1,
+      phases: [
+        {
+          id: "phase-1",
+          title: "Frameworks",
+          description: "React",
+          order: 1,
+          estimated_duration_weeks: 3,
+          status: "in_progress",
+          completion_percentage: "0",
+          objectives: [],
+          milestones: [
+            {
+              id: "milestone-1",
+              title: "Learn React fundamentals",
+              description: "",
+              milestone_type: "course",
+              order: 1,
+              estimated_duration_hours: "6",
+              status: "not_started",
+              is_required: true,
+              skills: [],
+              resources: [],
+            },
+          ],
+        },
+      ],
+    });
+    mocks.roadmapUpdateProgress.mockResolvedValue({});
+
+    render(<RoadmapPage />);
+
+    const milestone = await screen.findByRole("checkbox", { name: /Learn React fundamentals/i });
+    await act(async () => {
+      await user.click(milestone);
+    });
+
+    await waitFor(() => {
+      expect(mocks.roadmapUpdateProgress).toHaveBeenCalledWith("roadmap-trail-1", {
+        milestone_id: "milestone-1",
+        status: "completed",
+      });
+    });
   });
 
   it("navigates to the dashboard after activating a draft roadmap", async () => {

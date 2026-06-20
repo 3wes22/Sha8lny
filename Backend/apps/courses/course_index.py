@@ -23,6 +23,10 @@ def build_course_embedding_text(course) -> str:
         .select_related("skill")
         .values_list("skill__name", flat=True)
     )
+    # Ingested catalog courses carry their curated skills on metadata rather than
+    # as Skill rows (to avoid polluting the global skill taxonomy); include them.
+    metadata = course.metadata if isinstance(course.metadata, dict) else {}
+    skill_names += [str(s).strip() for s in (metadata.get("skills") or []) if str(s).strip()]
     parts = [
         str(course.title or "").strip(),
         str(course.description or "").strip(),

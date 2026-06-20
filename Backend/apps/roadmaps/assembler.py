@@ -23,6 +23,15 @@ from apps.users.models import User
 ASSEMBLER_VERSION = "roadmap-assembler-v1"
 
 
+# Honest licensing tier for the structure source (see DATASET_REGISTRY.md):
+# roadmap.sh content is personal-use-only — a development-only fallback that must
+# never be defended as the licensed corpus; our deterministic templates are
+# internally authored. The frontend renders this so sourced vs. fallback
+# roadmaps are never misrepresented.
+STRUCTURE_LICENSE_DEV_ONLY = "dev_only"
+STRUCTURE_LICENSE_INTERNAL = "internal"
+
+
 @dataclass
 class RoadmapProvenanceMetadata:
     structure_source: str
@@ -30,6 +39,7 @@ class RoadmapProvenanceMetadata:
     retrieved_urls: list[str]
     onet_mappings: list[dict[str, Any]]
     fallback_used: bool
+    structure_license_tier: str = STRUCTURE_LICENSE_INTERNAL
     assembler_version: str = ASSEMBLER_VERSION
     phase_sources: list[dict[str, Any]] = field(default_factory=list)
     retrieval_chunk_count: int = 0
@@ -212,6 +222,7 @@ class RoadmapAssembler:
                 retrieved_urls=[],
                 onet_mappings=[],
                 fallback_used=True,
+                structure_license_tier=STRUCTURE_LICENSE_INTERNAL,
                 retrieval_chunk_count=0,
             )
             return phases_data, provenance
@@ -251,6 +262,7 @@ class RoadmapAssembler:
             retrieved_urls=list(dict.fromkeys(all_urls)),
             onet_mappings=onet_mappings,
             fallback_used=False,
+            structure_license_tier=STRUCTURE_LICENSE_DEV_ONLY,
             phase_sources=phase_sources,
             retrieval_chunk_count=len(chunks),
         )

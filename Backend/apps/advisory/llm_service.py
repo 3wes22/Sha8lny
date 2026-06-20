@@ -42,6 +42,32 @@ def calculate_delay(response_text: str) -> float:
     return max(0.5, min(delay, 3.0))
 
 
+# Public citation fields surfaced to API clients (Task 2.2). The frontend renders
+# these per assistant message; the internal `_normalize_documents` shape stays
+# richer (score, topic, file) for prompt building and logging.
+PUBLIC_CITATION_FIELDS = ("source", "url", "section", "excerpt", "confidence_tier")
+
+
+def to_public_citations(documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Map internal normalized documents to the public citation contract."""
+    citations: List[Dict[str, Any]] = []
+    for document in documents or []:
+        if not isinstance(document, dict):
+            continue
+        citations.append(
+            {
+                # `source_name` is the licensed corpus label (e.g. "bls_ooh");
+                # fall back to the legacy `source` (category) then "general".
+                "source": str(document.get("source_name") or document.get("source") or "general"),
+                "url": str(document.get("url") or ""),
+                "section": str(document.get("section") or "").strip(),
+                "excerpt": str(document.get("excerpt") or "").strip(),
+                "confidence_tier": str(document.get("confidence_tier") or "LOW"),
+            }
+        )
+    return citations
+
+
 def get_rag_runtime() -> Optional[Dict[str, Callable[..., Any] | str]]:
     """Load the installed `rag` package lazily."""
     try:
@@ -269,6 +295,28 @@ class LLMAdvisoryService:
         return response_text, calculate_delay(response_text), metadata
 
     def generate_response(
+        self,
+        message: str,
+        conversation_history: Optional[list] = None,
+        user_context: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[str, float, Dict[str, Any]]:
+        response_text, delay, metadata = self._generate_response_impl(
+            message,
+            conversation_history=conversation_history,
+            user_context=user_context,
+        )
+        return response_text, delay, self._attach_citation_contract(metadata)
+
+    @staticmethod
+    def _attach_citation_contract(metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """Surface the public citation payload + no-context flag on every path (Task 2.2)."""
+        context_used = metadata.get("context_used")
+        documents = context_used.get("retrieved_documents") if isinstance(context_used, dict) else []
+        metadata["retrieved_documents"] = to_public_citations(documents or [])
+        metadata["no_retrieval_context"] = metadata.get("error_code") == "no_retrieval_context"
+        return metadata
+
+    def _generate_response_impl(
         self,
         message: str,
         conversation_history: Optional[list] = None,
