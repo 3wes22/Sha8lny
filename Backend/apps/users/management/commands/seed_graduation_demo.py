@@ -313,86 +313,60 @@ class Command(BaseCommand):
         )
 
         # Layer real (non-assessment) progress on top of the greyed baseline by
-        # working the current active band, so the account also shows live courses,
+        # working the current active band: complete its first course-milestone and
+        # the real Coursera course that the matcher attached to it during
+        # generation, then start the next one — so the account shows real courses,
         # a completion, and a streak alongside the assessment-derived greying.
-        phases = list(roadmap.phases.order_by("order").prefetch_related("milestones"))
+        phases = list(
+            roadmap.phases.order_by("order").prefetch_related("milestones__courses__course")
+        )
         current_phase = next(
             (phase for phase in phases if phase.status != RoadmapPhase.COMPLETED),
             phases[-1],
         )
-        active_milestones = [
+        active_course_milestones = [
             milestone
             for milestone in current_phase.milestones.order_by("order")
             if milestone.status != RoadmapMilestone.COMPLETED
+            and milestone.milestone_type == RoadmapMilestone.COURSE
         ]
-        band_label = current_phase.title.split(":")[0].strip() or "Current phase"
 
-        platform = self._ensure_demo_course_platform()
-
-        if active_milestones:
-            first_milestone = active_milestones[0]
-            primary_course = self._upsert_demo_course(
-                platform=platform,
-                external_id="demo-current-phase-deep-dive",
-                title=f"{band_label} Deep Dive",
-                short_description="Hands-on practice mapped to your current roadmap phase.",
-                url="https://demo.sha8alny.local/courses/current-phase-deep-dive",
-                duration_hours=Decimal("12.00"),
-                level="intermediate",
-            )
-            primary_roadmap_course = RoadmapService.add_course_to_milestone(
-                first_milestone,
-                primary_course,
-                order=1,
-                is_primary=True,
-                match_score=Decimal("92.00"),
-                recommendation_reason="Best match for your current roadmap milestone.",
-            )
-            CourseCompletionService.mark_course_complete(
-                user=user,
-                course=primary_course,
-                roadmap_course=primary_roadmap_course,
-                time_spent_hours=Decimal("12.00"),
-                user_rating=5,
-                user_review="Exactly the push needed to clear this milestone.",
-                would_recommend=True,
-            )
-            primary_roadmap_course.is_enrolled = True
-            primary_roadmap_course.is_completed = True
-            primary_roadmap_course.enrolled_at = now - timedelta(days=6)
-            primary_roadmap_course.completed_at = now - timedelta(days=2)
-            primary_roadmap_course.save(
-                update_fields=["is_enrolled", "is_completed", "enrolled_at", "completed_at", "updated_at"]
-            )
-            # Real, in-plan completion (completed_from_assessment stays False).
-            MilestoneService.achieve_milestone(user, first_milestone)
-
-        if len(active_milestones) > 1:
-            next_milestone = active_milestones[1]
-            next_course = self._upsert_demo_course(
-                platform=platform,
-                external_id="demo-next-milestone-primer",
-                title=f"{band_label} Next Steps",
-                short_description="A primer that keeps momentum into the next milestone.",
-                url="https://demo.sha8alny.local/courses/next-milestone-primer",
-                duration_hours=Decimal("8.00"),
-                level="intermediate",
-            )
-            next_roadmap_course = RoadmapService.add_course_to_milestone(
-                next_milestone,
-                next_course,
-                order=1,
-                is_primary=True,
-                match_score=Decimal("88.00"),
-                recommendation_reason="Keeps momentum into the next milestone.",
-            )
-            next_roadmap_course.is_enrolled = True
-            next_roadmap_course.enrolled_at = now - timedelta(days=1)
-            next_roadmap_course.save(
-                update_fields=["is_enrolled", "enrolled_at", "updated_at"]
-            )
-            next_milestone.status = RoadmapMilestone.IN_PROGRESS
-            next_milestone.save(update_fields=["status", "updated_at"])
+        completed_one = False
+        for milestone in active_course_milestones:
+            roadmap_course = milestone.courses.order_by("-is_primary", "order").first()
+            if not completed_one:
+                # First active milestone: complete it and its attached real course
+                # (if matching found one) -> real, in-plan progress.
+                if roadmap_course is not None:
+                    CourseCompletionService.mark_course_complete(
+                        user=user,
+                        course=roadmap_course.course,
+                        roadmap_course=roadmap_course,
+                        time_spent_hours=Decimal("12.00"),
+                        user_rating=5,
+                        user_review="Exactly the push needed to clear this milestone.",
+                        would_recommend=True,
+                    )
+                    roadmap_course.is_enrolled = True
+                    roadmap_course.is_completed = True
+                    roadmap_course.enrolled_at = now - timedelta(days=6)
+                    roadmap_course.completed_at = now - timedelta(days=2)
+                    roadmap_course.save(
+                        update_fields=[
+                            "is_enrolled", "is_completed", "enrolled_at", "completed_at", "updated_at",
+                        ]
+                    )
+                # Real, in-plan completion (completed_from_assessment stays False).
+                MilestoneService.achieve_milestone(user, milestone)
+                completed_one = True
+            elif roadmap_course is not None:
+                # Next milestone: enrolled / in progress.
+                roadmap_course.is_enrolled = True
+                roadmap_course.enrolled_at = now - timedelta(days=1)
+                roadmap_course.save(update_fields=["is_enrolled", "enrolled_at", "updated_at"])
+                milestone.status = RoadmapMilestone.IN_PROGRESS
+                milestone.save(update_fields=["status", "updated_at"])
+                break
 
         progress = ProgressService.update_progress_metrics(user, roadmap)
 
