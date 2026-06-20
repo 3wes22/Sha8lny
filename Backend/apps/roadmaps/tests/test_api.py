@@ -847,3 +847,30 @@ def test_baseline_persist_fires_no_completion_notifications(loop_user):
         RoadmapService.populate_ai_roadmap(roadmap)
     # Generation must NOT route baseline through the progress recompute.
     recompute.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_reopening_assessment_milestone_clears_flag(loop_user):
+    from decimal import Decimal
+    from apps.progress.services import MilestoneService
+    from apps.roadmaps.models import Roadmap, RoadmapMilestone, RoadmapPhase
+
+    roadmap = Roadmap.objects.create(
+        user=loop_user, title="R", target_career="Backend Developer",
+        current_level="advanced", target_level="job-ready",
+        estimated_duration_weeks=12, status=Roadmap.DRAFT,
+    )
+    phase = RoadmapPhase.objects.create(
+        roadmap=roadmap, title="Foundations", description="", order=1,
+        estimated_duration_weeks=4, status="completed",
+    )
+    milestone = RoadmapMilestone.objects.create(
+        phase=phase, title="Learn HTTP", description="", order=1,
+        estimated_duration_hours=Decimal("10.00"), status="completed",
+        completed_from_assessment=True,
+    )
+
+    MilestoneService.update_milestone_status(loop_user, milestone, "not_started")
+    milestone.refresh_from_db()
+    assert milestone.status == "not_started"
+    assert milestone.completed_from_assessment is False

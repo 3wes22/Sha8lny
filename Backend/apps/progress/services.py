@@ -542,7 +542,12 @@ class MilestoneService:
         milestone.status = status
         if status == RoadmapMilestone.NOT_STARTED:
             milestone.completed_at = None
-        milestone.save(update_fields=["status", "completed_at", "updated_at"])
+        # Leaving "completed" means the learner is redoing it: drop the
+        # assessment-baseline marker so it reads as real in-plan work.
+        milestone.completed_from_assessment = False
+        milestone.save(update_fields=[
+            "status", "completed_at", "completed_from_assessment", "updated_at",
+        ])
 
         MilestoneAchievement.objects.filter(
             user=user,
