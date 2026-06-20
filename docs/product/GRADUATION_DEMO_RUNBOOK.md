@@ -142,3 +142,52 @@ pytest apps/assessments/ apps/roadmaps/ apps/advisory/ apps/jobs/ apps/core/test
 cd Frontend
 npm run test:run
 ```
+
+## Demo Hardening
+
+### Offline path (verified — dead `GEMINI_API_KEY`, no Chroma volume)
+
+The product runs end-to-end with no AI key and no vector store; every AI feature
+degrades to its deterministic fallback. Verified by the offline full-loop test:
+
+```bash
+cd Backend
+env -u GEMINI_API_KEY venv/bin/python -m pytest apps/roadmaps/tests/test_full_loop.py -q
+# 1 passed — assessment -> roadmap (fallback provenance) -> courses (matched)
+#            -> jobs (ranked + explained) -> advisory (citation contract)
+```
+
+Observed offline behavior (recorded):
+- **Assessment / roadmap:** deterministic, assessment-aware structure; roadmap
+  provenance reports `fallback_used=true`, `structure_license_tier=internal`.
+- **Courses:** embedding match still links `RoadmapCourse` rows when the course
+  index is seeded; otherwise milestones simply show no course (no crash).
+- **Jobs:** skill match + LightGBM ranking run fully offline (committed
+  `job_ranker.lgb`); `explanation.top_factors` present.
+- **Advisory:** returns a grounded fallback message; the chat payload still
+  carries `retrieved_documents: []` and the `no_retrieval_context` flag, so the
+  UI renders the honest "no grounded sources" state instead of breaking.
+
+To force offline mode in a live demo, unset the key for that shell:
+`env -u GEMINI_API_KEY python3 manage.py runserver`.
+
+### Fresh-API-key rehearsal checklist (online path)
+
+1. Put a **fresh** `GEMINI_API_KEY` (unused quota) in `Backend/.env`;
+   `AI_PROVIDER=gemini`.
+2. Run the full reset (eight commands above) **once**.
+3. `python3 manage.py ai_smoke` — confirm a real Gemini round-trip succeeds.
+4. Warm the advisory BM25 index once before the live demo (first query per
+   process pays a one-time ~16s index build): ask one throwaway advisory question.
+5. Walk Path A then Path B end-to-end once; confirm advisory shows **Sources**
+   with confidence badges on a grounded question.
+6. Do **not** run the full test suite after this — it will exhaust the key.
+
+### Quota budget (important)
+
+- The full backend test suite makes enough Gemini calls to **exhaust a key (429s)**.
+  Rehearse the demo on a **fresh** key and **never run the suite right before the
+  demo**. Run tests quota-safe with `env -u GEMINI_API_KEY` (do **not** set
+  `GEMINI_API_KEY=` empty — that breaks 14 assessment stage-cache tests).
+- Keep a spare key in reserve; if mid-demo calls start 429-ing, the offline path
+  above keeps every surface usable.
