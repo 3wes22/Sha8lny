@@ -104,6 +104,11 @@ export function RoadmapStation({
                 {completion.toFixed(0)}% complete · {phase.estimated_duration_weeks} weeks
               </p>
             ) : null}
+            {state === "completed" && phase.baseline_from_assessment ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                Set from your assessment — expand to revise
+              </p>
+            ) : null}
           </div>
           {!locked ? (
             <ChevronDown

@@ -90,4 +90,30 @@ describe("RoadmapStation", () => {
     expect(onToggleExpand).not.toHaveBeenCalled();
     expect(screen.getByText(/locked/i)).toBeInTheDocument();
   });
+
+  it("shows an assessment-baseline caption on a passed station", () => {
+    const phase = {
+      id: "p1",
+      title: "Foundations: Backend Developer",
+      description: "",
+      order: 1,
+      estimated_duration_weeks: 4,
+      status: "completed" as const,
+      completion_percentage: "100.00",
+      objectives: [],
+      milestones: [],
+      baseline_from_assessment: true,
+    };
+    render(
+      <RoadmapStation
+        phase={phase}
+        index={0}
+        state="completed"
+        expanded={false}
+        onToggleExpand={() => {}}
+        onMilestoneToggle={() => {}}
+      />,
+    );
+    expect(screen.getByText(/set from your assessment/i)).toBeInTheDocument();
+  });
 });

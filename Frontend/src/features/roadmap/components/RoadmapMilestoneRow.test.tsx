@@ -59,6 +59,12 @@ describe("RoadmapMilestoneRow", () => {
 
     expect(onToggle).not.toHaveBeenCalled();
   });
+
+  it("does not show the assessment sub-label for an ordinary completed milestone", () => {
+    render(<RoadmapMilestoneRow milestone={milestone({ status: "completed" })} onToggle={vi.fn()} />);
+
+    expect(screen.queryByText(/from your assessment/i)).not.toBeInTheDocument();
+  });
 });
 
 const baseMilestone: RoadmapMilestone = {
