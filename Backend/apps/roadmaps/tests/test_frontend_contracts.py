@@ -139,3 +139,34 @@ def test_pending_roadmap_detail_exposes_generation_summary(api_client, roadmap_u
     assert response.data["ai_processing_status"] == "pending"
     assert response.data["journey_summary"]["next_action_title"] == "Preparing personalized phases"
     assert response.data["journey_nodes"] == []
+
+
+@pytest.mark.django_db
+def test_serializer_exposes_assessment_baseline_fields():
+    from decimal import Decimal
+    from apps.roadmaps.models import Roadmap, RoadmapMilestone, RoadmapPhase
+    from apps.roadmaps.serializers import RoadmapPhaseSerializer
+    from apps.users.models import User
+
+    user = User.objects.create_user(
+        auth0_id="sc1", email="sc1@example.com", username="sc1",
+        full_name="SC1", date_of_birth="1997-01-01",
+    )
+    roadmap = Roadmap.objects.create(
+        user=user, title="R", target_career="Backend Developer",
+        current_level="advanced", target_level="job-ready",
+        estimated_duration_weeks=12, status=Roadmap.DRAFT,
+    )
+    phase = RoadmapPhase.objects.create(
+        roadmap=roadmap, title="Foundations", description="", order=1,
+        estimated_duration_weeks=4, status="completed",
+    )
+    RoadmapMilestone.objects.create(
+        phase=phase, title="Learn HTTP", description="", order=1,
+        estimated_duration_hours=Decimal("10.00"), status="completed",
+        completed_from_assessment=True,
+    )
+
+    data = RoadmapPhaseSerializer(phase).data
+    assert data["milestones"][0]["completed_from_assessment"] is True
+    assert data["baseline_from_assessment"] is True
