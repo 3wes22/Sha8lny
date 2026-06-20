@@ -19,6 +19,7 @@ const typePillClass: Record<RoadmapMilestone["milestone_type"], string> = {
 
 export function RoadmapMilestoneRow({ milestone, onToggle, disabled }: RoadmapMilestoneRowProps) {
   const isComplete = milestone.status === "completed";
+  const fromAssessment = isComplete && milestone.completed_from_assessment === true;
 
   return (
     <button
@@ -42,8 +43,16 @@ export function RoadmapMilestoneRow({ milestone, onToggle, disabled }: RoadmapMi
         {isComplete ? <Check className="h-3 w-3" /> : null}
       </span>
 
-      <span className={cn("min-w-0 flex-1 text-sm", isComplete && "text-muted-foreground line-through")}>
-        {milestone.title}
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className={cn("min-w-0 text-sm", isComplete && "text-muted-foreground line-through")}>
+          {milestone.title}
+        </span>
+        {fromAssessment ? (
+          <span className="text-[0.7rem] font-medium text-muted-foreground no-underline">
+            Marked from your assessment ·{" "}
+            <span className="text-primary underline-offset-2 group-hover:underline">Revise</span>
+          </span>
+        ) : null}
       </span>
 
       <span

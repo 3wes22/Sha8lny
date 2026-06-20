@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { RoadmapMilestone } from "@/lib/api";
@@ -58,5 +58,34 @@ describe("RoadmapMilestoneRow", () => {
     await user.click(screen.getByRole("checkbox", { name: /Learn React fundamentals/i }));
 
     expect(onToggle).not.toHaveBeenCalled();
+  });
+});
+
+const baseMilestone: RoadmapMilestone = {
+  id: "m1",
+  title: "Learn HTTP basics",
+  description: "",
+  milestone_type: "course",
+  order: 1,
+  estimated_duration_hours: "10.00",
+  status: "completed",
+  is_required: true,
+  skills: [],
+  resources: [],
+  completed_from_assessment: true,
+};
+
+describe("RoadmapMilestoneRow assessment baseline", () => {
+  it("labels assessment-derived completions and offers Revise", () => {
+    render(<RoadmapMilestoneRow milestone={baseMilestone} onToggle={() => {}} />);
+    expect(screen.getByText(/from your assessment/i)).toBeInTheDocument();
+    expect(screen.getByText(/revise/i)).toBeInTheDocument();
+  });
+
+  it("calls onToggle when an assessment row is clicked (to reopen)", () => {
+    const onToggle = vi.fn();
+    render(<RoadmapMilestoneRow milestone={baseMilestone} onToggle={onToggle} />);
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(onToggle).toHaveBeenCalledWith(baseMilestone);
   });
 });

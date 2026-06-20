@@ -366,6 +366,7 @@ export interface RoadmapMilestone {
   skills: string[];
   resources: Resource[];
   completed_at?: string;
+  completed_from_assessment?: boolean;
   courses?: RoadmapCourse[];
   total_courses?: number;
   node_type?: "milestone";
@@ -388,6 +389,7 @@ export interface RoadmapPhase {
   milestones?: RoadmapMilestone[];
   completed_milestones?: number;
   total_milestones?: number;
+  baseline_from_assessment?: boolean;
   node_type?: "phase";
   estimated_effort?: string;
   next_action?: string;
