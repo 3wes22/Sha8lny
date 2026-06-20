@@ -623,7 +623,8 @@ class RoadmapService:
 
     @staticmethod
     def _create_personalized_structure(roadmap: Roadmap, phases_data: List[Dict[str, Any]]) -> None:
-        """Persist the generated roadmap hierarchy."""
+        """Persist the generated roadmap hierarchy with assessment-derived statuses."""
+        now = timezone.now()
         for phase_idx, phase_data in enumerate(phases_data, start=1):
             phase = RoadmapPhase.objects.create(
                 roadmap=roadmap,
@@ -635,7 +636,10 @@ class RoadmapService:
                 objectives=phase_data.get('objectives', []),
             )
 
-            for milestone_idx, milestone_data in enumerate(phase_data.get('milestones', []), start=1):
+            milestones = phase_data.get('milestones', [])
+            for milestone_idx, milestone_data in enumerate(milestones, start=1):
+                m_status = milestone_data.get('status', 'not_started')
+                from_assessment = bool(milestone_data.get('from_assessment', False))
                 RoadmapMilestone.objects.create(
                     phase=phase,
                     title=milestone_data['title'],
@@ -646,11 +650,42 @@ class RoadmapService:
                     milestone_type=milestone_data['type'],
                     order=milestone_idx,
                     estimated_duration_hours=Decimal(str(milestone_data['hours'])),
-                    status='not_started',
+                    status=m_status,
+                    completed_from_assessment=from_assessment,
+                    completed_at=now if m_status == 'completed' else None,
                     is_required=True,
                     skills=milestone_data.get('skills', []),
                     resources=milestone_data.get('resources', []),
                 )
+
+            # Derive phase status/completion from its milestones (no signals fired).
+            total = len(milestones)
+            completed = sum(1 for m in milestones if m.get('status') == 'completed')
+            if total and completed == total:
+                phase.status = 'completed'
+                phase.completion_percentage = Decimal('100.00')
+                phase.completed_at = now
+                phase.started_at = now
+            elif completed:
+                phase.status = 'in_progress'
+                phase.completion_percentage = Decimal(str(round(completed / total * 100, 2)))
+                phase.started_at = now
+            else:
+                phase.status = 'not_started'
+                phase.completion_percentage = Decimal('0.00')
+            phase.save(update_fields=[
+                'status', 'completion_percentage', 'started_at', 'completed_at', 'updated_at',
+            ])
+
+    @staticmethod
+    def _baseline_completion_percentage(roadmap: Roadmap) -> Decimal:
+        """Roadmap completion from persisted milestone statuses (no side effects)."""
+        milestones = RoadmapMilestone.objects.filter(phase__roadmap=roadmap)
+        total = milestones.count()
+        if not total:
+            return Decimal('0.00')
+        completed = milestones.filter(status=RoadmapMilestone.COMPLETED).count()
+        return Decimal(str(round(completed / total * 100, 2)))
 
     @staticmethod
     def _build_generation_input_summary(
@@ -837,8 +872,14 @@ class RoadmapService:
             default_summary=default_summary,
         )
 
+        from apps.roadmaps.baseline import apply_assessment_baseline
+
+        mastered = RoadmapService._dedupe_preserve_order([*top_skills, *strengths])
+        baselined_phases = apply_assessment_baseline(
+            personalization.phases, roadmap.current_level, gaps, mastered,
+        )
         roadmap.phases.all().delete()
-        RoadmapService._create_personalized_structure(roadmap, personalization.phases)
+        RoadmapService._create_personalized_structure(roadmap, baselined_phases)
         RoadmapService.match_courses_for_roadmap(roadmap)
 
         generation.update(
@@ -869,6 +910,7 @@ class RoadmapService:
             'job_readiness_focus': roadmap.target_career,
             'coaching_notes': personalization.coaching_notes,
         }
+        roadmap.completion_percentage = RoadmapService._baseline_completion_percentage(roadmap)
         roadmap.save(
             update_fields=[
                 'description',
@@ -881,6 +923,7 @@ class RoadmapService:
                 'processing_time_seconds',
                 'ai_insights',
                 'metadata',
+                'completion_percentage',
                 'updated_at',
             ]
         )

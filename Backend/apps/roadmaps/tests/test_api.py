@@ -787,3 +787,63 @@ def test_generation_produces_five_band_ladder(loop_user):
     assert len(phases) == 5
     assert "Foundations" in phases[0].title
     assert "Job-Ready" in phases[4].title
+
+
+def _make_advanced_backend_roadmap(user):
+    from apps.assessments.models import Assessment, AssessmentResult
+    from apps.roadmaps.models import Roadmap
+
+    assessment = Assessment.objects.create(
+        user=user, assessment_type="skills", target_career="Backend Developer",
+        questions=[], total_questions=0, status="completed", ai_processing_status="completed",
+    )
+    # NOTE: Roadmap.assessment is a FK to AssessmentResult (apps/roadmaps/models.py:225-226),
+    # not Assessment, so we must capture and link the created AssessmentResult below.
+    result = AssessmentResult.objects.create(
+        assessment=assessment, overall_score=88, skill_scores={"python": 90},
+        strengths=["Python"], areas_for_improvement=["Observability"],
+        recommended_careers=[{"title": "Backend Developer", "match_score": 92}],
+        recommended_learning_paths=[], ai_insights="x", llm_model_used="mock", ai_confidence_score=0.9,
+    )
+    return Roadmap.objects.create(
+        user=user, title="R", target_career="Backend Developer", assessment=result,
+        current_level="advanced", target_level="job-ready", estimated_duration_weeks=12,
+        weekly_hours_commitment=10, status=Roadmap.DRAFT, ai_processing_status="pending",
+    )
+
+
+@pytest.mark.django_db
+def test_advanced_learner_greys_first_two_bands(loop_user):
+    from unittest.mock import patch
+    from apps.roadmaps.services import RoadmapService
+
+    roadmap = _make_advanced_backend_roadmap(loop_user)
+    with patch("apps.roadmaps.assembler.RoadmapPathRetriever.retrieve_path_chunks", return_value=[]), \
+         patch("apps.roadmaps.ai_pipeline.GemmaClient.generate_structured", side_effect=RuntimeError("offline")):
+        RoadmapService.populate_ai_roadmap(roadmap)
+
+    phases = list(roadmap.phases.order_by("order"))
+    # Foundations + Core fully passed from assessment.
+    for phase in phases[:2]:
+        assert phase.status == "completed"
+        assert all(m.status == "completed" and m.completed_from_assessment
+                   for m in phase.milestones.all())
+    # Intermediate band onward is active (not from assessment).
+    assert phases[2].status in {"not_started", "in_progress"}
+    assert any(not m.completed_from_assessment for m in phases[2].milestones.all())
+    # Headline completion reflects the assessment baseline.
+    assert float(roadmap.completion_percentage) > 0
+
+
+@pytest.mark.django_db
+def test_baseline_persist_fires_no_completion_notifications(loop_user):
+    from unittest.mock import patch
+    from apps.roadmaps.services import RoadmapService
+
+    roadmap = _make_advanced_backend_roadmap(loop_user)
+    with patch("apps.roadmaps.assembler.RoadmapPathRetriever.retrieve_path_chunks", return_value=[]), \
+         patch("apps.roadmaps.ai_pipeline.GemmaClient.generate_structured", side_effect=RuntimeError("offline")), \
+         patch("apps.progress.services.ProgressService.update_progress_metrics") as recompute:
+        RoadmapService.populate_ai_roadmap(roadmap)
+    # Generation must NOT route baseline through the progress recompute.
+    recompute.assert_not_called()
