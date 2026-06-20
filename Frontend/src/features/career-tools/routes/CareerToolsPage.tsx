@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  ArrowRight,
   CheckCircle2,
   FileText,
   Globe,
@@ -8,6 +9,8 @@ import {
   Plus,
   Sparkles,
   Trash2,
+  Upload,
+  Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -22,6 +25,8 @@ import {
   getApiErrorMessage,
   type AtsResult,
   type PortfolioListItem,
+  type Resume,
+  type ResumeImprovement,
   type ResumeListItem,
 } from "@/lib/api";
 
@@ -41,13 +46,15 @@ const gradeTone = (grade?: string) => {
 const ResumeCard: React.FC<{
   resume: ResumeListItem;
   ats?: AtsResult;
-  optimizing: boolean;
-  deleting: boolean;
-  onOptimize: () => void;
+  improvement?: ResumeImprovement;
+  currentSummary?: string;
+  busy: boolean;
+  onImprove: () => void;
+  onApplySummary: () => void;
   onDelete: () => void;
-}> = ({ resume, ats, optimizing, deleting, onOptimize, onDelete }) => {
-  const score = ats ? ats.ats_score : Number(resume.ats_score);
-  const grade = ats ? ats.ats_grade : resume.ats_grade;
+}> = ({ resume, ats, improvement, currentSummary, busy, onImprove, onApplySummary, onDelete }) => {
+  const score = improvement ? improvement.ats_score : ats ? ats.ats_score : Number(resume.ats_score);
+  const grade = improvement ? improvement.ats_grade : ats ? ats.ats_grade : resume.ats_grade;
 
   return (
     <div className="panel-paper card-elevated flex flex-col gap-4 rounded-[1.5rem] p-5">
@@ -83,30 +90,91 @@ const ResumeCard: React.FC<{
         </div>
       </div>
 
-      {ats?.suggestions?.length ? (
-        <ul className="space-y-1.5 rounded-2xl bg-background/60 p-3 text-sm">
-          {ats.suggestions.map((suggestion) => (
-            <li className="flex items-start gap-2 text-muted-foreground" key={suggestion}>
-              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-              {suggestion}
-            </li>
-          ))}
-        </ul>
+      {improvement ? (
+        <div className="space-y-4 rounded-2xl bg-background/60 p-4 text-sm">
+          {!improvement.ai_used ? (
+            <p className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
+              AI is offline right now — showing a deterministic checklist instead.
+            </p>
+          ) : null}
+
+          {improvement.improved_summary ? (
+            <div className="space-y-2">
+              <p className="type-kicker text-[0.6rem]">Suggested summary</p>
+              {currentSummary ? (
+                <p className="rounded-lg border border-border/60 bg-muted/40 p-2 text-xs text-muted-foreground line-through decoration-muted-foreground/40">
+                  {currentSummary}
+                </p>
+              ) : null}
+              <p className="rounded-lg border border-primary/30 bg-primary/5 p-2 text-foreground">
+                {improvement.improved_summary}
+              </p>
+              <Button className="gradient-primary" disabled={busy} onClick={onApplySummary} size="sm">
+                {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-1 h-4 w-4" />}
+                Apply summary
+              </Button>
+            </div>
+          ) : null}
+
+          {improvement.strengthened_bullets.length ? (
+            <div className="space-y-1.5">
+              <p className="type-kicker text-[0.6rem]">Stronger bullets</p>
+              <ul className="space-y-1">
+                {improvement.strengthened_bullets.map((bullet) => (
+                  <li className="flex items-start gap-2 text-muted-foreground" key={bullet}>
+                    <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                    {bullet}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {improvement.missing_keywords.length ? (
+            <div className="space-y-1.5">
+              <p className="type-kicker text-[0.6rem]">Missing keywords</p>
+              <div className="flex flex-wrap gap-1.5">
+                {improvement.missing_keywords.map((keyword) => (
+                  <span
+                    className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-xs"
+                    key={keyword}
+                  >
+                    {keyword}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {improvement.recommendations.length ? (
+            <div className="space-y-1.5">
+              <p className="type-kicker text-[0.6rem]">Recommendations</p>
+              <ul className="space-y-1">
+                {improvement.recommendations.map((rec) => (
+                  <li className="flex items-start gap-2 text-muted-foreground" key={rec}>
+                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                    {rec}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="flex items-center gap-2">
-        <Button className="flex-1" disabled={optimizing} onClick={onOptimize} size="sm" variant="outline">
-          {optimizing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1 h-4 w-4" />}
-          Optimize for ATS
+        <Button className="flex-1" disabled={busy} onClick={onImprove} size="sm" variant="outline">
+          {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Wand2 className="mr-1 h-4 w-4" />}
+          Improve with AI
         </Button>
         <Button
           aria-label={`Delete ${resume.title}`}
-          disabled={deleting}
+          disabled={busy}
           onClick={onDelete}
           size="sm"
           variant="ghost"
         >
-          {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
         </Button>
       </div>
     </div>
@@ -165,11 +233,16 @@ const CareerToolsPage: React.FC = () => {
   const [portfolios, setPortfolios] = useState<PortfolioListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [atsResults, setAtsResults] = useState<Record<string, AtsResult>>({});
+  const [improvements, setImprovements] = useState<Record<string, ResumeImprovement>>({});
+  const [resumeDetails, setResumeDetails] = useState<Record<string, Resume>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [newResumeTitle, setNewResumeTitle] = useState("");
   const [newPortfolioTitle, setNewPortfolioTitle] = useState("");
   const [creatingResume, setCreatingResume] = useState(false);
   const [creatingPortfolio, setCreatingPortfolio] = useState(false);
+  const [resumeMode, setResumeMode] = useState<"create" | "upload">("upload");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refreshResumes = async () => {
     const response = await careerToolsApi.listResumes();
@@ -215,14 +288,83 @@ const CareerToolsPage: React.FC = () => {
     }
   };
 
-  const handleOptimize = async (id: string) => {
+  const handleUploadResume = async (file: File) => {
+    try {
+      setUploading(true);
+      const resume = await careerToolsApi.uploadResume(file);
+      await refreshResumes();
+      if (resume.ats_score != null) {
+        setAtsResults((prev) => ({
+          ...prev,
+          [resume.id]: {
+            message: "Upload complete",
+            ats_score: Number(resume.ats_score),
+            ats_grade: resume.ats_grade ?? "",
+            suggestions: (resume.ats_suggestions as { improvements?: string[] })?.improvements ?? [],
+          },
+        }));
+      }
+      toast.success(`CV uploaded — ATS score ${Math.round(Number(resume.ats_score) || 0)}`);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to upload CV"));
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      void handleUploadResume(file);
+    }
+  };
+
+  const handleImprove = async (id: string) => {
     try {
       setBusyId(id);
+      const [detail, improvement] = await Promise.all([
+        careerToolsApi.getResume(id),
+        careerToolsApi.improveResume(id),
+      ]);
+      setResumeDetails((prev) => ({ ...prev, [id]: detail }));
+      setImprovements((prev) => ({ ...prev, [id]: improvement }));
+      toast.success(
+        improvement.ai_used
+          ? "AI suggestions ready"
+          : "AI is offline — showing checklist suggestions",
+      );
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to improve resume"));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleApplySummary = async (id: string) => {
+    const improvement = improvements[id];
+    if (!improvement?.improved_summary) return;
+    try {
+      setBusyId(id);
+      const detail = resumeDetails[id];
+      const personalInfo = {
+        ...((detail?.personal_info as Record<string, unknown>) ?? {}),
+        summary: improvement.improved_summary,
+      };
+      await careerToolsApi.updateResume(id, { personal_info: personalInfo });
       const result = await careerToolsApi.optimizeAts(id);
       setAtsResults((prev) => ({ ...prev, [id]: result }));
-      toast.success(`ATS score: ${Math.round(result.ats_score)} (${result.ats_grade})`);
+      setImprovements((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      await refreshResumes();
+      toast.success(`Summary applied — ATS score ${Math.round(result.ats_score)} (${result.ats_grade})`);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "Failed to optimize resume"));
+      toast.error(getApiErrorMessage(error, "Failed to apply summary"));
     } finally {
       setBusyId(null);
     }
@@ -297,27 +439,81 @@ const CareerToolsPage: React.FC = () => {
           <section className="space-y-4">
             <SectionHeader description="Manage your CVs and check them against ATS heuristics." eyebrow="Resumes" title="Your resumes" />
 
-            <form
-              className="atlas-panel flex flex-col gap-3 p-4 sm:flex-row"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void handleCreateResume();
-              }}
-            >
-              <Input
-                onChange={(event) => setNewResumeTitle(event.target.value)}
-                placeholder="New resume title (e.g. Backend Engineer CV)"
-                value={newResumeTitle}
-              />
-              <Button className="gradient-primary shrink-0" disabled={creatingResume} type="submit">
-                {creatingResume ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                New resume
-              </Button>
-            </form>
+            <div className="flex flex-wrap gap-2">
+              <button
+                className={cn(
+                  "transition-smooth rounded-full border px-4 py-2 text-sm font-medium",
+                  resumeMode === "upload"
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border/70 text-muted-foreground hover:border-primary/40",
+                )}
+                onClick={() => setResumeMode("upload")}
+                type="button"
+              >
+                Upload CV
+              </button>
+              <button
+                className={cn(
+                  "transition-smooth rounded-full border px-4 py-2 text-sm font-medium",
+                  resumeMode === "create"
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border/70 text-muted-foreground hover:border-primary/40",
+                )}
+                onClick={() => setResumeMode("create")}
+                type="button"
+              >
+                Create new
+              </button>
+            </div>
+
+            {resumeMode === "create" ? (
+              <form
+                className="atlas-panel flex flex-col gap-3 p-4 sm:flex-row"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleCreateResume();
+                }}
+              >
+                <Input
+                  onChange={(event) => setNewResumeTitle(event.target.value)}
+                  placeholder="New resume title (e.g. Backend Engineer CV)"
+                  value={newResumeTitle}
+                />
+                <Button className="gradient-primary shrink-0" disabled={creatingResume} type="submit">
+                  {creatingResume ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                  New resume
+                </Button>
+              </form>
+            ) : (
+              <div className="atlas-panel flex flex-col items-start gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-medium">Upload your CV</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    PDF, DOCX, or TXT up to 5 MB. We extract contact info, experience, and skills, then score it for ATS.
+                  </p>
+                </div>
+                <input
+                  accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                  className="hidden"
+                  onChange={handleFileChange}
+                  ref={fileInputRef}
+                  type="file"
+                />
+                <Button
+                  className="gradient-primary shrink-0"
+                  disabled={uploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  type="button"
+                >
+                  {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                  Choose file
+                </Button>
+              </div>
+            )}
 
             {resumes.length === 0 ? (
               <StatePanel
-                description="Create your first resume to start tracking ATS readiness."
+                description="Upload a PDF/DOCX/TXT CV or create a blank resume to start tracking ATS readiness."
                 state="empty"
                 title="No resumes yet"
               />
@@ -326,11 +522,15 @@ const CareerToolsPage: React.FC = () => {
                 {resumes.map((resume) => (
                   <ResumeCard
                     ats={atsResults[resume.id]}
-                    deleting={busyId === resume.id}
+                    busy={busyId === resume.id}
+                    currentSummary={
+                      (resumeDetails[resume.id]?.personal_info as { summary?: string } | undefined)?.summary
+                    }
+                    improvement={improvements[resume.id]}
                     key={resume.id}
+                    onApplySummary={() => void handleApplySummary(resume.id)}
                     onDelete={() => void handleDeleteResume(resume.id)}
-                    onOptimize={() => void handleOptimize(resume.id)}
-                    optimizing={busyId === resume.id}
+                    onImprove={() => void handleImprove(resume.id)}
                     resume={resume}
                   />
                 ))}

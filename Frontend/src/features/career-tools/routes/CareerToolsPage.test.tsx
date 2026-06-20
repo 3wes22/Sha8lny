@@ -6,7 +6,11 @@ const mocks = vi.hoisted(() => ({
   listResumes: vi.fn(),
   listPortfolios: vi.fn(),
   optimizeAts: vi.fn(),
+  improveResume: vi.fn(),
+  getResume: vi.fn(),
+  updateResume: vi.fn(),
   createResume: vi.fn(),
+  uploadResume: vi.fn(),
   deleteResume: vi.fn(),
   createPortfolio: vi.fn(),
   publishPortfolio: vi.fn(),
@@ -19,7 +23,11 @@ vi.mock("@/lib/api", () => ({
     listResumes: mocks.listResumes,
     listPortfolios: mocks.listPortfolios,
     optimizeAts: mocks.optimizeAts,
+    improveResume: mocks.improveResume,
+    getResume: mocks.getResume,
+    updateResume: mocks.updateResume,
     createResume: mocks.createResume,
+    uploadResume: mocks.uploadResume,
     deleteResume: mocks.deleteResume,
     createPortfolio: mocks.createPortfolio,
     publishPortfolio: mocks.publishPortfolio,
@@ -70,6 +78,35 @@ beforeEach(() => {
     ats_grade: "A",
     suggestions: ["Add more keywords", "Quantify achievements"],
   });
+  mocks.improveResume.mockResolvedValue({
+    ai_used: true,
+    ats_score: 72,
+    ats_grade: "C",
+    improved_summary: "Results-driven engineer who cut latency by 40%.",
+    strengthened_bullets: ["Reduced p95 latency 40% via Redis caching."],
+    missing_keywords: ["CI/CD", "Kubernetes"],
+    recommendations: ["Lead with measurable impact."],
+  });
+  mocks.getResume.mockResolvedValue({
+    id: "r1",
+    title: "Software Engineer CV",
+    personal_info: { name: "Mo", summary: "Old summary." },
+  });
+  mocks.updateResume.mockResolvedValue({ id: "r1" });
+  mocks.uploadResume.mockResolvedValue({
+    id: "r2",
+    title: "uploaded-cv",
+    template_name: "modern",
+    is_primary: false,
+    is_ats_optimized: true,
+    ats_score: 75,
+    ats_grade: "B",
+    completeness: 60,
+    ats_suggestions: { improvements: ["Add certifications"] },
+    version: 1,
+    created_at: "2026-06-10T10:00:00Z",
+    updated_at: "2026-06-12T10:00:00Z",
+  });
 });
 
 describe("CareerToolsPage", () => {
@@ -80,19 +117,61 @@ describe("CareerToolsPage", () => {
     expect(screen.getByText("My Portfolio")).toBeInTheDocument();
   });
 
-  it("optimizes a resume for ATS and shows suggestions", async () => {
+  it("improves a resume with AI and shows the suggested summary", async () => {
     const user = userEvent.setup();
     render(<CareerToolsPage />);
 
     await screen.findByText("Software Engineer CV");
 
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: /optimize/i }));
+      await user.click(screen.getByRole("button", { name: /improve with ai/i }));
     });
 
     await waitFor(() => {
+      expect(mocks.improveResume).toHaveBeenCalledWith("r1");
+    });
+    expect(await screen.findByText(/Results-driven engineer/i)).toBeInTheDocument();
+    expect(screen.getByText("CI/CD")).toBeInTheDocument();
+  });
+
+  it("applies the AI summary and re-scores", async () => {
+    const user = userEvent.setup();
+    render(<CareerToolsPage />);
+
+    await screen.findByText("Software Engineer CV");
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /improve with ai/i }));
+    });
+    const applyButton = await screen.findByRole("button", { name: /apply summary/i });
+
+    await act(async () => {
+      await user.click(applyButton);
+    });
+
+    await waitFor(() => {
+      expect(mocks.updateResume).toHaveBeenCalledWith("r1", {
+        personal_info: { name: "Mo", summary: "Results-driven engineer who cut latency by 40%." },
+      });
       expect(mocks.optimizeAts).toHaveBeenCalledWith("r1");
     });
-    expect(await screen.findByText("Quantify achievements")).toBeInTheDocument();
+  });
+
+  it("uploads a CV file from the upload tab", async () => {
+    const user = userEvent.setup();
+    render(<CareerToolsPage />);
+
+    await screen.findByText("Software Engineer CV");
+
+    const file = new File(["Mohamed Wes\nmohamed@example.com"], "cv.txt", { type: "text/plain" });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+
+    await act(async () => {
+      await user.upload(input, file);
+    });
+
+    await waitFor(() => {
+      expect(mocks.uploadResume).toHaveBeenCalledWith(file);
+    });
   });
 });

@@ -1347,6 +1347,16 @@ export interface AtsResult {
   suggestions: string[];
 }
 
+export interface ResumeImprovement {
+  ai_used: boolean;
+  ats_score: number;
+  ats_grade: string;
+  improved_summary: string;
+  strengthened_bullets: string[];
+  missing_keywords: string[];
+  recommendations: string[];
+}
+
 export interface PortfolioListItem {
   id: string;
   title: string;
@@ -1374,8 +1384,34 @@ export const careerToolsApi = {
 
   deleteResume: (id: string) => apiClient.delete<void>(`/career-tools/resumes/${id}/`),
 
+  uploadResume: async (file: File): Promise<Resume> => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const token = tokenStorage.getAccessToken();
+    const url = `${API_URL}/career-tools/resumes/upload/`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null);
+      throw new ApiError(response.status, response.statusText, errorData, url);
+    }
+
+    return response.json() as Promise<Resume>;
+  },
+
   optimizeAts: (id: string) =>
     apiClient.post<AtsResult>(`/career-tools/resumes/${id}/optimize_ats/`, {}),
+
+  improveResume: (id: string) =>
+    apiClient.post<ResumeImprovement>(`/career-tools/resumes/${id}/improve/`, {}),
+
+  updateResume: (id: string, data: Partial<Pick<Resume, "personal_info" | "title" | "template_name">>) =>
+    apiClient.patch<Resume>(`/career-tools/resumes/${id}/`, data),
 
   listPortfolios: () =>
     apiClient.get<PaginatedResponse<PortfolioListItem>>("/career-tools/portfolios/"),
