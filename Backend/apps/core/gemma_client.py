@@ -18,6 +18,7 @@ from apps.core.ai_settings import (
     AI_PROVIDER,
     GEMINI_API_BASE_URL,
     GEMINI_API_KEY,
+    GEMINI_API_KEYS,
     LLM_MAX_OUTPUT_TOKENS,
     LLM_RETRY_BACKOFF_SECONDS,
     LLM_RETRY_COUNT,
@@ -77,15 +78,22 @@ class GemmaClient:
         self.temperature = temperature
         self.num_ctx = num_ctx
         self.max_output_tokens = max_output_tokens
-        self._provider = create_provider(
-            provider_name=self.provider_name,
-            host=self.host,
-            api_key=self.api_key,
-            base_url=self.base_url,
-            timeout_seconds=self.timeout_seconds,
-            temperature=self.temperature,
-            num_ctx=self.num_ctx,
-        )
+        provider_kwargs = {
+            "provider_name": self.provider_name,
+            "host": self.host,
+            "base_url": self.base_url,
+            "timeout_seconds": self.timeout_seconds,
+            "temperature": self.temperature,
+            "num_ctx": self.num_ctx,
+        }
+        explicit_key = str(api_key or "").strip()
+        if self.provider_name != "ollama" and GEMINI_API_KEYS and (
+            not explicit_key or explicit_key == GEMINI_API_KEY
+        ):
+            provider_kwargs["api_keys"] = GEMINI_API_KEYS
+        else:
+            provider_kwargs["api_key"] = explicit_key
+        self._provider = create_provider(**provider_kwargs)
 
     def generate_text(self, *, prompt: str, system: str = "") -> GemmaResponse:
         started_at = monotonic()
