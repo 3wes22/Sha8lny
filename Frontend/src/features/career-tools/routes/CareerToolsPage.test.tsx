@@ -5,7 +5,6 @@ import userEvent from "@testing-library/user-event";
 const mocks = vi.hoisted(() => ({
   listResumes: vi.fn(),
   listPortfolios: vi.fn(),
-  optimizeAts: vi.fn(),
   improveResume: vi.fn(),
   createResume: vi.fn(),
   uploadResume: vi.fn(),
@@ -20,7 +19,6 @@ vi.mock("@/lib/api", () => ({
   careerToolsApi: {
     listResumes: mocks.listResumes,
     listPortfolios: mocks.listPortfolios,
-    optimizeAts: mocks.optimizeAts,
     improveResume: mocks.improveResume,
     createResume: mocks.createResume,
     uploadResume: mocks.uploadResume,
@@ -67,12 +65,6 @@ beforeEach(() => {
         updated_at: "2026-06-12T10:00:00Z",
       },
     ],
-  });
-  mocks.optimizeAts.mockResolvedValue({
-    message: "ATS optimization analysis complete",
-    ats_score: 88,
-    ats_grade: "A",
-    suggestions: ["Add more keywords", "Quantify achievements"],
   });
   mocks.improveResume.mockResolvedValue({
     ai_used: true,

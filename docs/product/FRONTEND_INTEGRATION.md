@@ -126,12 +126,23 @@ That document is the source of truth for:
 
 ### Current auth flow
 
-- access and refresh tokens are stored in `localStorage`
+- access and refresh tokens are stored in `localStorage` under `sha8lny_access_token` / `sha8lny_refresh_token`
 - the client sends `Authorization: Bearer <token>`
 - `401` responses trigger refresh through `/users/auth/refresh/`
 - refresh failure clears stored tokens and redirects to `/login`
 
 This is the current implementation, not the final ideal architecture. It works with the present backend, but a later hardening pass should move toward cookie-backed auth.
+
+### Security trade-offs (documented for defense review)
+
+| Topic | Current choice | Risk | Mitigation / future work |
+|-------|----------------|------|--------------------------|
+| Token storage | `localStorage` (readable by JS) | XSS can exfiltrate JWTs | Keep dependency surface small; avoid `dangerouslySetInnerHTML`; prefer httpOnly cookies in production |
+| CSP | Not enforced by the SPA itself | Inline script injection harder to block at the edge | Production deploy should set a strict `Content-Security-Policy` on the static host (e.g. `default-src 'self'`; limit `connect-src` to API origin) |
+| Password reset | Route stub only (`/forgot-password`) | Users may expect email recovery | Page states MVP limitation; no fake success path |
+| Refresh rotation | Backend rotates + blacklists refresh tokens | Stolen refresh token window | Short access-token TTL (1 h) limits blast radius |
+
+Server state in feature pages still uses local `useEffect` + `useState` fetch patterns. TanStack Query remains a dev dependency for test utilities only until a page adopts `useQuery`.
 
 ### Shared client conventions
 
@@ -182,7 +193,6 @@ Frontend expects:
 - `/assessment/:id/`
 - `/assessment/:id/submit/`
 - `/assessment/:id/result/`
-- `/assessment/latest/`
 
 The reconstructed assessment flow now relies on:
 

@@ -1,8 +1,7 @@
 /**
  * API Client for Sha8lny Backend
  *
- * Provides typed fetch wrapper with authentication handling,
- * error management, and React Query integration helpers.
+ * Typed fetch wrapper with JWT auth handling and shared error helpers.
  */
 
 const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
@@ -594,13 +593,6 @@ export interface PaginatedResponse<T> {
   results: T[];
 }
 
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  created_at: string;
-}
-
 export interface ChatRequest {
   message: string;
   conversation_id?: string;
@@ -654,14 +646,6 @@ export interface ChatResponse {
   retrieved_documents?: Citation[];
   no_retrieval_context?: boolean;
   metadata: AIInvocationMetadata;
-}
-
-export interface Conversation {
-  id: string;
-  title: string;
-  messages: ChatMessage[];
-  created_at: string;
-  updated_at: string;
 }
 
 export interface UserPreferences {
@@ -903,14 +887,6 @@ export interface AssessmentResult {
   created_at: string;
 }
 
-export interface AssessmentListItem {
-  id: string;
-  assessment_type: string;
-  status: string;
-  completion_percentage: number;
-  created_at: string;
-}
-
 // ============================================================================
 // API Endpoints
 // ============================================================================
@@ -984,14 +960,6 @@ export const roadmapApi = {
   createAI: (data: RoadmapCreateAIRequest) =>
     apiClient.post<Roadmap>('/roadmap/', data),
 
-  // Update roadmap
-  update: (id: string, data: Partial<Roadmap>) =>
-    apiClient.put<Roadmap>(`/roadmap/${id}/`, data),
-
-  // Delete roadmap
-  delete: (id: string) =>
-    apiClient.delete<void>(`/roadmap/${id}/`),
-
   // Update progress (phase or milestone)
   updateProgress: (roadmapId: string, data: RoadmapProgressUpdate) =>
     apiClient.put<{ message: string }>(`/roadmap/${roadmapId}/progress/`, data),
@@ -1010,14 +978,6 @@ export const roadmapTemplateApi = {
   // List all published templates
   list: () =>
     apiClient.get<PaginatedResponse<RoadmapTemplate>>('/roadmap/templates/'),
-
-  // Get specific template
-  get: (id: string) =>
-    apiClient.get<RoadmapTemplate>(`/roadmap/templates/${id}/`),
-
-  // Filter templates by career
-  byCareer: (career: string) =>
-    apiClient.get<RoadmapTemplate[]>(`/roadmap/templates/by_career/?career=${encodeURIComponent(career)}`),
 };
 
 export const jobApi = {
@@ -1046,14 +1006,6 @@ export const jobApi = {
     const query = searchParams.toString();
     const suffix = query ? `?${query}` : '';
     return apiClient.get<JobMatchResponse>(`/jobs/match/${suffix}`);
-  },
-
-  // Get all jobs (paginated list)
-  list: (params?: { page?: number; page_size?: number }) => {
-    const searchParams = new URLSearchParams();
-    if (params?.page) searchParams.append('page', String(params.page));
-    if (params?.page_size) searchParams.append('page_size', String(params.page_size));
-    return apiClient.get<PaginatedResponse<JobListItem>>(`/jobs/?${searchParams.toString()}`);
   },
 
   // Get job by ID (full details)
@@ -1102,30 +1054,11 @@ export const notificationApi = {
 export const advisorApi = {
   chat: (data: ChatRequest) =>
     apiClient.post<ChatResponse>('/advisory/chat/', data),
-
-  getHistory: () =>
-    apiClient.get<Conversation[]>('/advisory/history/'),
-
-  getConversation: (id: string) =>
-    apiClient.get<Conversation>(`/advisory/history/${id}/`),
 };
 
 export const assessmentApi = {
-  list: (params?: { assessment_type?: string; status?: string }) => {
-    const searchParams = new URLSearchParams();
-    if (params?.assessment_type) searchParams.append('assessment_type', params.assessment_type);
-    if (params?.status) searchParams.append('status', params.status);
-    return apiClient.get<PaginatedResponse<AssessmentListItem>>(`/assessment/?${searchParams.toString()}`);
-  },
-
   get: (id: string) =>
     apiClient.get<Assessment>(`/assessment/${id}/`),
-
-  getLatest: (assessment_type?: string) => {
-    const searchParams = new URLSearchParams();
-    if (assessment_type) searchParams.append('assessment_type', assessment_type);
-    return apiClient.get<Assessment>(`/assessment/latest/?${searchParams.toString()}`);
-  },
 
   create: (data: AssessmentCreateRequest) =>
     apiClient.post<Assessment>('/assessment/', data),
@@ -1135,14 +1068,6 @@ export const assessmentApi = {
 
   getResult: (assessmentId: string) =>
     apiClient.get<AssessmentResult>(`/assessment/${assessmentId}/result/`),
-
-  history: (params?: { assessment_type?: string; status?: string; limit?: number }) => {
-    const searchParams = new URLSearchParams();
-    if (params?.assessment_type) searchParams.append('assessment_type', params.assessment_type);
-    if (params?.status) searchParams.append('status', params.status);
-    if (params?.limit) searchParams.append('limit', params.limit.toString());
-    return apiClient.get<AssessmentListItem[]>(`/assessment/history/?${searchParams.toString()}`);
-  },
 };
 
 // ============================================================================
@@ -1199,19 +1124,6 @@ export interface CourseSearchParams {
 }
 
 export const courseApi = {
-  list: (params: CourseSearchParams = {}) => {
-    const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== "") {
-        searchParams.append(key, String(value));
-      }
-    });
-    const query = searchParams.toString();
-    return apiClient.get<PaginatedResponse<CourseListItem>>(
-      `/courses/courses/${query ? `?${query}` : ""}`,
-    );
-  },
-
   search: (params: CourseSearchParams = {}) => {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -1225,11 +1137,7 @@ export const courseApi = {
     );
   },
 
-  recommended: () => apiClient.get<CourseListItem[]>("/courses/courses/recommended/"),
-
   get: (id: string) => apiClient.get<Course>(`/courses/courses/${id}/`),
-
-  platforms: () => apiClient.get<PaginatedResponse<CoursePlatform>>("/courses/platforms/"),
 };
 
 // ============================================================================
@@ -1247,23 +1155,6 @@ export interface ProgressStats {
   average_daily_hours: string | number;
   this_week_hours: string | number;
   last_activity_date: string | null;
-}
-
-export interface UserProgressListItem {
-  id: string;
-  roadmap: string;
-  roadmap_title?: string;
-  overall_completion_percentage: string | number;
-  completion_display?: string;
-  phases_completed: number;
-  milestones_completed: number;
-  courses_completed: number;
-  current_streak_days: number;
-  streak_display?: string;
-  total_learning_hours: string | number;
-  hours_display?: string;
-  last_activity_date?: string | null;
-  on_track?: boolean;
 }
 
 export interface CourseCompletionListItem {
@@ -1293,13 +1184,8 @@ export interface MilestoneAchievementListItem {
 export const progressApi = {
   getStats: () => apiClient.get<ProgressStats>("/progress/stats/"),
 
-  list: () => apiClient.get<PaginatedResponse<UserProgressListItem>>("/progress/progress/"),
-
   completions: () =>
     apiClient.get<PaginatedResponse<CourseCompletionListItem>>("/progress/completions/"),
-
-  achievements: () =>
-    apiClient.get<PaginatedResponse<MilestoneAchievementListItem>>("/progress/achievements/"),
 
   recentAchievements: () =>
     apiClient.get<MilestoneAchievementListItem[]>("/progress/achievements/recent/"),
@@ -1379,8 +1265,6 @@ export interface PortfolioCreateRequest {
 export const careerToolsApi = {
   listResumes: () => apiClient.get<PaginatedResponse<ResumeListItem>>("/career-tools/resumes/"),
 
-  getResume: (id: string) => apiClient.get<Resume>(`/career-tools/resumes/${id}/`),
-
   createResume: (data: ResumeCreateRequest) =>
     apiClient.post<Resume>("/career-tools/resumes/", data),
 
@@ -1406,14 +1290,8 @@ export const careerToolsApi = {
     return response.json() as Promise<Resume>;
   },
 
-  optimizeAts: (id: string) =>
-    apiClient.post<AtsResult>(`/career-tools/resumes/${id}/optimize_ats/`, {}),
-
   improveResume: (id: string) =>
     apiClient.post<ResumeImprovement>(`/career-tools/resumes/${id}/improve/`, {}),
-
-  updateResume: (id: string, data: Partial<Pick<Resume, "personal_info" | "title" | "template_name">>) =>
-    apiClient.patch<Resume>(`/career-tools/resumes/${id}/`, data),
 
   listPortfolios: () =>
     apiClient.get<PaginatedResponse<PortfolioListItem>>("/career-tools/portfolios/"),
