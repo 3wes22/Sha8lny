@@ -65,11 +65,48 @@ def score_faithfulness(
 
 
 def _gemini_judge(answer: str, passages: list[str]) -> float:  # pragma: no cover - operator path
-    """Production judge — wired to Gemini. Run by the operator on a fresh key."""
-    raise RuntimeError(
-        "Gemini judge not wired in this environment; pass an injected judge or run "
-        "with a real GEMINI_API_KEY via the backend GemmaClient."
+    """Production judge — calls Gemini when ``GEMINI_API_KEY`` is set."""
+    import os
+
+    import httpx
+
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError(
+            "Set GEMINI_API_KEY to run the production faithfulness judge "
+            "(use a fresh key; the full test suite exhausts quota)."
+        )
+
+    model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
+    base_url = os.environ.get(
+        "GEMINI_API_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"
+    ).rstrip("/")
+    url = f"{base_url}/models/{model}:generateContent?key={api_key}"
+
+    context = "\n---\n".join(passages[:10]) or "(no passages provided)"
+    prompt = (
+        "You are a strict faithfulness judge for a RAG career advisor.\n"
+        "Given PASSAGES and an ANSWER, return JSON only: "
+        '{"supported": 1} if every factual claim in the answer is supported by the passages, '
+        'else {"supported": 0}.\n\n'
+        f"PASSAGES:\n{context}\n\nANSWER:\n{answer}\n"
     )
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.0, "responseMimeType": "application/json"},
+    }
+    response = httpx.post(url, json=payload, timeout=60.0)
+    response.raise_for_status()
+    body = response.json()
+    text = (
+        body.get("candidates", [{}])[0]
+        .get("content", {})
+        .get("parts", [{}])[0]
+        .get("text", "")
+    )
+    parsed = json.loads(text) if text else {}
+    supported = parsed.get("supported", parsed.get("score", 0))
+    return 1.0 if float(supported) >= 0.5 else 0.0
 
 
 if __name__ == "__main__":  # pragma: no cover

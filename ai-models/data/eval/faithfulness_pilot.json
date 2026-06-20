@@ -1,0 +1,22 @@
+[
+  {
+    "answer": "Backend developers in Egypt often start with Python or Java, build REST APIs, and learn SQL for relational data.",
+    "passages": [
+      "Common backend stacks include Python with Django or Flask and Java with Spring Boot.",
+      "Relational databases and SQL remain core skills for backend roles."
+    ]
+  },
+  {
+    "answer": "You should always fine-tune a 70B model locally for every career question.",
+    "passages": [
+      "Retrieval-augmented generation combines dense search with a hosted LLM for grounded answers.",
+      "The platform uses Gemini with deterministic fallbacks when the API is unavailable."
+    ]
+  },
+  {
+    "answer": "Use select_related on foreign keys and prefetch_related on reverse relations to avoid N+1 queries in Django list views.",
+    "passages": [
+      "Django ORM N+1 issues are fixed with select_related for ForeignKey and prefetch_related for many-to-many or reverse FK."
+    ]
+  }
+]

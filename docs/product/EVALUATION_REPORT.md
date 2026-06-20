@@ -9,8 +9,8 @@ This report is the defense-facing roll-up of the per-component evals.
 | RAG retrieval | 55-query eval set, doc-level ground truth | recall@5 0.118 → **0.609** final pipeline (rerank peak **0.627**; ×5.2) | `ai-models/eval_results/retrieval/*.json` |
 | Job ranker | Leave-one-group-out NDCG/MAP vs baselines | ndcg@5 **0.589** vs 0.560 overlap / 0.160 random; MAP ties overlap | `ai-models/models/custom/job_ranker_eval.json` |
 | Source credibility | Deterministic tier fraction | scorer + tests green | `ai-models/src/rag/credibility.py` |
-| Assessment (open-ended) | Expert review packet (blind, 3 reviewers) | packet ready; session is an operator step | `docs/product/EXPERT_REVIEW_PACKET.md` |
-| Faithfulness | LLM-judge (Gemini) | scaffolded; Gemini-quota-gated | `ai-models/scripts/eval_faithfulness.py` |
+| Assessment (open-ended) | Expert review packet (blind, 3 reviewers) | packet + analysis tooling ready; human session pending | `EXPERT_REVIEW_PACKET.md`, `analyze_expert_review.py` |
+| Faithfulness | LLM-judge (Gemini) | judge wired; pilot set committed; operator run on fresh key | `eval_faithfulness.py`, `faithfulness_pilot.json` |
 
 ---
 
@@ -99,4 +99,7 @@ running the session is an operator step. The instrument is positioned as
 cd ai-models
 ../Backend/venv/bin/python scripts/run_retrieval_eval.py --stage <label>
 ../Backend/venv/bin/python -m pytest tests/test_credibility.py -q
+../Backend/venv/bin/python scripts/generate_eval_charts.py
+python scripts/analyze_expert_review.py --csv ../docs/product/expert_review_scoring_sheet.csv --engine ../docs/product/expert_review_engine_scores.json
+cd ../Backend && env -u GEMINI_API_KEY python manage.py score_expert_review_reference
 ```

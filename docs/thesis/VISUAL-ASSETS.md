@@ -49,8 +49,8 @@
 | 4.14 | Screenshot | Grounded advisor chat showing cited sources. | §4.6.3 | Capture (`/advisor`) |
 | 4.15 | Screenshot | Profile, skills, and preferences. | §4.6.3 | Capture (`/profile`) |
 | 5.1 | Diagram | Testing pyramid applied to Sha8lny. | §5.1 | Draw |
-| 5.2 | Bar chart | Job-ranker NDCG@5/@10 vs. overlap and random baselines. | §5.4.1 | Generate from eval |
-| 5.3 | Bar chart | Retrieval recall@5 / MRR: hybrid+rerank vs. dense-only. | §5.4.2 | Generate from eval |
+| 5.2 | Bar chart | Job-ranker NDCG@5/@10 vs. overlap and random baselines. | §5.4.1 | `docs/thesis/assets/fig-5.2-ranker-ndcg.svg` |
+| 5.3 | Bar chart | Retrieval recall@5 / MRR: hybrid+rerank vs. dense-only. | §5.4.2 | `docs/thesis/assets/fig-5.3-retrieval-recall-mrr.svg` |
 | 5.4 | Chart | API latency distribution by endpoint class. | §5.4.3 | Generate from load test |
 | 6.1 | Diagram | Sha8lny positioned against prior work (explainability, locality, integration). | §6.4 | Draw |
 | 7.1 | Roadmap timeline | Short-, long-term, and research future work. | §7.2 | Draw |

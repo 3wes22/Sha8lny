@@ -193,3 +193,47 @@ To force offline mode in a live demo, unset the key for that shell:
   `GEMINI_API_KEY=` empty — that breaks 14 assessment stage-cache tests).
 - Keep a spare key in reserve; if mid-demo calls start 429-ing, the offline path
   above keeps every surface usable.
+
+## PR6 — Expert review & faithfulness (operator steps)
+
+These complete claims **C3** / **C11** after the code/docs remediation PRs.
+
+### Expert review (human session)
+
+1. Share [`EXPERT_REVIEW_PACKET.md`](EXPERT_REVIEW_PACKET.md) + blank
+   [`expert_review_scoring_sheet.csv`](expert_review_scoring_sheet.csv) with three reviewers.
+2. Generate engine reference scores on the pilot sample answers (keyword fallback, no API key):
+
+   ```bash
+   cd Backend
+   env -u GEMINI_API_KEY python manage.py score_expert_review_reference
+   ```
+
+3. After reviewers return scores, analyze agreement:
+
+   ```bash
+   python ai-models/scripts/analyze_expert_review.py \
+     --csv docs/product/expert_review_scoring_sheet.csv \
+     --engine docs/product/expert_review_engine_scores.json
+   ```
+
+4. Record the JSON summary in [`EVALUATION_REPORT.md`](EVALUATION_REPORT.md) §4.
+
+### Faithfulness (LLM judge, fresh Gemini key)
+
+```bash
+cd ai-models
+export GEMINI_API_KEY=<fresh-key>
+python scripts/eval_faithfulness.py --items data/eval/faithfulness_pilot.json
+# cached per item under eval_results/faithfulness/
+```
+
+Target: mean faithfulness **> 0.85** on the pilot set; expand to a larger logged
+advisory sample before thesis submission.
+
+### Thesis charts (offline, no API)
+
+```bash
+python ai-models/scripts/generate_eval_charts.py
+# writes docs/thesis/assets/fig-5.2-ranker-ndcg.svg and fig-5.3-retrieval-recall-mrr.svg
+```
