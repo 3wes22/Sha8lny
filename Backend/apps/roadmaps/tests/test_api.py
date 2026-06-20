@@ -207,6 +207,8 @@ class TestRoadmapCreationAPI:
         Forces the deterministic roadmap blueprint (LLM unavailable) so the assertions on
         assessment-derived structure are hermetic instead of depending on live Gemini output.
         """
+        from unittest.mock import patch
+
         monkeypatch.setattr(core_ai_settings, "GEMINI_API_KEY", "")
         api_client.force_authenticate(user=test_user)
 
@@ -242,11 +244,21 @@ class TestRoadmapCreationAPI:
             llm_model_used='assessment-mock-v1',
         )
 
-        response = api_client.post(
-            reverse('roadmaps:roadmap-list'),
-            {'assessment_id': str(assessment_result.id)},
-            format='json',
-        )
+        with (
+            patch(
+                "apps.roadmaps.assembler.RoadmapPathRetriever.retrieve_path_chunks",
+                return_value=[],
+            ),
+            patch(
+                "apps.roadmaps.ai_pipeline.GemmaClient.generate_structured",
+                side_effect=RuntimeError("offline"),
+            ),
+        ):
+            response = api_client.post(
+                reverse('roadmaps:roadmap-list'),
+                {'assessment_id': str(assessment_result.id)},
+                format='json',
+            )
 
         assert response.status_code == status.HTTP_202_ACCEPTED
         assert response.data['target_career'] == 'Backend Developer'
@@ -281,7 +293,10 @@ class TestRoadmapCreationAPI:
             .order_by('phase__order', 'order')
             .values_list('title', flat=True)
         )
-        assert milestone_titles
+        # "Backend Developer" resolves to the "backend" role ladder
+        # (apps/roadmaps/ladder.py ROLE_LADDERS), whose band 1 always
+        # includes this authored topic — a stable, content-specific check.
+        assert any('Django' in title for title in milestone_titles)
 
     def test_create_ai_roadmap_prefers_structured_roadmap_signal(self, api_client, test_user):
         """Test roadmap generation prefers structured roadmap_signal over legacy learning paths."""
