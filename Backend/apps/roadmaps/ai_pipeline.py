@@ -13,9 +13,9 @@ from apps.core.ai_settings import AI_PROVIDER, GEMINI_FLASH_LITE_MODEL
 from apps.core.gemma_client import GemmaClient
 
 
-ROADMAP_PERSONALIZATION_PROMPT = """You rewrite a fixed 3-phase learning roadmap blueprint into motivating, personalized copy for a {career} learner currently at {current_level} aiming for {target_level}, with ~{weekly_hours} hrs/week.
+ROADMAP_PERSONALIZATION_PROMPT = """You rewrite a fixed multi-phase learning roadmap blueprint into motivating, personalized copy for a {career} learner currently at {current_level} aiming for {target_level}, with ~{weekly_hours} hrs/week.
 Prioritize their gaps: {gaps}. Build on strengths: {strengths}.
-Return STRICT JSON preserving the given phase/milestone structure and ids; only improve title, description, and next_action text. Do NOT add, remove, or reorder phases or milestones. Keep each description under 240 characters."""
+Return STRICT JSON preserving the given phase/milestone structure and ids exactly; do NOT add, remove, or reorder phases or milestones; only improve title, description, and next_action text. Keep each description under 240 characters."""
 
 
 @dataclass(frozen=True)

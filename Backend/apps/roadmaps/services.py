@@ -608,90 +608,18 @@ class RoadmapService:
         top_skills: List[str],
         weekly_hours: int,
     ) -> List[Dict[str, Any]]:
-        """Create a deterministic, assessment-aware roadmap structure."""
-        total_focus_items = max(1, len(priority_skills) + len(gaps))
-        base_hours = BASE_HOURS_BY_LEVEL.get(current_level, DEFAULT_BASE_HOURS)
-        total_hours = base_hours + (total_focus_items * HOURS_PER_FOCUS_ITEM)
-        estimated_weeks = max(MIN_PLAN_WEEKS, math.ceil(total_hours / max(weekly_hours, 1)))
+        """Create the assessment-aware 5-band ladder blueprint."""
+        from apps.roadmaps.ladder import build_ladder_blueprint
 
-        first_skill = priority_skills[0] if priority_skills else (top_skills[0] if top_skills else target_career)
-        second_skill = priority_skills[1] if len(priority_skills) > 1 else first_skill
-        first_gap = gaps[0] if gaps else f'{target_career} fundamentals'
-        second_gap = gaps[1] if len(gaps) > 1 else 'project execution'
-        lead_strength = strengths[0] if strengths else 'your strongest skills'
-
-        foundation_weeks = max(MIN_PHASE_WEEKS, math.ceil(estimated_weeks * PHASE_WEEK_SPLIT[0]))
-        gap_weeks = max(MIN_PHASE_WEEKS, math.ceil(estimated_weeks * PHASE_WEEK_SPLIT[1]))
-        # Third phase takes the remainder (may fall below the floor); the guard
-        # below then borrows from the gap phase so the three phases still sum to
-        # ``estimated_weeks``. Clamping here instead would make the guard dead
-        # code and silently overshoot the planned duration.
-        phase_weeks = [
-            foundation_weeks,
-            gap_weeks,
-            estimated_weeks - foundation_weeks - gap_weeks,
-        ]
-        if phase_weeks[2] < MIN_PHASE_WEEKS:
-            deficit = MIN_PHASE_WEEKS - phase_weeks[2]
-            phase_weeks[1] = max(MIN_PHASE_WEEKS, phase_weeks[1] - deficit)
-            phase_weeks[2] = MIN_PHASE_WEEKS
-
-        return [
-            {
-                'title': f'Stabilize your {target_career} baseline',
-                'description': (
-                    f'Anchor the roadmap around your current {current_level} signal and '
-                    f'build repeatable confidence with {first_skill}.'
-                ),
-                'weeks': phase_weeks[0],
-                'objectives': [
-                    f'Clarify what job-ready {target_career} performance looks like.',
-                    f'Strengthen {first_skill} with deliberate practice.',
-                    'Create momentum before the heavier gap-closing work starts.',
-                ],
-                'milestones': [
-                    {'title': f'Audit your current {target_career} baseline', 'type': 'practice', 'hours': 6, 'skills': top_skills[:2] or [first_skill]},
-                    {'title': f'Strengthen {first_skill} foundations', 'type': 'course', 'hours': 14, 'skills': [first_skill]},
-                    {'title': f'Build a scoped practice project using {first_skill}', 'type': 'project', 'hours': 18, 'skills': [first_skill]},
-                ],
-            },
-            {
-                'title': 'Close the highest-priority gaps',
-                'description': (
-                    f'Turn the assessment gaps into explicit milestones so the roadmap stays '
-                    f'personal instead of generic.'
-                ),
-                'weeks': phase_weeks[1],
-                'objectives': [
-                    f'Close the {first_gap} gap with focused work.',
-                    f'Build working confidence with {second_skill}.',
-                    'Translate weak spots into visible progress.',
-                ],
-                'milestones': [
-                    {'title': f'Close the {first_gap} gap', 'type': 'practice', 'hours': 12, 'skills': [first_gap]},
-                    {'title': f'Build working confidence with {second_skill}', 'type': 'course', 'hours': 12, 'skills': [second_skill]},
-                    {'title': f'Apply {second_gap} in a guided project sprint', 'type': 'project', 'hours': 20, 'skills': [second_gap, second_skill]},
-                ],
-            },
-            {
-                'title': 'Ship proof and become job-ready',
-                'description': (
-                    f'Use {lead_strength} as an advantage while packaging your work for real '
-                    f'{target_career} opportunities.'
-                ),
-                'weeks': phase_weeks[2],
-                'objectives': [
-                    'Produce portfolio evidence that matches the target role.',
-                    'Turn project work into resume and interview stories.',
-                    'Run a focused job search with clear next actions.',
-                ],
-                'milestones': [
-                    {'title': RoadmapService._portfolio_project_title(target_career), 'type': 'project', 'hours': 24, 'skills': [first_skill, second_skill]},
-                    {'title': f'Turn {lead_strength} into resume-ready and interview-ready stories', 'type': 'practice', 'hours': 8, 'skills': strengths[:2] or [lead_strength]},
-                    {'title': f'Run a targeted {target_career} job search sprint', 'type': 'practice', 'hours': 8, 'skills': [target_career]},
-                ],
-            },
-        ]
+        return build_ladder_blueprint(
+            target_career=target_career,
+            current_level=current_level,
+            priority_skills=priority_skills,
+            gaps=gaps,
+            top_skills=top_skills,
+            strengths=strengths,
+            weekly_hours=weekly_hours,
+        )
 
     @staticmethod
     def _create_personalized_structure(roadmap: Roadmap, phases_data: List[Dict[str, Any]]) -> None:

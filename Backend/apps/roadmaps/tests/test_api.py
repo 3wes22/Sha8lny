@@ -44,6 +44,16 @@ def test_user(db):
 
 
 @pytest.fixture
+def loop_user(db):
+    from apps.users.models import User
+
+    return User.objects.create_user(
+        auth0_id="ladder_auth0", email="ladder@example.com", username="ladder_user",
+        full_name="Ladder User", date_of_birth="1997-01-01",
+    )
+
+
+@pytest.fixture
 def roadmap_template(db):
     """Create a roadmap template."""
     return RoadmapTemplate.objects.create(
@@ -255,15 +265,23 @@ class TestRoadmapCreationAPI:
         assert roadmap.ai_insights['strengths']
         assert 'System design' in roadmap.ai_insights['gaps']
         assert roadmap.ai_insights['priority_skills'] == ['Django', 'PostgreSQL']
-        assert roadmap.phases.count() == 3
+        assert roadmap.phases.count() == 5
+
+        # Ladder blueprint (Task 3/4): authored band content replaces literal
+        # gap/skill-name insertion into milestone titles, so assert on the
+        # 5-band structure itself rather than gap/skill substrings.
+        phase_titles = list(
+            roadmap.phases.order_by('order').values_list('title', flat=True)
+        )
+        assert any('Foundations' in title for title in phase_titles)
+        assert any('Job-Ready' in title for title in phase_titles)
 
         milestone_titles = list(
             RoadmapMilestone.objects.filter(phase__roadmap=roadmap)
             .order_by('phase__order', 'order')
             .values_list('title', flat=True)
         )
-        assert any('Django' in title for title in milestone_titles)
-        assert any('System design' in title for title in milestone_titles)
+        assert milestone_titles
 
     def test_create_ai_roadmap_prefers_structured_roadmap_signal(self, api_client, test_user):
         """Test roadmap generation prefers structured roadmap_signal over legacy learning paths."""
@@ -721,3 +739,36 @@ class TestRoadmapListAPI:
         assert response.status_code == status.HTTP_200_OK
         # Should only see own roadmap
         assert len(response.data['results']) == 1
+
+
+@pytest.mark.django_db
+def test_generation_produces_five_band_ladder(loop_user):
+    from unittest.mock import patch
+
+    from apps.assessments.models import Assessment, AssessmentResult
+    from apps.roadmaps.models import Roadmap
+    from apps.roadmaps.services import RoadmapService
+
+    assessment = Assessment.objects.create(
+        user=loop_user, assessment_type="skills", target_career="Backend Developer",
+        questions=[], total_questions=0, status="completed", ai_processing_status="completed",
+    )
+    assessment_result = AssessmentResult.objects.create(
+        assessment=assessment, overall_score=40, skill_scores={"python": 40},
+        strengths=["Python"], areas_for_improvement=["System design"],
+        recommended_careers=[{"title": "Backend Developer", "match_score": 80}],
+        recommended_learning_paths=[], ai_insights="x", llm_model_used="mock", ai_confidence_score=0.7,
+    )
+    roadmap = Roadmap.objects.create(
+        user=loop_user, title="R", target_career="Backend Developer", assessment=assessment_result,
+        current_level="beginner", target_level="job-ready", estimated_duration_weeks=12,
+        weekly_hours_commitment=10, status=Roadmap.DRAFT, ai_processing_status="pending",
+    )
+    with patch("apps.roadmaps.assembler.RoadmapPathRetriever.retrieve_path_chunks", return_value=[]), \
+         patch("apps.roadmaps.ai_pipeline.GemmaClient.generate_structured", side_effect=RuntimeError("offline")):
+        RoadmapService.populate_ai_roadmap(roadmap)
+
+    phases = list(roadmap.phases.order_by("order"))
+    assert len(phases) == 5
+    assert "Foundations" in phases[0].title
+    assert "Job-Ready" in phases[4].title
