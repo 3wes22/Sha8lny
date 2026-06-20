@@ -221,9 +221,9 @@ These complete claims **C3** / **C11** after the code/docs remediation PRs.
 
 ### Faithfulness (LLM judge, fresh Gemini key)
 
-**`.env` format:** use `GEMINI_API_KEY=AIzaSy...` on a single line with **no space after `=`**
-and no commented duplicate on the next line — `source .env` treats `KEY= value` as an empty
-key plus a shell command.
+**`.env` format:** use `GEMINI_API_KEY=AIzaSy...` on a single line with **no space after `=`**.
+Add backup keys via `GEMINI_API_KEYS=key1,key2`, `GEMINI_API_KEY_2=...`, or commented
+`# AIzaSy...` lines — the runtime rotates to the next key automatically on **429** quota errors.
 
 ```bash
 cd ai-models

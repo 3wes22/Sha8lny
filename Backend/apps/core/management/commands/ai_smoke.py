@@ -6,7 +6,7 @@ import json
 
 from django.core.management.base import BaseCommand
 
-from apps.core.ai_settings import AI_PROVIDER, GEMINI_API_KEY
+from apps.core.ai_settings import AI_PROVIDER, GEMINI_API_KEYS
 from apps.core.gemma_client import GemmaClient
 
 
@@ -21,7 +21,7 @@ class Command(BaseCommand):
                 )
             )
 
-        if not GEMINI_API_KEY:
+        if not GEMINI_API_KEYS:
             self.stderr.write(self.style.ERROR("GEMINI_API_KEY is not configured."))
             return
 

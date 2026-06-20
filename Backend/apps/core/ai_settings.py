@@ -12,6 +12,8 @@ from pathlib import Path
 
 from decouple import config
 
+from apps.core.gemini_keys import collect_gemini_api_keys
+
 
 _BACKEND_BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -24,7 +26,21 @@ AI_PROVIDER = config("AI_PROVIDER", default="gemini").strip().lower() or "gemini
 # ---------------------------------------------------------------------------
 # Gemini API
 # ---------------------------------------------------------------------------
-GEMINI_API_KEY = config("GEMINI_API_KEY", default="")
+def _gemini_env_mapping() -> dict[str, str]:
+    mapping = {
+        "GEMINI_API_KEY": config("GEMINI_API_KEY", default=""),
+        "GEMINI_API_KEYS": config("GEMINI_API_KEYS", default=""),
+    }
+    for index in range(2, 10):
+        mapping[f"GEMINI_API_KEY_{index}"] = config(f"GEMINI_API_KEY_{index}", default="")
+    return mapping
+
+
+GEMINI_API_KEYS = collect_gemini_api_keys(
+    env=_gemini_env_mapping(),
+    env_file=_BACKEND_BASE_DIR / ".env",
+)
+GEMINI_API_KEY = GEMINI_API_KEYS[0] if GEMINI_API_KEYS else ""
 GEMINI_API_BASE_URL = config(
     "GEMINI_API_BASE_URL",
     default="https://generativelanguage.googleapis.com/v1beta",
@@ -172,7 +188,8 @@ def get_ai_settings_summary() -> dict:
         "retry_count": LLM_RETRY_COUNT,
         "temperature": LLM_TEMPERATURE,
         "max_output_tokens": LLM_MAX_OUTPUT_TOKENS,
-        "api_key_configured": bool(GEMINI_API_KEY),
+        "api_key_configured": bool(GEMINI_API_KEYS),
+        "gemini_api_key_count": len(GEMINI_API_KEYS),
         "ollama_host": OLLAMA_HOST if AI_PROVIDER == "ollama" else None,
         "ollama_model": OLLAMA_MODEL if AI_PROVIDER == "ollama" else None,
         "ollama_num_ctx": OLLAMA_NUM_CTX if AI_PROVIDER == "ollama" else None,

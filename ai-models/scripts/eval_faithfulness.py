@@ -90,22 +90,28 @@ def score_faithfulness(
 
 
 def _gemini_judge(answer: str, passages: list[str]) -> float:  # pragma: no cover - operator path
-    """Production judge — calls Gemini when ``GEMINI_API_KEY`` is set."""
+    """Production judge — calls Gemini when a key is configured."""
+    import sys
+
     import httpx
 
     _load_backend_env()
-    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if not api_key:
+    backend_root = _BACKEND_ENV.parent
+    if str(backend_root) not in sys.path:
+        sys.path.insert(0, str(backend_root))
+    from apps.core.gemini_keys import collect_gemini_api_keys
+
+    api_keys = collect_gemini_api_keys(env=os.environ, env_file=_BACKEND_ENV)
+    if not api_keys:
         raise RuntimeError(
-            "Set GEMINI_API_KEY to run the production faithfulness judge "
-            "(use a fresh key; the full test suite exhausts quota)."
+            "Configure GEMINI_API_KEY (and optional backups) in Backend/.env "
+            "to run the production faithfulness judge."
         )
 
     model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
     base_url = os.environ.get(
         "GEMINI_API_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"
     ).rstrip("/")
-    url = f"{base_url}/models/{model}:generateContent?key={api_key}"
 
     context = "\n---\n".join(passages[:10]) or "(no passages provided)"
     prompt = (
@@ -119,18 +125,33 @@ def _gemini_judge(answer: str, passages: list[str]) -> float:  # pragma: no cove
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.0, "responseMimeType": "application/json"},
     }
-    response = httpx.post(url, json=payload, timeout=60.0)
-    response.raise_for_status()
-    body = response.json()
-    text = (
-        body.get("candidates", [{}])[0]
-        .get("content", {})
-        .get("parts", [{}])[0]
-        .get("text", "")
-    )
-    parsed = json.loads(text) if text else {}
-    supported = parsed.get("supported", parsed.get("score", 0))
-    return 1.0 if float(supported) >= 0.5 else 0.0
+
+    last_error: Exception | None = None
+    for index, api_key in enumerate(api_keys):
+        url = f"{base_url}/models/{model}:generateContent?key={api_key}"
+        response = httpx.post(url, json=payload, timeout=60.0)
+        if response.status_code == 429 and index < len(api_keys) - 1:
+            last_error = httpx.HTTPStatusError(
+                "rate limited",
+                request=response.request,
+                response=response,
+            )
+            continue
+        response.raise_for_status()
+        body = response.json()
+        text = (
+            body.get("candidates", [{}])[0]
+            .get("content", {})
+            .get("parts", [{}])[0]
+            .get("text", "")
+        )
+        parsed = json.loads(text) if text else {}
+        supported = parsed.get("supported", parsed.get("score", 0))
+        return 1.0 if float(supported) >= 0.5 else 0.0
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("No Gemini API keys succeeded")
 
 
 if __name__ == "__main__":  # pragma: no cover

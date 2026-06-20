@@ -1157,7 +1157,7 @@ class AssessmentAIService:
 
     @classmethod
     def _gemini_configured(cls) -> bool:
-        return bool(str(core_ai_settings.GEMINI_API_KEY or "").strip())
+        return bool(core_ai_settings.GEMINI_API_KEYS)
 
     @classmethod
     def _curated_stage_questions(
