@@ -14,8 +14,8 @@ Single source of truth for thesis ↔ implementation alignment.
 | C7 | Job–skill matching (embedding + LightGBM rerank) | `job_ranker.lgb` committed; order differs from overlap-only | Done | `ai-models/models/custom/job_ranker.lgb`, `JOB_RANKER_METHODOLOGY.md` |
 | C8 | "Why this job?" explainability | API `explanation` object with `top_factors` | Done | `/jobs/match/` + `JobMatchExplanation.tsx` |
 | C9 | Course ↔ milestone matching | ≥2 milestones with `match_score > 0` on demo roadmap | Done | `match_courses_for_roadmap` wired into generation (`services.py:914`) + `test_course_matching.py` roadmap-level test |
-| C10 | LLM stack thesis accuracy | Gemini + Gemma/Ollama; thesis Ch.2 updated | Not Started | Week 4 (`ACADEMIC_SUMMARY.md`) |
-| C11 | Evaluation (expert review + retrieval audit) | Thesis §3.4 appendix tables | In Progress | `RAG_RETRIEVAL_EVAL.md` + `EXPERT_REVIEW_PACKET.md` done; faithfulness/`EVALUATION_REPORT.md` pending (Week 4, Gemini-gated) |
+| C10 | LLM stack thesis accuracy | Gemini + Gemma/Ollama; thesis Ch.2 updated | Done | `ACADEMIC_SUMMARY.md` + `ADR-002-HOSTED-DEMO-AI-RUNTIME.md` document the Gemini-default + Ollama/Gemma fallback stack; deterministic fallbacks per module |
+| C11 | Evaluation (expert review + retrieval audit) | Thesis §3.4 appendix tables | Done (faithfulness operator-gated) | `EVALUATION_REPORT.md` + `RAG_RETRIEVAL_EVAL.md` + `EVAL_REPORT.md` + `credibility.py`/tests + `EXPERT_REVIEW_PACKET.md`; LLM-judge faithfulness scaffolded (`eval_faithfulness.py`), real run is an operator step |
 
 ## Limitations (explicit, not silent gaps)
 
