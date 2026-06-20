@@ -162,8 +162,10 @@ Observed offline behavior (recorded):
   provenance reports `fallback_used=true`, `structure_license_tier=internal`.
 - **Courses:** embedding match still links `RoadmapCourse` rows when the course
   index is seeded; otherwise milestones simply show no course (no crash).
-- **Jobs:** skill match + LightGBM ranking run fully offline (committed
-  `job_ranker.lgb`); `explanation.top_factors` present.
+- **Jobs:** skill match runs fully offline. If a local `job_ranker.lgb` exists,
+  the LightGBM reranker can order results; otherwise the endpoint falls back to
+  skill-overlap ordering. `explanation.top_factors` remains present in both
+  paths.
 - **Advisory:** returns a grounded fallback message; the chat payload still
   carries `retrieved_documents: []` and the `no_retrieval_context` flag, so the
   UI renders the honest "no grounded sources" state instead of breaking.

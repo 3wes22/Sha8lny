@@ -110,7 +110,7 @@ If you see `scenario_retrieval_failed` instead, read the `error_type` field. The
 Flip the flag in `.env`:
 
 ```env
-ASSESSMENT_SCENARIO_RAG_ENABLED=false
+ASSESSMENT_SCENARIO_RAG_ENABLED=true
 ```
 
 Restart the dev server. Prompt content and behavior return to byte-identical pre-feature behavior. No code revert needed, no data migration.
