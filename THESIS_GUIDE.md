@@ -10,7 +10,8 @@ while the thesis is being written.
 > **How to use this file**
 > - **Thesis writer:** Work top-to-bottom through Part 1 (chapter plan). Every claim is
 >   tied to a file or a number in the repo (Part 4 is the evidence index) — never write a
->   claim you can't point to.
+>   claim you can't point to. For **what to cite vs ignore** (dead code, stubs, outdated
+>   docs), see [`docs/thesis/CODEBASE_REFERENCE_GUIDE.md`](docs/thesis/CODEBASE_REFERENCE_GUIDE.md).
 > - **Teammate starting parallel work:** Jump to **Part 3 (Future Work)**. Each item says
 >   *where* in the repo it lives, *what's missing*, and *acceptance criteria*. Read the
 >   "Coordination note" first so you don't collide with in-flight work.

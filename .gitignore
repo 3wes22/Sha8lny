@@ -1,6 +1,9 @@
 # Superpowers visual brainstorming companion
 .superpowers/
 
+# Playwright MCP browser-automation scratch (snapshots/console dumps)
+.playwright-mcp/
+
 # Python
 __pycache__/
 *.py[cod]
