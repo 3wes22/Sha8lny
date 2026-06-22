@@ -10,7 +10,7 @@ This report is the defense-facing roll-up of the per-component evals.
 | Job ranker | Leave-one-group-out NDCG/MAP vs baselines | ndcg@5 **0.589** vs 0.560 overlap / 0.160 random; MAP ties overlap | `ai-models/models/custom/job_ranker_eval.json` |
 | Source credibility | Deterministic tier fraction | scorer + tests green | `ai-models/src/rag/credibility.py` |
 | Assessment (open-ended) | Expert review packet (blind, 3 reviewers) | packet + analysis tooling ready; human session pending | `EXPERT_REVIEW_PACKET.md`, `analyze_expert_review.py` |
-| Faithfulness | LLM-judge (Gemini) | pilot **0.33** on 3 items (below 0.85 target; expand set) | `eval_faithfulness.py`, `faithfulness_pilot.json`, `eval_results/faithfulness/pilot_summary.json` |
+| Faithfulness | LLM-judge (Gemini) | judge **run & validated** on 3-item pilot (grounded→1.0, control→0.0, borderline→0.0); 0.33 mean reflects the control mix, not a system rate | `eval_faithfulness.py`, `faithfulness_pilot.json`, `eval_results/faithfulness/pilot_summary.json` |
 
 ---
 
@@ -67,8 +67,15 @@ is documented in [`DATASET_REGISTRY.md`](DATASET_REGISTRY.md) and
 authoritative (official/government/peer-reviewed/established/curated);
 `dev_fallback` (roadmap.sh) and unknown do not count. Pure-Python, 5 tests green
 (`ai-models/tests/test_credibility.py`). This is the deterministic half of the
-faithfulness/credibility pair; the LLM-judge faithfulness scorer is scaffolded
-but Gemini-quota-gated and is run by the operator on a fresh key.
+faithfulness/credibility pair. The LLM-judge faithfulness scorer
+(`scripts/eval_faithfulness.py`, Gemini) was **run this cycle** on the 3-item
+validation pilot: it scored the cleanly-grounded answer **1.0**, the unfaithful
+control **0.0**, and a borderline answer (one unsupported "in Egypt" claim)
+**0.0** — i.e. a strict judge that correctly flags unsupported claims. The
+mean of **0.33** reflects the deliberate control mix, **not** a system
+faithfulness rate; a system-level rate over a larger all-grounded sample
+(target > 0.85) remains future work. Summary:
+[`eval_results/faithfulness/pilot_summary.json`](../../ai-models/eval_results/faithfulness/pilot_summary.json).
 
 ## 4. Assessment scoring
 
@@ -90,7 +97,7 @@ running the session is an operator step. The instrument is positioned as
 | Precision@5 > 0.70 | ❌ 0.22 — documented miss + root cause |
 | Ranker beats overlap & random baselines | 🟡 ndcg@5 beats overlap slightly and random strongly; MAP ties overlap; embedding disabled |
 | Credibility scorer deterministic + tested | ✅ |
-| Faithfulness > 0.85 (LLM judge) | 🟡 pilot 0.33/3 items — below target; expand eval set |
+| Faithfulness > 0.85 (LLM judge) | 🟡 judge run & validated on a 3-item pilot (1 grounded→1.0, 1 control→0.0, 1 borderline→0.0); system-level rate over a larger all-grounded sample is future work |
 | Expert-review agreement | ⏳ packet ready, session is operator step |
 
 ## Reproduce

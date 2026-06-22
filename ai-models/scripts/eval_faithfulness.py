@@ -126,16 +126,33 @@ def _gemini_judge(answer: str, passages: list[str]) -> float:  # pragma: no cove
         "generationConfig": {"temperature": 0.0, "responseMimeType": "application/json"},
     }
 
+    import time
+
     last_error: Exception | None = None
     for index, api_key in enumerate(api_keys):
         url = f"{base_url}/models/{model}:generateContent?key={api_key}"
-        response = httpx.post(url, json=payload, timeout=60.0)
+        # Retry transient 5xx (e.g. 503 Service Unavailable) on the same key with
+        # a short backoff before rotating keys / giving up.
+        response = None
+        for attempt in range(4):
+            response = httpx.post(url, json=payload, timeout=60.0)
+            if response.status_code >= 500:
+                last_error = httpx.HTTPStatusError(
+                    f"transient {response.status_code}",
+                    request=response.request,
+                    response=response,
+                )
+                time.sleep(2 * (attempt + 1))
+                continue
+            break
         if response.status_code == 429 and index < len(api_keys) - 1:
             last_error = httpx.HTTPStatusError(
                 "rate limited",
                 request=response.request,
                 response=response,
             )
+            continue
+        if response.status_code >= 500 and index < len(api_keys) - 1:
             continue
         response.raise_for_status()
         body = response.json()
