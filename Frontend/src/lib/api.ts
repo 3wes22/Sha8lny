@@ -1138,6 +1138,8 @@ export const courseApi = {
   },
 
   get: (id: string) => apiClient.get<Course>(`/courses/courses/${id}/`),
+
+  platforms: () => apiClient.get<PaginatedResponse<CoursePlatform>>("/courses/platforms/"),
 };
 
 // ============================================================================

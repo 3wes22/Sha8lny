@@ -16,6 +16,11 @@ system has been fully implemented, tested, and evaluated. The content is grounde
 `ai-models` Python package), so the technical claims, endpoint names, model names, and
 metrics are consistent throughout.
 
+> **For LLMs and co-authors:** read [`CODEBASE_REFERENCE_GUIDE.md`](CODEBASE_REFERENCE_GUIDE.md)
+> before citing code or docs. It separates **authoritative evidence** (Tier 1–2) from
+> **aspirational plans**, **retired components**, and **stubbed features** you must not
+> defend as shipped.
+
 Each chapter file is structured as:
 
 1. **Section purpose** — what the section is for and why it is included.

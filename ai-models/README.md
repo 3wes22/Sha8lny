@@ -1,6 +1,6 @@
 # AI Models - Sha8alny Platform
 
-> **Active role in demo:** provides the `career_knowledge` ChromaDB collection used by the advisory feature. Run `python -m rag.seeder` to seed. The Gemini API handles all LLM inference — this package does not run local models.
+> **Active role in demo:** provides the `career_knowledge` ChromaDB collection used by the advisory feature. Build it with `python -m src.rag.build_vector_db` (full ~64k-chunk corpus; persists on disk). `python -m rag.seeder` only loads the small KB markdown set and is guarded so it cannot clobber the full corpus. The Gemini API handles all LLM inference — this package does not run local models.
 
 This directory contains all AI-powered components for the Sha8alny career development platform.
 

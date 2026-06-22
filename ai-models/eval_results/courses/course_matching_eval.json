@@ -1,0 +1,60 @@
+{
+  "catalog_size": 1886,
+  "method": "deterministic skill/role/level matcher over the 8-role ladders, top-1",
+  "totals": {
+    "milestones": 106,
+    "coverage_pct": 100.0,
+    "role_appropriate_pct": 89.6,
+    "level_appropriate_pct": 94.3
+  },
+  "per_role": {
+    "backend": {
+      "milestones": 15,
+      "coverage_pct": 100.0,
+      "role_appropriate_pct": 66.7,
+      "level_appropriate_pct": 93.3
+    },
+    "frontend": {
+      "milestones": 13,
+      "coverage_pct": 100.0,
+      "role_appropriate_pct": 100.0,
+      "level_appropriate_pct": 84.6
+    },
+    "data_science": {
+      "milestones": 13,
+      "coverage_pct": 100.0,
+      "role_appropriate_pct": 92.3,
+      "level_appropriate_pct": 100.0
+    },
+    "fullstack": {
+      "milestones": 13,
+      "coverage_pct": 100.0,
+      "role_appropriate_pct": 84.6,
+      "level_appropriate_pct": 100.0
+    },
+    "devops": {
+      "milestones": 13,
+      "coverage_pct": 100.0,
+      "role_appropriate_pct": 92.3,
+      "level_appropriate_pct": 100.0
+    },
+    "android": {
+      "milestones": 13,
+      "coverage_pct": 100.0,
+      "role_appropriate_pct": 92.3,
+      "level_appropriate_pct": 100.0
+    },
+    "machine_learning_engineer": {
+      "milestones": 13,
+      "coverage_pct": 100.0,
+      "role_appropriate_pct": 100.0,
+      "level_appropriate_pct": 100.0
+    },
+    "ui_ux_designer": {
+      "milestones": 13,
+      "coverage_pct": 100.0,
+      "role_appropriate_pct": 92.3,
+      "level_appropriate_pct": 76.9
+    }
+  }
+}

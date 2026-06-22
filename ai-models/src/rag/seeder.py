@@ -109,30 +109,58 @@ def load_knowledge_base() -> List[Dict]:
     return all_documents
 
 
-def seed_database(clear_existing: bool = True):
+def seed_database(clear_existing: bool = True, force: bool = False):
     """
     Seed the vector database with knowledge base documents.
-    
+
+    This seeds ONLY the top-level ``data/knowledge_base/*.md`` files. The full
+    advisory corpus (KB + BLS/MDN + roadmap.sh + O*NET, ~64k chunks) is built by
+    ``build_vector_db.py`` into the *same* ``career_knowledge`` collection.
+    Because ``clear_existing`` deletes that collection first, running this seeder
+    against an already-built corpus would shrink it to a few hundred KB sections
+    and gut retrieval. A safety guard refuses to clear a collection that is
+    larger than this KB-only seed unless ``force`` (or ``SEEDER_FORCE=1``) is set.
+
     Args:
-        clear_existing: If True, clear existing data before seeding
+        clear_existing: If True, clear existing data before seeding.
+        force: Override the shrink guard and clear regardless.
     """
     print("=" * 50)
     print("Knowledge Base Seeder")
     print("=" * 50)
-    
-    # Clear existing data if requested
-    if clear_existing:
-        print("\nClearing existing collection...")
-        clear_collection()
-    
-    # Load documents
+
+    # Load documents first so we can size the seed and guard against clobbering
+    # the full corpus built by build_vector_db.py.
     print("\nLoading knowledge base documents...")
     documents = load_knowledge_base()
-    
+
     if not documents:
         print("No documents found to seed!")
         return
-    
+
+    force = force or os.getenv("SEEDER_FORCE", "").lower() in {"1", "true", "yes"}
+
+    # Clear existing data if requested (with shrink guard)
+    if clear_existing:
+        try:
+            existing = get_document_count()
+        except Exception:
+            existing = 0
+        if existing > len(documents) and not force:
+            print(
+                f"\n⛔ Refusing to clear: the 'career_knowledge' collection holds "
+                f"{existing} documents, but this KB-only seed would replace them "
+                f"with just {len(documents)}.\n"
+                f"   This collection is built by 'python -m src.rag.build_vector_db' "
+                f"(the full ~64k-chunk advisory corpus) and persists on disk.\n"
+                f"   To rebuild the full corpus, run build_vector_db.\n"
+                f"   To override this guard and seed KB-only anyway, pass --force "
+                f"(or set SEEDER_FORCE=1)."
+            )
+            return
+        print("\nClearing existing collection...")
+        clear_collection()
+
     print(f"\nTotal documents to seed: {len(documents)}")
     
     # Prepare for insertion
@@ -158,4 +186,23 @@ def seed_database(clear_existing: bool = True):
 
 
 if __name__ == "__main__":
-    seed_database()
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Seed the knowledge-base markdown sections into the career_knowledge "
+            "collection. For the full advisory corpus, use build_vector_db instead."
+        )
+    )
+    parser.add_argument(
+        "--no-clear",
+        action="store_true",
+        help="Append without clearing the existing collection first.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Clear even if it would shrink a larger existing corpus.",
+    )
+    args = parser.parse_args()
+    seed_database(clear_existing=not args.no_clear, force=args.force)

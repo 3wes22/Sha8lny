@@ -15,6 +15,21 @@ const TIER_VARIANT: Record<Citation["confidence_tier"], "default" | "secondary" 
   LOW: "outline",
 };
 
+// Friendly, credible display names for the corpus source slugs (see
+// docs/product/DATASET_REGISTRY.md). Falls back to the raw slug if unmapped.
+const SOURCE_LABELS: Record<string, string> = {
+  knowledge_base: "Sha8lny Knowledge Base",
+  bls_ooh: "BLS Occupational Outlook Handbook",
+  mdn: "MDN Web Docs",
+  tech_trends: "Stack Overflow Developer Survey",
+  onet: "O*NET (US Dept. of Labor)",
+  "roadmap.sh": "roadmap.sh",
+};
+
+function sourceLabel(source: string): string {
+  return SOURCE_LABELS[source] ?? source;
+}
+
 /**
  * Collapsible "Sources" block rendered under a grounded assistant message.
  *
@@ -51,7 +66,7 @@ export function MessageSources({ sources }: MessageSourcesProps) {
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold">
-                  {source.source}
+                  {sourceLabel(source.source)}
                   {source.section ? <span className="text-muted-foreground"> · {source.section}</span> : null}
                 </span>
                 <Badge className={cn("shrink-0")} variant={TIER_VARIANT[source.confidence_tier] ?? "outline"}>

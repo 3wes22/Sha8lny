@@ -1,6 +1,9 @@
 # Superpowers visual brainstorming companion
 .superpowers/
 
+# Playwright MCP browser-automation scratch (snapshots/console dumps)
+.playwright-mcp/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -111,3 +114,13 @@ Sha8lny_Presentation_Final.pptx
 
 # Thesis source (keep docs/thesis for markdown)
 Grad*.docx
+
+# Thesis working directory: large binaries (.docx/.pdf/.zip) + build artifacts.
+# Kept out of git history; the reviewed markdown lives under docs/thesis/.
+docs/Final_thesis/
+
+# Office lock files anywhere
+~$*
+
+# Local demo evidence screenshots (repo root)
+/advisor-*.png

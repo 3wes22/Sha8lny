@@ -8,6 +8,8 @@ local Ollama runtime later does not require another architecture rewrite.
 See ADR-002: docs/product/ADR-002-HOSTED-DEMO-AI-RUNTIME.md
 """
 
+import os
+import sys
 from pathlib import Path
 
 from decouple import config
@@ -16,6 +18,14 @@ from apps.core.gemini_keys import collect_gemini_api_keys
 
 
 _BACKEND_BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+# Under pytest, never source Gemini keys from the developer's .env file. The
+# suite is designed to run keyless (deterministic fallbacks) and must not depend
+# on — or spend — a real key just because one is present in .env for the demo.
+# Keys can still be injected explicitly via the process environment when a test
+# needs them. This is what makes the documented `env -u GEMINI_API_KEY` run
+# actually keyless regardless of .env contents.
+_UNDER_PYTEST = "pytest" in sys.modules
 
 
 # ---------------------------------------------------------------------------
@@ -27,18 +37,21 @@ AI_PROVIDER = config("AI_PROVIDER", default="gemini").strip().lower() or "gemini
 # Gemini API
 # ---------------------------------------------------------------------------
 def _gemini_env_mapping() -> dict[str, str]:
+    # decouple's config() also reads the .env file; under pytest read only the
+    # actual process environment so a .env key cannot leak into tests.
+    read = (lambda key: os.environ.get(key, "")) if _UNDER_PYTEST else (lambda key: config(key, default=""))
     mapping = {
-        "GEMINI_API_KEY": config("GEMINI_API_KEY", default=""),
-        "GEMINI_API_KEYS": config("GEMINI_API_KEYS", default=""),
+        "GEMINI_API_KEY": read("GEMINI_API_KEY"),
+        "GEMINI_API_KEYS": read("GEMINI_API_KEYS"),
     }
     for index in range(2, 10):
-        mapping[f"GEMINI_API_KEY_{index}"] = config(f"GEMINI_API_KEY_{index}", default="")
+        mapping[f"GEMINI_API_KEY_{index}"] = read(f"GEMINI_API_KEY_{index}")
     return mapping
 
 
 GEMINI_API_KEYS = collect_gemini_api_keys(
     env=_gemini_env_mapping(),
-    env_file=_BACKEND_BASE_DIR / ".env",
+    env_file=None if _UNDER_PYTEST else _BACKEND_BASE_DIR / ".env",
 )
 GEMINI_API_KEY = GEMINI_API_KEYS[0] if GEMINI_API_KEYS else ""
 GEMINI_API_BASE_URL = config(

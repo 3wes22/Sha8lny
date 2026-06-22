@@ -139,7 +139,9 @@ def test_rag_generator_uses_configured_gemini_settings(monkeypatch):
     monkeypatch.setattr(generator, "get_gemini_flash_model", lambda: "gemini-2.5-flash", raising=False)
     monkeypatch.setattr(generator, "get_llm_timeout_seconds", lambda: 19, raising=False)
     monkeypatch.setattr(generator, "get_llm_temperature", lambda: 0.15, raising=False)
-    monkeypatch.setattr(generator, "get_gemini_api_key", lambda: "test-key", raising=False)
+    # generate_with_gemini reads keys via get_gemini_api_keys() (plural, for
+    # quota rotation); patch that so the request URL carries the test key.
+    monkeypatch.setattr(generator, "get_gemini_api_keys", lambda: ["test-key"])
 
     response = generator.generate_with_gemini("Plan my learning path.")
 

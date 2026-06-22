@@ -1,5 +1,6 @@
 from dataclasses import replace
 
+import pytest
 from django.core.cache import cache
 
 from apps.assessments.ai_pipeline import AssessmentAIService
@@ -8,6 +9,18 @@ from apps.assessments.role_graph import load_role_graph
 from apps.core.ai_logging import build_ai_metadata
 from apps.core.exceptions import AIServiceError
 from apps.core.gemma_client import GemmaResponse
+
+
+@pytest.fixture(autouse=True)
+def _gemini_gate_open(monkeypatch):
+    """Open the LLM key gate for these tests.
+
+    Every generation test here mocks ``GemmaClient.generate_structured``; the
+    suite runs keyless (``env -u GEMINI_API_KEY``) so the staged pipeline would
+    otherwise short-circuit to the deterministic fallback and never reach the
+    mock. Setting a placeholder key opens ``_gemini_configured`` without any real
+    Gemini call (the client is mocked)."""
+    monkeypatch.setattr("apps.core.ai_settings.GEMINI_API_KEYS", ["test-key"])
 
 
 def _stage_one_payload(graph):

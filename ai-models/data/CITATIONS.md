@@ -8,6 +8,7 @@ US-centric, or synthetic, that is stated rather than glossed.
 |---|---|---|---|---|---|
 | O*NET Database | 30.1 | CC BY 4.0 (attribution required) | local copy in repo | United States | Skills/tasks taxonomy reference; **backend-role-only** milestone crosswalk PoC |
 | roadmap.sh content | repo snapshot | **Proprietary — personal use only, redistribution prohibited** | local copy in repo | Global | Source of learning-path *structure* for roadmap generation |
+| Coursera course catalog (`azrai99/coursera-course-dataset`) | HF snapshot | Apache-2.0 (attribution) | `ai-models/data/courses/` | Global | Real course **metadata** for roadmap course recommendation (1,886 career-relevant of 6,645) |
 | `jobs_egypt_tech.csv` | v1 (internal) | Internal/synthetic | hand-authored | Egypt (synthetic) | Job-ranker training/eval fixtures |
 | Real Egyptian job postings | — | _TBD_ | _not yet acquired_ | Egypt | **Future work**: real-data job-ranker training + gold-set evaluation |
 
