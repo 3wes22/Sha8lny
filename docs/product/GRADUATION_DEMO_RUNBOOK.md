@@ -28,17 +28,26 @@ source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
 python3 manage.py migrate
-python3 manage.py seed_graduation_demo --reset
-python3 manage.py seed_courses
-python3 manage.py rebuild_course_index
-cd ../ai-models && python -m rag.seeder && cd ../Backend
-python3 manage.py seed_jobs --clear --count 24
-python3 manage.py extract_job_skills --limit 24
-python3 manage.py ai_smoke
-python3 manage.py runserver
+
+# One-time: build the advisory RAG corpus (~64k chunks). It persists on disk
+# under ai-models/data/vector_db, so this is only needed once (or after you
+# delete the vector store). Do NOT run `python -m rag.seeder` for this — that
+# loads only the small KB markdown set and is guarded against clobbering the
+# full corpus.
+cd ../ai-models && python -m src.rag.build_vector_db && cd ../Backend
+
+# Seed/refresh all demo data in the correct order, with a ✓/✗ summary:
+python3 manage.py demo_reset
+
+# Warm the advisory retrieval index on startup so the first live question
+# does not pay the one-time ~20s cold start.
+ADVISORY_WARMUP=1 python3 manage.py runserver
 ```
 
-Always run all commands in order after any reset — skipping `rebuild_course_index` or `rag.seeder` will produce zero course matches or ungrounded advisory responses.
+`demo_reset` runs every step in the correct order (course catalog + index → demo
+seed → jobs → corpus check → Gemini smoke), so course matching and grounding
+cannot silently break from a skipped or mis-ordered step. Run it again any time
+to reset.
 
 ### 2. Frontend
 
@@ -107,21 +116,18 @@ The product should still stay usable if the AI runtime is unavailable:
 
 ## Reset Between Rehearsals
 
-Use this command before each fresh demo pass:
+Use this single command before each fresh demo pass:
 
 ```bash
 cd Backend
 source venv/bin/activate
-python3 manage.py seed_graduation_demo --reset
-python3 manage.py seed_courses
-python3 manage.py rebuild_course_index
-cd ../ai-models && python -m rag.seeder && cd ../Backend
-python3 manage.py seed_jobs --clear --count 24
-python3 manage.py extract_job_skills --limit 24
-python3 manage.py ai_smoke
+python3 manage.py demo_reset            # add --skip-ai-smoke for an offline pass
 ```
 
-Always run all eight commands in order after any reset — skipping `rebuild_course_index` or `rag.seeder` will produce zero course matches or ungrounded advisory responses.
+`demo_reset` chains every step in the correct order and prints a per-step ✓/✗
+summary; it verifies (never rebuilds) the persisted advisory corpus. It does
+**not** touch the vector store, so the one-time `build_vector_db` step above is
+not repeated here.
 
 ## Notes
 

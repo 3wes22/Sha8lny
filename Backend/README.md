@@ -131,19 +131,21 @@ celery -A config beat --loglevel=info
 
 ### 6. Graduation Demo Prep
 
-After migrations, seed the demo environment in this exact order:
+After migrations, build the advisory corpus once, then seed the demo with a
+single command:
 
 ```bash
-python3 manage.py seed_graduation_demo --reset
-python3 manage.py seed_courses
-python3 manage.py rebuild_course_index
-cd ../ai-models && python -m rag.seeder && cd ../Backend
-python3 manage.py seed_jobs --clear --count 24
-python3 manage.py extract_job_skills --limit 24
-python3 manage.py ai_smoke
+# One-time (persists on disk under ai-models/data/vector_db):
+cd ../ai-models && python -m src.rag.build_vector_db && cd ../Backend
+
+# Seed/refresh all demo data in the correct order (✓/✗ summary):
+python3 manage.py demo_reset            # --skip-ai-smoke for an offline pass
 ```
 
-Set `GEMINI_API_KEY` in `.env` before running `ai_smoke`. Always run all eight commands after any reset.
+Set `GEMINI_API_KEY` in `.env` before running with the live `ai_smoke` step.
+`demo_reset` is idempotent — re-run it to reset between rehearsals. Do **not**
+run `python -m rag.seeder` to seed the advisory corpus: it loads only the small
+KB markdown set (and is guarded against clobbering the full corpus).
 
 ### 7. Run Tests
 
