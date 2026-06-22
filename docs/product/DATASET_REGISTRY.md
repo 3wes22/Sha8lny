@@ -75,10 +75,58 @@ standards bodies), `established` (recognized platforms/publishers),
 - **Decision:** **USE** for course↔milestone matching (metadata-level only).
 
 ### Assessment scenario corpus (`Backend/apps/assessments/scenario_corpus/`)
-- **Source:** team-authored scenario documents (currently `backend.py` only)
-- **License:** project-internal
-- **Decision:** **USE**, tier `curated`. New role content (plan Tasks 2.6–2.8)
-  must log any external references it draws on as entries here first.
+- **Source:** team-authored scenario documents (all 8 roles seeded — Tier-1
+  stage-1 calibration content authored as original internal content)
+- **License:** project-internal / original content (`internal-original-content`)
+- **Decision:** **USE**, tier `curated`. Tasks 2.6–2.8 landed Tier-1 content for
+  all 8 roles (`scenario_corpus_audit --tier 1` passes); no external references
+  were drawn on, so no third-party entries were required. Tier-2 (stage-2)
+  content remains the open authoring frontier.
+
+### Job-posting acquisition — real Egyptian postings (plan Tasks 3.1–3.4)
+- **Source (chosen path):** **curated CSV export** of real Egyptian tech postings
+  (Wuzzuf/Bayt listing fields: title, company, location, description, posted_date,
+  external_url), loaded via `Backend/apps/jobs/ingest/csv_loader.py`. Nimble- or
+  scraper-assisted Wuzzuf collection is **only** permissible if its ToS allows
+  automated access at collection time — not assumed here.
+- **License / ToS:** job-board content is the posters'/board's; **ToS must be
+  checked before any automated collection**. The curated-CSV path captures only
+  factual listing fields (no bulk content redistribution) and records
+  `platform_metadata.source` + `scraped_at` for provenance.
+- **Quality:** real market data (vs. the synthetic `jobs_egypt_tech.csv` fixtures).
+- **Decision:** **USE (curated CSV) — operator step.** The ingest → export →
+  retrain → eval commands exist and accept real data (`--real-only`); fetching
+  ≥100 genuine postings and running the retrain is a developer action item (no
+  live network in the build environment). Until that lands, `CLAIMS_REGISTER.md`
+  C6 stays scoped to the demonstrator framing. See the **Jobs real-data runbook**
+  below.
+
+---
+
+## Jobs real-data runbook (operator step for Tasks 3.2–3.4)
+
+The ranker upgrade path is fully scaffolded; run it with a real postings CSV:
+
+```bash
+# 1. Ingest ≥100 real Egyptian postings from a curated CSV (ToS-checked).
+cd Backend
+python manage.py ingest_jobs_csv --path ../ai-models/data/raw/<real_postings>.csv
+#    each row gets platform_metadata.source, scraped_at, real external_url
+
+# 2. Export real-only training pairs + retrain the ranker with the embedding
+#    feature enabled (sentence-transformers present in Backend/venv).
+python manage.py export_jobs_for_ranker --real-only
+python manage.py train_job_ranker --real-only      # writes ai-models/models/custom/job_ranker.lgb
+
+# 3. Re-run leave-one-group-out eval and refresh the report.
+cd ../ai-models
+../Backend/venv/bin/python scripts/train_job_ranker.py        # regenerates job_ranker_eval.json
+#    then update models/custom/EVAL_REPORT.md before/after table
+```
+
+Acceptance when run: `Job.objects.filter(platform_metadata__source__isnull=False).count() >= 100`,
+non-zero `skill_embedding_cosine` across training pairs, and a before/after
+table in `EVAL_REPORT.md`.
 
 ---
 

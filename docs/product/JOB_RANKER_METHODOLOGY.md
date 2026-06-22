@@ -2,7 +2,11 @@
 
 ## Model
 
-- **Algorithm:** LightGBM `lambdarank` (`job_ranker.lgb` under `ai-models/models/custom/`)
+- **Algorithm:** LightGBM `lambdarank` when a local `job_ranker.lgb` is present.
+- **Committed artifact status:** the current repository commits evaluation artifacts
+  (`job_ranker_eval.json`, `EVAL_REPORT.md`) but **does not commit** the binary
+  `job_ranker.lgb`; runtime falls back to skill-overlap ordering when that file
+  is absent.
 - **Features:** `skill_embedding_cosine`, `required_skill_overlap_ratio`, `experience_level_delta`, `job_freshness_score`, `location_match`
 - **Embeddings:** `all-MiniLM-L6-v2` (same family as RAG)
 
@@ -18,11 +22,13 @@ Manual evaluation pairs for thesis anti-circularity: export a held-out CSV and c
 ## Runtime
 
 - `JobService.match_jobs_for_user` sorts with the ranker when the model file exists.
+- If the model file is missing or ranking fails, the endpoint falls back to
+  required-skill-overlap ordering.
 - **Displayed `match_score`** remains required-skill overlap % (interpretable).
-- **Order** follows the learned ranker score.
+- **Order** follows the learned ranker score only in model-present runs.
 - **Career level filter** (`experience_matching.py`): jobs above the user’s band are excluded (e.g. entry users do not see senior/lead postings). Level is inferred from active roadmap template, assessment score, or skill proficiency.
 
-## Retrain
+## Retrain / produce local model
 
 ```bash
 cd Backend
@@ -33,4 +39,6 @@ python manage.py train_job_ranker --real-only
 ## Limitations
 
 - Pseudo-labels, not human relevance judgments at scale
-- One-time Wuzzuf snapshot (`platform_metadata.scraped_at`), not daily scraping
+- Synthetic fixture postings in the current repo, not defended live market data
+- No committed `job_ranker.lgb` binary in the current repository
+- Real Egyptian postings and model retraining are documented operator steps

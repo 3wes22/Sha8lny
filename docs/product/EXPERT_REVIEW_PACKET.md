@@ -60,6 +60,27 @@ Related: [`ROLE_GRAPH_METHODOLOGY.md`](ROLE_GRAPH_METHODOLOGY.md),
 | OE14 | ui_ux_designer | Usability Testing | How would you run a session to find where users struggle in checkout? |
 | OE15 | ui_ux_designer | Information Architecture | How would you validate that your navigation grouping matches users' expectations? |
 
+## Sample candidate answers (pilot session)
+
+Reference answers for a pilot or dry-run live in
+[`expert_review_items.json`](expert_review_items.json) (`sample_answer` per item).
+Engine reference scores for those answers are generated deterministically:
+
+```bash
+cd Backend
+env -u GEMINI_API_KEY python manage.py score_expert_review_reference
+# writes docs/product/expert_review_engine_scores.json
+```
+
+Recruit three independent reviewers, have them fill only their assigned rows in
+[`expert_review_scoring_sheet.csv`](expert_review_scoring_sheet.csv), then:
+
+```bash
+python ai-models/scripts/analyze_expert_review.py \
+  --csv docs/product/expert_review_scoring_sheet.csv \
+  --engine docs/product/expert_review_engine_scores.json
+```
+
 ## Expected-concept keys (for the organizer, not the reviewers)
 
 These mirror each item's `expected_concepts`; reviewers grade holistically, not

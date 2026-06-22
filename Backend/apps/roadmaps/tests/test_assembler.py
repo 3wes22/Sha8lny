@@ -73,7 +73,7 @@ class TestRoadmapAssembler:
 
         assert provenance.fallback_used is True
         assert provenance.structure_source == "deterministic_fallback"
-        assert len(phases) == 3
+        assert len(phases) == 5
 
     @patch("apps.roadmaps.assembler.RoadmapPathRetriever.retrieve_path_chunks")
     def test_provenance_contract_sourced_path(self, mock_retrieve, test_user):

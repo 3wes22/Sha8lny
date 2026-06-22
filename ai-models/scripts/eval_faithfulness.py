@@ -1,0 +1,181 @@
+"""LLM-as-judge faithfulness scorer (Task 4.1) — scaffold.
+
+Faithfulness = does each advisory answer stay supported by its retrieved
+passages? A judge (Gemini in production) returns 1 = supported / 0 = unsupported
+per (answer, passages) item; we report the mean. Judge calls are **cached to
+disk** so a run does not re-spend quota on unchanged items.
+
+The judge is **injectable** so tests run with a deterministic stub and no
+network/quota — production wiring passes a Gemini-backed judge. Running the real
+judge is an operator step on a fresh ``GEMINI_API_KEY`` (the full test suite
+exhausts quota).
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+from typing import Any, Callable, Iterable
+
+# (answer, passages) -> 1.0 supported / 0.0 unsupported
+Judge = Callable[[str, list[str]], float]
+
+_CACHE_DIR = Path(__file__).resolve().parents[1] / "eval_results" / "faithfulness"
+_BACKEND_ENV = Path(__file__).resolve().parents[2] / "Backend" / ".env"
+
+
+def _load_backend_env() -> None:
+    """Load Backend/.env so GEMINI_API_KEY is available outside Django."""
+    if not _BACKEND_ENV.exists():
+        return
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(_BACKEND_ENV, override=False)
+        return
+    except ImportError:
+        pass
+
+    for line in _BACKEND_ENV.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def _item_key(answer: str, passages: list[str]) -> str:
+    blob = json.dumps({"a": answer, "p": passages}, sort_keys=True)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+
+def score_faithfulness(
+    items: Iterable[dict[str, Any]],
+    judge: Judge,
+    *,
+    cache_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Score a batch of {answer, passages} items with a judge, caching per item.
+
+    Returns ``{"n": int, "faithfulness": float, "per_item": [...]}``.
+    """
+    cache_dir = cache_dir or _CACHE_DIR
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    per_item: list[dict[str, Any]] = []
+    for item in items:
+        answer = str(item.get("answer") or "")
+        passages = [str(p) for p in (item.get("passages") or [])]
+        key = _item_key(answer, passages)
+        cache_path = cache_dir / f"{key}.json"
+
+        if cache_path.exists():
+            score = float(json.loads(cache_path.read_text())["score"])
+            cached = True
+        else:
+            score = float(judge(answer, passages))
+            cache_path.write_text(json.dumps({"score": score}))
+            cached = False
+        per_item.append({"key": key, "score": score, "cached": cached})
+
+    n = len(per_item)
+    mean = sum(entry["score"] for entry in per_item) / n if n else 0.0
+    return {"n": n, "faithfulness": mean, "per_item": per_item}
+
+
+def _gemini_judge(answer: str, passages: list[str]) -> float:  # pragma: no cover - operator path
+    """Production judge — calls Gemini when a key is configured."""
+    import sys
+
+    import httpx
+
+    _load_backend_env()
+    backend_root = _BACKEND_ENV.parent
+    if str(backend_root) not in sys.path:
+        sys.path.insert(0, str(backend_root))
+    from apps.core.gemini_keys import collect_gemini_api_keys
+
+    api_keys = collect_gemini_api_keys(env=os.environ, env_file=_BACKEND_ENV)
+    if not api_keys:
+        raise RuntimeError(
+            "Configure GEMINI_API_KEY (and optional backups) in Backend/.env "
+            "to run the production faithfulness judge."
+        )
+
+    model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
+    base_url = os.environ.get(
+        "GEMINI_API_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"
+    ).rstrip("/")
+
+    context = "\n---\n".join(passages[:10]) or "(no passages provided)"
+    prompt = (
+        "You are a strict faithfulness judge for a RAG career advisor.\n"
+        "Given PASSAGES and an ANSWER, return JSON only: "
+        '{"supported": 1} if every factual claim in the answer is supported by the passages, '
+        'else {"supported": 0}.\n\n'
+        f"PASSAGES:\n{context}\n\nANSWER:\n{answer}\n"
+    )
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.0, "responseMimeType": "application/json"},
+    }
+
+    import time
+
+    last_error: Exception | None = None
+    for index, api_key in enumerate(api_keys):
+        url = f"{base_url}/models/{model}:generateContent?key={api_key}"
+        # Retry transient 5xx (e.g. 503 Service Unavailable) on the same key with
+        # a short backoff before rotating keys / giving up.
+        response = None
+        for attempt in range(4):
+            response = httpx.post(url, json=payload, timeout=60.0)
+            if response.status_code >= 500:
+                last_error = httpx.HTTPStatusError(
+                    f"transient {response.status_code}",
+                    request=response.request,
+                    response=response,
+                )
+                time.sleep(2 * (attempt + 1))
+                continue
+            break
+        if response.status_code == 429 and index < len(api_keys) - 1:
+            last_error = httpx.HTTPStatusError(
+                "rate limited",
+                request=response.request,
+                response=response,
+            )
+            continue
+        if response.status_code >= 500 and index < len(api_keys) - 1:
+            continue
+        response.raise_for_status()
+        body = response.json()
+        text = (
+            body.get("candidates", [{}])[0]
+            .get("content", {})
+            .get("parts", [{}])[0]
+            .get("text", "")
+        )
+        parsed = json.loads(text) if text else {}
+        supported = parsed.get("supported", parsed.get("score", 0))
+        return 1.0 if float(supported) >= 0.5 else 0.0
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("No Gemini API keys succeeded")
+
+
+if __name__ == "__main__":  # pragma: no cover
+    _load_backend_env()
+    parser = argparse.ArgumentParser(description="Faithfulness eval (LLM judge).")
+    parser.add_argument("--items", type=Path, help="JSON list of {answer, passages}.")
+    args = parser.parse_args()
+    data = json.loads(args.items.read_text()) if args.items else []
+    result = score_faithfulness(data, _gemini_judge)
+    print(json.dumps(result, indent=2))

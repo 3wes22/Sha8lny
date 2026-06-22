@@ -94,14 +94,19 @@ import DashboardPage from "@/features/dashboard/routes/DashboardPage";
 import { render } from "@/test/utils";
 
 describe("DashboardPage", () => {
-  it("renders the career atlas dashboard", async () => {
+  it("renders the simplified single-column dashboard", async () => {
     render(<DashboardPage />);
 
-    expect(await screen.findByText(/Mona, your momentum is already visible/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Completed milestones/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Ship milestone/i)[0]).toBeInTheDocument();
-    expect(screen.getAllByText(/Core React foundations/i)[0]).toBeInTheDocument();
-    expect(screen.getByText(/3 day streak/i)).toBeInTheDocument();
-    expect(screen.getByText(/^3$/)).toBeInTheDocument();
+    expect(await screen.findByText(/Welcome back, Mona/i)).toBeInTheDocument();
+
+    expect(screen.getByText(/2\/6/)).toBeInTheDocument();
+    expect(screen.getByText(/1\/4/)).toBeInTheDocument();
+    expect(screen.getByText(/3 day/i)).toBeInTheDocument();
+    expect(screen.getByText(/18w/i)).toBeInTheDocument();
+
+    expect(screen.getAllByText(/Core React foundations/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/50%/)).toBeInTheDocument();
+
+    expect(screen.getByText(/Refine roadmap interactions/i)).toBeInTheDocument();
   });
 });

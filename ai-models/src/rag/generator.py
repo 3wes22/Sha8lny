@@ -15,6 +15,7 @@ from .retriever import get_relevant_context
 from .runtime_settings import (
     get_gemini_api_base_url,
     get_gemini_api_key,
+    get_gemini_api_keys,
     get_gemini_flash_model,
     get_llm_temperature,
     get_llm_timeout_seconds,
@@ -38,7 +39,7 @@ DEFAULT_MAX_TOKENS = 512
 
 def has_gemini_api_key() -> bool:
     """Return whether a Gemini API key is configured."""
-    return bool(str(get_gemini_api_key() or "").strip())
+    return bool(get_gemini_api_keys())
 
 
 def generate_with_gemini(
@@ -51,8 +52,8 @@ def generate_with_gemini(
     """
     Generate a response using the hosted Gemini API.
     """
-    api_key = str(get_gemini_api_key() or "").strip()
-    if not api_key:
+    api_keys = get_gemini_api_keys()
+    if not api_keys:
         raise ConnectionError("GEMINI_API_KEY is not configured.")
 
     base_url = get_gemini_api_base_url().rstrip("/")
@@ -60,44 +61,56 @@ def generate_with_gemini(
     temperature = get_llm_temperature() if temperature is None else temperature
     timeout_seconds = get_llm_timeout_seconds()
 
-    response = httpx.post(
-        f"{base_url}/models/{model}:generateContent?key={api_key}",
-        json={
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [{"text": prompt}],
-                }
-            ],
-            "systemInstruction": {
-                "role": "system",
-                "parts": [{"text": system}],
-            },
-            "generationConfig": {
-                "temperature": temperature,
-                "candidateCount": 1,
-                "maxOutputTokens": max_tokens,
-            },
+    body = {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [{"text": prompt}],
+            }
+        ],
+        "systemInstruction": {
+            "role": "system",
+            "parts": [{"text": system}],
         },
-        timeout=timeout_seconds,
-    )
+        "generationConfig": {
+            "temperature": temperature,
+            "candidateCount": 1,
+            "maxOutputTokens": max_tokens,
+        },
+    }
 
-    if response.status_code >= 400:
-        raise RuntimeError(
-            f"Gemini API error: {response.status_code} {response.text.strip()}"
+    last_error: Exception | None = None
+    for index, api_key in enumerate(api_keys):
+        response = httpx.post(
+            f"{base_url}/models/{model}:generateContent?key={api_key}",
+            json=body,
+            timeout=timeout_seconds,
         )
-
-    result = response.json()
-    candidates = result.get("candidates", []) if isinstance(result, dict) else []
-    for candidate in candidates:
-        if not isinstance(candidate, dict):
+        if response.status_code == 429 and index < len(api_keys) - 1:
+            last_error = RuntimeError(
+                f"Gemini API error: {response.status_code} {response.text.strip()}"
+            )
             continue
-        content = candidate.get("content") if isinstance(candidate.get("content"), dict) else {}
-        parts = content.get("parts") if isinstance(content.get("parts"), list) else []
-        for part in parts:
-            if isinstance(part, dict) and str(part.get("text") or "").strip():
-                return str(part.get("text") or "").strip()
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"Gemini API error: {response.status_code} {response.text.strip()}"
+            )
 
+        result = response.json()
+        candidates = result.get("candidates", []) if isinstance(result, dict) else []
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            content = candidate.get("content") if isinstance(candidate.get("content"), dict) else {}
+            parts = content.get("parts") if isinstance(content.get("parts"), list) else []
+            for part in parts:
+                if isinstance(part, dict) and str(part.get("text") or "").strip():
+                    return str(part.get("text") or "").strip()
+
+        raise RuntimeError("Gemini returned an empty response")
+
+    if last_error is not None:
+        raise last_error
     raise RuntimeError("Gemini returned an empty response")
 
 

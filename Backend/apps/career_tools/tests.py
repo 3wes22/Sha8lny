@@ -1,5 +1,6 @@
 """Tests for the career_tools app: ATS scoring, resume document generation, and portfolio publishing."""
 
+import io
 from decimal import Decimal
 
 import pytest
@@ -8,8 +9,41 @@ from rest_framework import status
 from apps.career_tools.models import Portfolio, Resume
 from apps.career_tools.services import PortfolioService, ResumeService
 
+try:
+    from reportlab.pdfgen import canvas
+except ImportError:  # pragma: no cover
+    canvas = None
+
 
 BASE = "/api/v1/career-tools"
+
+SAMPLE_CV_TEXT = """
+Mohamed Wes
+mohamed@example.com
++201012345678
+
+Summary
+Backend engineer with Django and PostgreSQL experience.
+
+Experience
+Backend Developer at Acme Corp (2022–2024)
+Built REST APIs serving 10k requests/day.
+
+Education
+BSc Computer Science, Cairo University
+
+Skills
+Python, Django, PostgreSQL, React
+"""
+
+
+def _make_pdf_bytes(text: str) -> bytes:
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer)
+    pdf.drawString(72, 800, text[:80])
+    pdf.save()
+    buffer.seek(0)
+    return buffer.read()
 
 
 def _complete_resume(user) -> Resume:
@@ -93,6 +127,72 @@ def test_generate_rejects_invalid_format(authenticated_client, user):
 
 
 @pytest.mark.django_db
+def test_create_resume_endpoint_assigns_user(authenticated_client, user):
+    response = authenticated_client.post(
+        f"{BASE}/resumes/", {"title": "API Created Resume"}, format="json"
+    )
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["title"] == "API Created Resume"
+    resume = Resume.objects.get(id=response.data["id"])
+    assert resume.user == user
+
+
+@pytest.mark.django_db
+def test_upload_resume_txt_populates_fields_and_scores(authenticated_client, user):
+    upload = io.BytesIO(SAMPLE_CV_TEXT.encode("utf-8"))
+    upload.name = "my-cv.txt"
+
+    response = authenticated_client.post(
+        f"{BASE}/resumes/upload/",
+        {"file": upload},
+        format="multipart",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["title"] == "my-cv"
+    assert float(response.data["ats_score"]) > 0
+    assert response.data["personal_info"]["email"] == "mohamed@example.com"
+
+    resume = Resume.objects.get(id=response.data["id"])
+    assert resume.user == user
+    assert resume.is_ats_optimized is True
+
+
+@pytest.mark.django_db
+@pytest.mark.skipif(canvas is None, reason="reportlab not installed")
+def test_upload_resume_pdf_extracts_text(authenticated_client, user):
+    pdf_bytes = _make_pdf_bytes("mohamed@example.com Python Django")
+    upload = io.BytesIO(pdf_bytes)
+    upload.name = "cv.pdf"
+    upload.size = len(pdf_bytes)
+
+    response = authenticated_client.post(
+        f"{BASE}/resumes/upload/",
+        {"file": upload},
+        format="multipart",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    resume = Resume.objects.get(id=response.data["id"])
+    assert resume.pdf_file.name.endswith(".pdf")
+
+
+@pytest.mark.django_db
+def test_upload_resume_rejects_unsupported_type(authenticated_client):
+    upload = io.BytesIO(b"not a resume")
+    upload.name = "cv.exe"
+
+    response = authenticated_client.post(
+        f"{BASE}/resumes/upload/",
+        {"file": upload},
+        format="multipart",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "Unsupported" in response.data["error"]
+
+
+@pytest.mark.django_db
 def test_resume_list_is_scoped_to_user(authenticated_client, user, another_user):
     mine = _complete_resume(user)
     ResumeService.create_resume(user=another_user, title="Someone else's resume")
@@ -104,7 +204,102 @@ def test_resume_list_is_scoped_to_user(authenticated_client, user, another_user)
     assert len(returned_ids) == 1
 
 
+# --- AI resume improvement -------------------------------------------------
+
+
+class _StubGemmaResponse:
+    def __init__(self, payload):
+        self.payload = payload
+        self.text = ""
+        self.prompt_tokens = 10
+        self.completion_tokens = 20
+
+
+@pytest.mark.django_db
+def test_improve_with_ai_returns_structured_fields(user, monkeypatch):
+    resume = _complete_resume(user)
+
+    def fake_generate_structured(self, **kwargs):
+        return _StubGemmaResponse({
+            "improved_summary": "Results-driven backend engineer who cut API latency by 40%.",
+            "strengthened_bullets": ["Reduced p95 latency 40% by adding Redis caching."],
+            "missing_keywords": ["CI/CD", "Kubernetes"],
+            "recommendations": ["Add a metrics-driven summary."],
+        })
+
+    monkeypatch.setattr(
+        "apps.core.gemma_client.GemmaClient.generate_structured",
+        fake_generate_structured,
+    )
+
+    result = ResumeService.improve_with_ai(resume)
+
+    assert result["ai_used"] is True
+    assert "latency" in result["improved_summary"]
+    assert "CI/CD" in result["missing_keywords"]
+    assert result["strengthened_bullets"]
+    assert float(result["ats_score"]) >= 0
+
+
+@pytest.mark.django_db
+def test_improve_with_ai_falls_back_when_llm_fails(user, monkeypatch):
+    resume = ResumeService.create_resume(user=user, title="Sparse Resume")
+
+    def boom(self, **kwargs):
+        from apps.core.exceptions import AIServiceError
+
+        raise AIServiceError("provider unavailable", details={"reason": "timeout"})
+
+    monkeypatch.setattr(
+        "apps.core.gemma_client.GemmaClient.generate_structured",
+        boom,
+    )
+
+    result = ResumeService.improve_with_ai(resume)
+
+    assert result["ai_used"] is False
+    assert result["recommendations"]  # deterministic suggestions present
+
+
+@pytest.mark.django_db
+def test_improve_endpoint_returns_payload(authenticated_client, user, monkeypatch):
+    resume = _complete_resume(user)
+
+    monkeypatch.setattr(
+        "apps.core.gemma_client.GemmaClient.generate_structured",
+        lambda self, **kwargs: _StubGemmaResponse({
+            "improved_summary": "Strong summary.",
+            "strengthened_bullets": ["Bullet."],
+            "missing_keywords": ["Docker"],
+            "recommendations": ["Tip."],
+        }),
+    )
+
+    response = authenticated_client.post(f"{BASE}/resumes/{resume.id}/improve/")
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["ai_used"] is True
+    assert response.data["improved_summary"] == "Strong summary."
+
+
+@pytest.mark.django_db
+def test_improve_endpoint_scoped_to_owner(authenticated_client, another_user):
+    others = ResumeService.create_resume(user=another_user, title="Not yours")
+    response = authenticated_client.post(f"{BASE}/resumes/{others.id}/improve/")
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
 # --- Portfolio publish + public view (regression: was referencing .slug) ----
+
+
+@pytest.mark.django_db
+def test_create_portfolio_endpoint_assigns_user(authenticated_client, user):
+    response = authenticated_client.post(
+        f"{BASE}/portfolios/", {"title": "API Created Portfolio"}, format="json"
+    )
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["title"] == "API Created Portfolio"
+    portfolio = Portfolio.objects.get(id=response.data["id"])
+    assert portfolio.user == user
 
 
 @pytest.mark.django_db

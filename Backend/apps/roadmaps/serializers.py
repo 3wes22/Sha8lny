@@ -110,6 +110,7 @@ class RoadmapMilestoneListSerializer(serializers.ModelSerializer):
             'milestone_type',
             'order',
             'status',
+            'completed_from_assessment',
             'is_required',
             'estimated_duration_hours',
         ]
@@ -133,6 +134,7 @@ class RoadmapMilestoneSerializer(serializers.ModelSerializer):
             'order',
             'estimated_duration_hours',
             'status',
+            'completed_from_assessment',
             'is_required',
             'skills',
             'resources',
@@ -191,6 +193,7 @@ class RoadmapPhaseSerializer(serializers.ModelSerializer):
     node_type = serializers.SerializerMethodField()
     estimated_effort = serializers.SerializerMethodField()
     next_action = serializers.SerializerMethodField()
+    baseline_from_assessment = serializers.SerializerMethodField()
 
     class Meta:
         model = RoadmapPhase
@@ -208,6 +211,7 @@ class RoadmapPhaseSerializer(serializers.ModelSerializer):
             'milestones',
             'completed_milestones',
             'total_milestones',
+            'baseline_from_assessment',
             'node_type',
             'estimated_effort',
             'next_action',
@@ -227,6 +231,12 @@ class RoadmapPhaseSerializer(serializers.ModelSerializer):
         if obj.status == RoadmapPhase.IN_PROGRESS:
             return "Keep advancing the active milestones inside this phase."
         return "Activate this phase when the previous phase is complete."
+
+    def get_baseline_from_assessment(self, obj):
+        milestones = list(obj.milestones.all())
+        finished = [m for m in milestones
+                    if m.status in (RoadmapMilestone.COMPLETED, RoadmapMilestone.SKIPPED)]
+        return bool(finished) and all(m.completed_from_assessment for m in finished)
 
 
 # ============================================================================

@@ -20,6 +20,9 @@ const AdvisoryPage = lazy(() => import("@/features/advisory/routes/AdvisoryPage"
 const JobsPage = lazy(() => import("@/features/jobs/routes/JobsPage"));
 const SavedJobsPage = lazy(() => import("@/features/jobs/routes/SavedJobsPage"));
 const JobDetailPage = lazy(() => import("@/features/jobs/routes/JobDetailPage"));
+const CoursesPage = lazy(() => import("@/features/courses/routes/CoursesPage"));
+const ProgressPage = lazy(() => import("@/features/progress/routes/ProgressPage"));
+const CareerToolsPage = lazy(() => import("@/features/career-tools/routes/CareerToolsPage"));
 const NotificationsPage = lazy(() => import("@/features/notifications/routes/NotificationsPage"));
 const ProfilePage = lazy(() => import("@/features/profile/routes/ProfilePage"));
 const SettingsPage = lazy(() => import("@/features/settings/routes/SettingsPage"));
@@ -61,6 +64,9 @@ export const AppRoutes = () => {
         <Route path={ROUTES.jobs} element={withProtectedLayout(<JobsPage />)} />
         <Route path={ROUTES.savedJobs} element={withProtectedLayout(<SavedJobsPage />)} />
         <Route path={ROUTES.jobDetail()} element={withProtectedLayout(<JobDetailPage />)} />
+        <Route path={ROUTES.courses} element={withProtectedLayout(<CoursesPage />)} />
+        <Route path={ROUTES.progress} element={withProtectedLayout(<ProgressPage />)} />
+        <Route path={ROUTES.careerTools} element={withProtectedLayout(<CareerToolsPage />)} />
         <Route
           path={ROUTES.notifications}
           element={withProtectedLayout(<NotificationsPage />)}

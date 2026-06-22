@@ -8,12 +8,24 @@ local Ollama runtime later does not require another architecture rewrite.
 See ADR-002: docs/product/ADR-002-HOSTED-DEMO-AI-RUNTIME.md
 """
 
+import os
+import sys
 from pathlib import Path
 
 from decouple import config
 
+from apps.core.gemini_keys import collect_gemini_api_keys
+
 
 _BACKEND_BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+# Under pytest, never source Gemini keys from the developer's .env file. The
+# suite is designed to run keyless (deterministic fallbacks) and must not depend
+# on — or spend — a real key just because one is present in .env for the demo.
+# Keys can still be injected explicitly via the process environment when a test
+# needs them. This is what makes the documented `env -u GEMINI_API_KEY` run
+# actually keyless regardless of .env contents.
+_UNDER_PYTEST = "pytest" in sys.modules
 
 
 # ---------------------------------------------------------------------------
@@ -24,7 +36,24 @@ AI_PROVIDER = config("AI_PROVIDER", default="gemini").strip().lower() or "gemini
 # ---------------------------------------------------------------------------
 # Gemini API
 # ---------------------------------------------------------------------------
-GEMINI_API_KEY = config("GEMINI_API_KEY", default="")
+def _gemini_env_mapping() -> dict[str, str]:
+    # decouple's config() also reads the .env file; under pytest read only the
+    # actual process environment so a .env key cannot leak into tests.
+    read = (lambda key: os.environ.get(key, "")) if _UNDER_PYTEST else (lambda key: config(key, default=""))
+    mapping = {
+        "GEMINI_API_KEY": read("GEMINI_API_KEY"),
+        "GEMINI_API_KEYS": read("GEMINI_API_KEYS"),
+    }
+    for index in range(2, 10):
+        mapping[f"GEMINI_API_KEY_{index}"] = read(f"GEMINI_API_KEY_{index}")
+    return mapping
+
+
+GEMINI_API_KEYS = collect_gemini_api_keys(
+    env=_gemini_env_mapping(),
+    env_file=None if _UNDER_PYTEST else _BACKEND_BASE_DIR / ".env",
+)
+GEMINI_API_KEY = GEMINI_API_KEYS[0] if GEMINI_API_KEYS else ""
 GEMINI_API_BASE_URL = config(
     "GEMINI_API_BASE_URL",
     default="https://generativelanguage.googleapis.com/v1beta",
@@ -172,7 +201,8 @@ def get_ai_settings_summary() -> dict:
         "retry_count": LLM_RETRY_COUNT,
         "temperature": LLM_TEMPERATURE,
         "max_output_tokens": LLM_MAX_OUTPUT_TOKENS,
-        "api_key_configured": bool(GEMINI_API_KEY),
+        "api_key_configured": bool(GEMINI_API_KEYS),
+        "gemini_api_key_count": len(GEMINI_API_KEYS),
         "ollama_host": OLLAMA_HOST if AI_PROVIDER == "ollama" else None,
         "ollama_model": OLLAMA_MODEL if AI_PROVIDER == "ollama" else None,
         "ollama_num_ctx": OLLAMA_NUM_CTX if AI_PROVIDER == "ollama" else None,

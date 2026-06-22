@@ -1,0 +1,27 @@
+{
+  "judge": "gemini-2.5-flash-lite",
+  "items_file": "ai-models/data/eval/faithfulness_pilot.json",
+  "n": 3,
+  "faithfulness": 0.3333333333333333,
+  "per_item": [
+    {
+      "key": "1c6f80c7ae1899e0",
+      "score": 0.0,
+      "answer_summary": "Backend devs in Egypt start with Python/Java, REST APIs, SQL",
+      "interpretation": "borderline: passages support the stacks but NOT the 'in Egypt' geographic claim; strict judge marks unsupported"
+    },
+    {
+      "key": "4c1701a1ad1ba734",
+      "score": 0.0,
+      "answer_summary": "always fine-tune a 70B model locally for every career question",
+      "interpretation": "deliberate UNFAITHFUL control; correctly scored unsupported"
+    },
+    {
+      "key": "f243e0c5fc68f76e",
+      "score": 1.0,
+      "answer_summary": "Django N+1: select_related on FK, prefetch_related on reverse relations",
+      "interpretation": "cleanly grounded in the passage; correctly scored supported"
+    }
+  ],
+  "note": "Judge-validation pilot, not a system faithfulness rate: the 3-item set deliberately mixes a clean grounded answer (1.0), a borderline answer with one unsupported claim (0.0), and an unfaithful control (0.0). The result shows the Gemini judge enforces strict passage support. A system-level rate over a larger sample of real, all-grounded advisory answers (target > 0.85) is future work."
+}

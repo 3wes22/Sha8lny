@@ -296,6 +296,27 @@ class Skill(BaseModel):
         verbose_name = _('Skill')
         verbose_name_plural = _('Skills')
 
+    def save(self, *args, **kwargs):
+        """Auto-populate a unique slug from the name when one is not provided.
+
+        Several seed/ingest paths create skills by name only; without this the
+        SlugField stays blank and the first such row claims the unique empty
+        slug, making every subsequent slugless skill collide. Deriving a unique
+        slug here keeps those paths safe regardless of caller.
+        """
+        if not self.slug:
+            from django.utils.text import slugify
+
+            base = slugify(self.name) or "skill"
+            slug = base
+            counter = 2
+            existing = type(self).all_objects.exclude(pk=self.pk) if self.pk else type(self).all_objects.all()
+            while existing.filter(slug=slug).exists():
+                slug = f"{base}-{counter}"
+                counter += 1
+            self.slug = slug
+        super().save(*args, **kwargs)
+
     def __str__(self):
         """String representation using skill name."""
         return self.name

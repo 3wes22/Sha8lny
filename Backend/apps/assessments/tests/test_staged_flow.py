@@ -346,6 +346,9 @@ def test_new_first_class_roles_complete_the_staged_flow(
 def test_staged_assessment_caps_llm_invocations_at_three(api_client, assessment_user, monkeypatch):
     api_client.force_authenticate(user=assessment_user)
     cache.clear()
+    # Suite runs keyless; open the LLM key gate so generation takes the (mocked)
+    # LLM path. The client is mocked below, so no real Gemini call is made.
+    monkeypatch.setattr("apps.core.ai_settings.GEMINI_API_KEYS", ["test-key"])
     calls = {"count": 0}
 
     def fake_generate_structured(

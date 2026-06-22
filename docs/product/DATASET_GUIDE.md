@@ -171,10 +171,12 @@ Powers the **Jobs** feature (search, skill-matching, ranking).
 ```
 
 - **How it's used:** features are engineered from these rows (skill overlap,
-  experience match, freshness, location) and a **LightGBM ranker**
-  (`job_ranker.lgb`) is trained to order jobs for a user. This is a
-  *machine-learning model trained on tabular data* — **not** a vector search.
-  Live job rows also live in the Postgres `Job` table.
+  experience match, freshness, location) and a **LightGBM ranker** can be
+  trained locally as `job_ranker.lgb` to order jobs for a user. The current repo
+  commits evaluation artifacts, not the binary model, so runtime falls back to
+  skill-overlap ordering when no local model file exists. This is a
+  *tabular ranking pipeline* — **not** a vector search. Live job rows also live
+  in the Postgres `Job` table.
 - **Honest note:** these 60 postings are **synthetic fixtures** (real company
   names, templated descriptions). Replacing them with real labeled Egyptian
   postings is documented future work. See `models/custom/EVAL_REPORT.md`.
@@ -241,7 +243,7 @@ licensed alternative before any public release (see `data/CITATIONS.md`).
 | **AI Career Advisor** | Career-knowledge corpus (all 7 sources) | `career_knowledge` Chroma collection; hybrid retrieval + rerank + citations |
 | **Learning Roadmap** | roadmap.sh (structure) + O\*NET crosswalk (references) | `career_knowledge` filtered by `source=roadmap.sh`; `onet_mapper` direct lookup |
 | **Skills Assessment** | Assessment-scenario corpus | `assessment_scenarios` Chroma collection (separate); backend role seeded |
-| **Jobs (match & rank)** | Job postings | `job_ranker_training.json` → LightGBM `job_ranker.lgb`; Postgres `Job` rows |
+| **Jobs (match & rank)** | Job postings | `job_ranker_training.json` → eval artifacts / optional local LightGBM `job_ranker.lgb`; Postgres `Job` rows |
 | **Progress / Dashboard** | (derived from user activity — no external dataset) | Application DB |
 
 ---

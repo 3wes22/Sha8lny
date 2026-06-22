@@ -10,7 +10,8 @@ while the thesis is being written.
 > **How to use this file**
 > - **Thesis writer:** Work top-to-bottom through Part 1 (chapter plan). Every claim is
 >   tied to a file or a number in the repo (Part 4 is the evidence index) — never write a
->   claim you can't point to.
+>   claim you can't point to. For **what to cite vs ignore** (dead code, stubs, outdated
+>   docs), see [`docs/thesis/CODEBASE_REFERENCE_GUIDE.md`](docs/thesis/CODEBASE_REFERENCE_GUIDE.md).
 > - **Teammate starting parallel work:** Jump to **Part 3 (Future Work)**. Each item says
 >   *where* in the repo it lives, *what's missing*, and *acceptance criteria*. Read the
 >   "Coordination note" first so you don't collide with in-flight work.
@@ -18,8 +19,8 @@ while the thesis is being written.
 >   test suites; verify by re-running the commands in Part 4 before final submission.
 
 **Document status:** Reflects the repo as of branch
-`defensibility/weighted-score-and-ranker-eval`. Backend suite: **291 tests passing**.
-AI-layer suite: **110 tests passing** (both run on deterministic fallbacks, no API key).
+`defensibility/weighted-score-and-ranker-eval`. Backend suite: **382 tests passing**.
+AI-layer suite: **112 tests passing**, 5 skipped (both run on deterministic fallbacks, no API key).
 
 ---
 
@@ -36,7 +37,7 @@ AI-layer suite: **110 tests passing** (both run on deterministic fallbacks, no A
 | **AI layer** | RAG pipeline (ChromaDB + sentence-transformers + BM25 + cross-encoder) + LightGBM job ranker |
 | **LLM runtime** | Hosted **Google Gemini** (default) via a single `GemmaClient` gateway; local **Gemma/Ollama** fallback; **deterministic fallback on every AI path** |
 | **No-LLM-by-design** | Workflow routing, roadmap structure/ordering, course matching, scoring roll-up, progress — all deterministic |
-| **Tests** | **291** backend + **110** AI-layer, all passing on offline fallbacks |
+| **Tests** | **382** backend + **74** frontend + **112** AI-layer (5 skipped), all passing on offline fallbacks |
 | **Headline result** | Advisory retrieval Recall@5 improved **~5×** (0.118 → 0.609) and MRR **~5×** (0.109 → 0.544) over a measured baseline; corpus cleaned from 358,992 → ~64,000 docs |
 | **Defining quality** | "Not an API wrapper" — a **measured, staged** retrieval pipeline with abstention; correctness is *measured, not asserted* |
 
@@ -161,7 +162,8 @@ jobs 766 LOC, roadmaps 761, courses 535, progress 518, users 509, assessments 42
 - **Assessments** — staged AI question generation for **8 roles**; role-graph taxonomy
   (curated-v3); **weighted, deterministic** overall scoring (per-dimension
   `assessment_weight`/`weight` roll-up — the LLM's self-reported score is **not trusted**);
-  coverage enforcement; default-off scenario RAG few-shot augmentation. Positioned as a
+  coverage enforcement; default-on scenario RAG few-shot augmentation that safely
+  returns no retrieved examples when no approved scenario matches. Positioned as a
   **formative** assessment, *not* a psychometrically validated instrument.
   Files: `apps/assessments/ai_pipeline.py`, `engine.py`, `scenario_corpus/`.
 - **Roadmaps** — AI generation from assessment with a **deterministic, assessment-aware
@@ -257,7 +259,7 @@ LightGBM NDCG@5 lift over overlap baseline: **+0.0292**. **Be honest:** the
 unavailable in the training env), so the lift is a **lower bound**, and labels are
 heuristic, not human.
 
-**7.4 Software testing.** **291 backend** + **110 AI-layer** automated tests, all passing
+**7.4 Software testing.** **382 backend** + **74 frontend** + **112 AI-layer** automated tests, all passing
 on deterministic fallbacks (no network/API key). Describe the test strategy: unit +
 API/integration + frontend-contract tests + a full-loop test.
 
@@ -331,10 +333,13 @@ Android, UI/UX Designer. Scenario-corpus authoring lives under
 
 ### 2.4 Key commands (put in the appendix / reproducibility section)
 ```bash
-# Backend tests (offline, deterministic)        → 291 passing
+# Backend tests (offline, deterministic)        → 382 passing
 cd Backend && env -u GEMINI_API_KEY ./venv/bin/python -m pytest -q
 
-# AI-layer tests                                 → 110 passing
+# Frontend tests                                 → 74 passing
+cd Frontend && npm run test:run
+
+# AI-layer tests                                 → 112 passing, 5 skipped
 cd ai-models && ../Backend/venv/bin/python -m pytest -q
 
 # Retrieval evaluation (produces Ch.7 table)
@@ -495,7 +500,7 @@ submission:
 
 **Reproducibility rule for the writer:** every figure/number in Ch.7 must trace to a
 committed artifact above. Re-run the Part 2.4 commands before final submission and confirm
-the numbers still match (291 / 110 tests; the retrieval table).
+the numbers still match (382 / 74 / 112 tests; the retrieval table).
 
 ---
 

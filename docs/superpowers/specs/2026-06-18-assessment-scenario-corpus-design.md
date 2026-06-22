@@ -17,7 +17,9 @@ The assessment module already ships a complete scenario-RAG *mechanism* (spec `0
 - Only **`backend.py`** has content — **12 scenarios**, seeded from `BACKEND_FALLBACK_SCENARIOS`.
 - The other **7 roles are literally `SCENARIOS = []`**: `frontend`, `fullstack`, `data_science`, `devops`, `android`, `machine_learning_engineer`, `ui_ux_designer`.
 - There is **no fast seeding path** for the 7 empty roles: `fallback_scenarios.py` contains only `BACKEND_FALLBACK_SCENARIOS`. Their content must be authored or generated from scratch.
-- The feature is **default-off**: `ASSESSMENT_SCENARIO_RAG_ENABLED=false`.
+- The feature is reversible by flag. As built, `ASSESSMENT_SCENARIO_RAG_ENABLED`
+  defaults to `true`; retrieval safely returns `[]` when no approved matching
+  scenario exists, and environments can still opt out with `false`.
 
 ### The floor math (why naive "fill the corpus" is infeasible)
 

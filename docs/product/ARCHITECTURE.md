@@ -23,7 +23,7 @@
 The graduation demo uses a **Gemini-first** AI stack with deterministic Django orchestration:
 
 - **Working end-to-end:** staged skills assessment, AI roadmap personalization, progress tracking, advisory chat with RAG, jobs skill extraction and user-gap matching
-- **Vector stores:** ChromaDB with two collections — `courses` (roadmap course matching) and `career_knowledge` (advisory RAG via `python -m rag.seeder`)
+- **Vector stores:** ChromaDB with two collections — `courses` (roadmap course matching) and `career_knowledge` (advisory RAG, built via `python -m src.rag.build_vector_db`)
 - **Single inference gateway:** `GemmaClient` in `Backend/apps/core/gemma_client.py` routes all LLM calls to the hosted Gemini API
 - **Async AI work:** Celery queue `ai` handles assessment question generation, roadmap population, and final evaluation (development may run tasks eagerly)
 

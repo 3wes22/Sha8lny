@@ -5,6 +5,7 @@ Handles resume building, ATS optimization, and portfolio management.
 """
 
 import json
+import logging
 from typing import Optional, List, Dict, Any, Tuple
 from decimal import Decimal
 from django.db import transaction
@@ -14,6 +15,7 @@ from .models import Resume, Portfolio
 from apps.users.models import User
 from apps.notifications.signals import resume_generated, resume_optimized, portfolio_published
 
+logger = logging.getLogger(__name__)
 
 class ResumeService:
     """Service for resume management and generation"""
@@ -61,6 +63,46 @@ class ResumeService:
         resume_generated.send(sender=Resume, instance=resume, user=user)
 
         return resume
+
+    @staticmethod
+    @transaction.atomic
+    def create_resume_from_upload(user: User, uploaded_file) -> Resume:
+        """Create a resume from an uploaded CV file and run ATS scoring."""
+        from pathlib import PurePath
+
+        from .resume_parser import extract_text, parse_resume_text, validate_upload
+
+        validate_upload(uploaded_file.name, uploaded_file.size)
+        text = extract_text(uploaded_file, uploaded_file.name)
+        if not text.strip():
+            raise ValueError(
+                "Could not extract text from this file. "
+                "Scanned/image-only PDFs are not supported yet."
+            )
+
+        parsed = parse_resume_text(text)
+        title = PurePath(uploaded_file.name).stem or "Uploaded CV"
+
+        resume = ResumeService.create_resume(
+            user=user,
+            title=title,
+            personal_info=parsed.get("personal_info", {}),
+            work_experience=parsed.get("work_experience", {}),
+            education=parsed.get("education", {}),
+            skills=parsed.get("skills", {}),
+            certifications=parsed.get("certifications", {}),
+            projects=parsed.get("projects", {}),
+            languages=parsed.get("languages", {}),
+        )
+
+        uploaded_file.seek(0)
+        ext = PurePath(uploaded_file.name).suffix.lower()
+        if ext == ".pdf":
+            resume.pdf_file.save(uploaded_file.name, uploaded_file, save=True)
+        elif ext == ".docx":
+            resume.docx_file.save(uploaded_file.name, uploaded_file, save=True)
+
+        return ResumeService.optimize_for_ats(resume)
 
     @staticmethod
     def get_user_resumes(user: User) -> List[Resume]:
@@ -265,6 +307,111 @@ class ResumeService:
                 {'key': 'languages', 'label': 'Languages', 'items': cls._section_items(resume.languages)},
             ],
         }
+
+    AI_IMPROVE_SCHEMA = {
+        "type": "object",
+        "properties": {
+            "improved_summary": {"type": "string"},
+            "strengthened_bullets": {"type": "array", "items": {"type": "string"}},
+            "missing_keywords": {"type": "array", "items": {"type": "string"}},
+            "recommendations": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": [
+            "improved_summary",
+            "strengthened_bullets",
+            "missing_keywords",
+            "recommendations",
+        ],
+    }
+
+    @classmethod
+    def improve_with_ai(cls, resume: Resume) -> Dict[str, Any]:
+        """Use the configured LLM to improve a resume for ATS-friendliness.
+
+        Returns a payload with a rewritten summary, stronger bullet suggestions,
+        missing keywords, and prioritized recommendations. Falls back to the
+        deterministic suggestions (``ai_used: False``) when the LLM is offline,
+        so the action never hard-fails.
+        """
+        score, suggestions = cls.compute_ats_score(resume)
+        document = cls.build_resume_document(resume)
+
+        base_payload = {
+            "ats_score": float(score),
+            "ats_grade": resume.ats_grade_display if resume.ats_score else cls._grade_for(score),
+        }
+
+        system = (
+            "You are an expert resume coach optimizing CVs for Applicant Tracking "
+            "Systems (ATS) in the Egyptian/MENA tech market. Improve clarity and "
+            "keyword coverage without inventing employers, dates, or achievements. "
+            "Return strict JSON only."
+        )
+        prompt = (
+            "Improve this resume for ATS. Use only information present; do not "
+            "fabricate experience.\n\n"
+            f"Current ATS score: {float(score)} ({base_payload['ats_grade']}).\n"
+            f"Detected gaps: {json.dumps(suggestions)}\n\n"
+            f"Resume content (JSON):\n{json.dumps(document)}\n\n"
+            "Respond with JSON keys: improved_summary (rewritten professional "
+            "summary, <=80 words), strengthened_bullets (3-6 stronger, quantified "
+            "work bullet suggestions), missing_keywords (relevant ATS keywords not "
+            "already present), recommendations (prioritized, resume-specific steps)."
+        )
+
+        try:
+            from apps.core.gemma_client import GemmaClient
+
+            client = GemmaClient(task_type="json_generation")
+            response = client.generate_structured(
+                prompt=prompt,
+                system=system,
+                required_keys=(
+                    "improved_summary",
+                    "strengthened_bullets",
+                    "missing_keywords",
+                    "recommendations",
+                ),
+                response_json_schema=cls.AI_IMPROVE_SCHEMA,
+            )
+            payload = response.payload or {}
+            return {
+                **base_payload,
+                "ai_used": True,
+                "improved_summary": str(payload.get("improved_summary", "")).strip(),
+                "strengthened_bullets": [
+                    str(item).strip() for item in payload.get("strengthened_bullets", []) if str(item).strip()
+                ],
+                "missing_keywords": [
+                    str(item).strip() for item in payload.get("missing_keywords", []) if str(item).strip()
+                ],
+                "recommendations": [
+                    str(item).strip() for item in payload.get("recommendations", []) if str(item).strip()
+                ],
+            }
+        except Exception:  # noqa: BLE001 - any LLM/provider failure falls back gracefully
+            logger.warning("AI resume improvement failed; using deterministic fallback", exc_info=True)
+            return {
+                **base_payload,
+                "ai_used": False,
+                "improved_summary": "",
+                "strengthened_bullets": [],
+                "missing_keywords": [],
+                "recommendations": suggestions,
+            }
+
+    @staticmethod
+    def _grade_for(score) -> str:
+        value = float(score)
+        if value >= 90:
+            return "A"
+        if value >= 80:
+            return "B"
+        if value >= 70:
+            return "C"
+        if value >= 60:
+            return "D"
+        return "F"
 
     @classmethod
     @transaction.atomic

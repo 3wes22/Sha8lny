@@ -41,10 +41,16 @@ def get_ai_provider() -> str:
 
 
 def get_gemini_api_key() -> str:
+    keys = get_gemini_api_keys()
+    return keys[0] if keys else ""
+
+
+def get_gemini_api_keys() -> list[str]:
     backend_settings = _load_backend_ai_settings()
     if backend_settings is not None:
-        return backend_settings.GEMINI_API_KEY
-    return os.getenv("GEMINI_API_KEY", "")
+        return list(getattr(backend_settings, "GEMINI_API_KEYS", []) or [])
+    single = os.getenv("GEMINI_API_KEY", "").strip()
+    return [single] if single else []
 
 
 def get_gemini_api_base_url() -> str:

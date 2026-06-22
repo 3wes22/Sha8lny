@@ -159,7 +159,7 @@ class CourseCompletionViewSet(viewsets.ModelViewSet):
         try:
             course = Course.objects.get(
                 id=serializer.validated_data['course_id'],
-                is_active=True
+                is_published=True
             )
         except Course.DoesNotExist:
             return Response(
@@ -340,7 +340,7 @@ class TimeLogViewSet(viewsets.ModelViewSet):
             try:
                 course = Course.objects.get(
                     id=serializer.validated_data['course_id'],
-                    is_active=True
+                    is_published=True
                 )
             except Course.DoesNotExist:
                 return Response(

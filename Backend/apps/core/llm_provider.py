@@ -12,6 +12,7 @@ from apps.core.ai_settings import (
     AI_PROVIDER,
     GEMINI_API_BASE_URL,
     GEMINI_API_KEY,
+    GEMINI_API_KEYS,
     GEMINI_FLASH_LITE_MODEL,
     GEMINI_FLASH_MODEL,
     LLM_MAX_OUTPUT_TOKENS,
@@ -79,22 +80,55 @@ class GeminiProvider(LLMProvider):
         self,
         *,
         api_key: str = GEMINI_API_KEY,
+        api_keys: list[str] | None = None,
         base_url: str = GEMINI_API_BASE_URL,
         timeout_seconds: int = 60,
         temperature: float = LLM_TEMPERATURE,
     ) -> None:
-        self.api_key = str(api_key or "").strip()
+        if api_keys is not None:
+            resolved_keys = list(api_keys)
+        elif api_key:
+            resolved_keys = [str(api_key).strip()]
+        else:
+            resolved_keys = list(GEMINI_API_KEYS)
+        self.api_keys = [key for key in resolved_keys if key]
+        self.api_key = self.api_keys[0] if self.api_keys else ""
         self.base_url = str(base_url or GEMINI_API_BASE_URL).rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.temperature = temperature
 
     def send(self, payload: dict[str, Any]) -> dict[str, Any]:
-        if not self.api_key:
+        if not self.api_keys:
             raise AIServiceError(
                 "Gemini API key is not configured",
                 details={"reason": "missing_api_key", "retryable": False},
             )
-        if self.api_key.startswith("your-") or self.api_key.startswith("<") or self.api_key.endswith("-here"):
+
+        last_error: AIServiceError | None = None
+        for index, api_key in enumerate(self.api_keys):
+            try:
+                return self._send_with_key(api_key, payload)
+            except AIServiceError as error:
+                last_error = error
+                status_code = (error.details or {}).get("status_code")
+                if status_code == 429 and index < len(self.api_keys) - 1:
+                    continue
+                raise
+
+        if last_error is not None:
+            raise last_error
+        raise AIServiceError(
+            "Gemini API key is not configured",
+            details={"reason": "missing_api_key", "retryable": False},
+        )
+
+    def _send_with_key(self, api_key: str, payload: dict[str, Any]) -> dict[str, Any]:
+        if not api_key:
+            raise AIServiceError(
+                "Gemini API key is not configured",
+                details={"reason": "missing_api_key", "retryable": False},
+            )
+        if api_key.startswith("your-") or api_key.startswith("<") or api_key.endswith("-here"):
             raise AIServiceError(
                 "Gemini API key is still set to a placeholder value",
                 details={"reason": "placeholder_api_key", "retryable": False},
@@ -131,7 +165,7 @@ class GeminiProvider(LLMProvider):
             }
 
         response = httpx.post(
-            f"{self.base_url}/models/{model}:generateContent?key={self.api_key}",
+            f"{self.base_url}/models/{model}:generateContent?key={api_key}",
             json=body,
             timeout=self.timeout_seconds,
         )
@@ -299,6 +333,7 @@ def create_provider(
     provider_name: str = AI_PROVIDER,
     host: str = OLLAMA_HOST,
     api_key: str = GEMINI_API_KEY,
+    api_keys: list[str] | None = None,
     base_url: str = GEMINI_API_BASE_URL,
     timeout_seconds: int = 60,
     temperature: float = LLM_TEMPERATURE,
@@ -315,6 +350,7 @@ def create_provider(
         )
     return GeminiProvider(
         api_key=api_key,
+        api_keys=api_keys,
         base_url=base_url,
         timeout_seconds=timeout_seconds,
         temperature=temperature,

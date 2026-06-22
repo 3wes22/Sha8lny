@@ -383,3 +383,20 @@ def test_chat_response_surfaces_citations_and_flag(api_client, advisory_user, mo
     citation = response.data["retrieved_documents"][0]
     assert set(citation.keys()) == {"source", "url", "section", "excerpt", "confidence_tier"}
     assert citation["source"] == "bls_ooh"
+
+
+@pytest.mark.django_db
+def test_conversation_create_is_not_exposed(api_client, advisory_user):
+    api_client.force_authenticate(user=advisory_user)
+
+    response = api_client.post(
+        "/api/v1/advisory/history/",
+        {
+            "user": str(advisory_user.id),
+            "title": "Injected conversation",
+            "topic": "career",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
